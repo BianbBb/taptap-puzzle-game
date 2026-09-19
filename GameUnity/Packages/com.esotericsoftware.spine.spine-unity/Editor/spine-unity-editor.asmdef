@@ -1,0 +1,13 @@
+{
+    "name": "spine-unity-editor",
+    "references": [
+        "spine-unity",
+        "Unity.ugui"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false
+}

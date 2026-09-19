@@ -1,0 +1,30 @@
+GenerateDatas/
+Ignore/
+Tools/LubanTools
+UnityPackage/*.unitypackage
+# GameConfig/Tools/LubanTools/
+
+*.vs
+*.idea
+*.dotnet
+
+# Excel temporary files
+~$*.xlsx
+~$*.xlsm
+
+
+#Generate Tools
+Tools/Generate Tools/SourceGenerator/*/*bin
+Tools/Generate Tools/SourceGenerator/*/*obj
+Tools/Generate Tools/SourceGenerator/*.DotSettings.user
+
+path_define.bat
+path_define.sh
+
+Tools/BuildTools/Log/
+
+# .claude 和 .codex 的hooks缓存文件
+.claude/hooks/.last_idle
+.claude/*/*.log
+.codex/*/*.log
+.codex/hooks/.last_idle

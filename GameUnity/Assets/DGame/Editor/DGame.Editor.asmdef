@@ -1,0 +1,40 @@
+{
+    "name": "DGame.Editor",
+    "rootNamespace": "DGame",
+    "references": [
+        "GUID:0510f21df0bc72647b839474e83421bb",
+        "GUID:e34a5702dd353724aa315fb8011f08c3",
+        "GUID:4d1926c9df5b052469a1c63448b7609a",
+        "GUID:2373f786d14518f44b0f475db77ba4de",
+        "GUID:f51ebe6a0ceec4240a699833d6309b23",
+        "GUID:b6a4cc5e963e3354187f83c658e8d3df",
+        "GUID:6055be8ebefd69e48b49212b09b47b2f",
+        "GUID:3743e71edcd5bd8499007797ef02cbfb",
+        "GUID:66e09fc524ec6594b8d6ca1d91aa1a41",
+        "GUID:68765d262e2128e4ab49c983f3411946",
+        "GUID:173464ddf4cdb6640a4dfa8a9281ad69",
+        "GUID:5c01126466f01474daeed348e8810aef"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.esotericsoftware.spine.spine-unity",
+            "expression": "[3.8,3.9)",
+            "define": "SPINE_UNITY"
+        },
+        {
+            "name": "com.esotericsoftware.spine.spine-unity",
+            "expression": "[3.8,3.9)",
+            "define": "SPINE_CSHARP"
+        }
+    ],
+    "noEngineReferences": false
+}

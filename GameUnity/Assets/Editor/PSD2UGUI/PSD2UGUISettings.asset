@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 769495493c1661d4885fd2a8af30095f, type: 3}
+  m_Name: PSD2UGUISettings
+  m_EditorClassIdentifier: 
+  resolution: {x: 750, y: 1334}
+  textComponentType: 0
+  textComponentTypeName: GameLogic.UIText
+  textMeshProComponentTypeName: TMPro.TextMeshProUGUI
+  uniTextComponentTypeName: LightSide.UniText
+  imageComponentTypeName: GameLogic.UIImage
+  buttonComponentTypeName: GameLogic.UIButton
+  rawImageComponentTypeName: 
+  shadowComponentTypeName: 
+  outlineComponentTypeName: 
+  gradientComponentTypeName: 
+  spriteSearchFolders:
+  - Assets/BundleAssets/UIRaw
+  textureSearchFolders:
+  - Assets/BundleAssets/UIRaw/Raw
+  defaultFontPath: Assets/BundleAssets/Fonts/SmileySans.ttf
+  fontPaths: []
+  defaultTmpFontAssetPath: Assets/Plugins/TextMesh Pro/Resources/Fonts & Materials/LiberationSans
+    SDF.asset
+  tmpFontAssetPaths: []
+  defaultUniTextFontAssetPath:
+  uniTextFontAssetPaths: []

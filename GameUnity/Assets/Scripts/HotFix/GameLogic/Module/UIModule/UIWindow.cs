@@ -1,0 +1,766 @@
+﻿using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
+using DG.Tweening;
+using DGame;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace GameLogic
+{
+    public abstract class UIWindow : UIBase
+    {
+        #region Propreties
+
+        private static uint s_nextWindowId = 0;
+        private readonly string m_modelSpritePath = "ModelSprite";
+        private SetUISafeFitHelper m_setUISafeFitHelper;
+        private System.Action<UIWindow> m_prepareCallback;
+        private Canvas m_canvas;
+        private Canvas[] m_childCanvas;
+        private GraphicRaycaster m_graphicRaycaster;
+        private GraphicRaycaster[] m_childGraphicRaycasters;
+        private bool m_isChildCanvasDirty;
+        private const float NORMAL_TWEEN_POP_TIME = 0.3f;
+        private const float NORMAL_MODEL_ALPHA = 0.85f;
+        private float m_curModelAlpha;
+        private float m_manualAlpha;
+        private Image m_modelSprite;
+        private UIButton m_modelCloseBtn;
+        private bool m_isCreated;
+        private readonly UniTaskCompletionSource<bool> m_prepareCompletionSource = new UniTaskCompletionSource<bool>();
+
+        /// <summary>
+        /// Canvas组件
+        /// </summary>
+        public Canvas Canvas => m_canvas;
+
+        /// <summary>
+        /// 图形射线检测组件
+        /// </summary>
+        public GraphicRaycaster GraphicRaycaster => m_graphicRaycaster;
+
+        public override UIType Type => UIType.Window;
+
+        /// <summary>
+        /// 窗口ID
+        /// </summary>
+        public uint WindowID { get; set; }
+
+        private CanvasGroup m_canvasGroup;
+
+        /// <summary>
+        /// CanvasGroup组件
+        /// </summary>
+        public CanvasGroup CanvasGroup
+            => m_canvasGroup == null
+                ? m_canvasGroup = DGame.Utility.UnityUtil.AddMonoBehaviour<CanvasGroup>(gameObject)
+                : m_canvasGroup;
+
+        private readonly CancellationTokenSource m_cancellationTokenSource = new CancellationTokenSource();
+
+        /// <summary>
+        /// 窗口生命周期取消令牌
+        /// </summary>
+        internal CancellationToken LifetimeToken => m_cancellationTokenSource.Token;
+
+        private Transform m_transform;
+
+        /// <summary>
+        /// 窗口位置组件
+        /// </summary>
+        public override Transform transform => m_transform;
+
+        /// <summary>
+        /// 窗口矩阵位置组件
+        /// </summary>
+        public override RectTransform rectTransform => m_transform as RectTransform;
+
+        /// <summary>
+        /// 窗口实例化资源对象
+        /// </summary>
+        public override GameObject gameObject { get; protected set; }
+
+        /// <summary>
+        /// 窗口名称
+        /// </summary>
+        public string WindowFullName { get; private set; }
+
+        protected virtual UILayer windowLayer => UILayer.UI;
+
+        /// <summary>
+        /// 窗口层级
+        /// </summary>
+        public int WindowLayer => (int)windowLayer;
+
+        /// <summary>
+        /// 资源定位地址
+        /// </summary>
+        public virtual string AssetLocation { get; private set; }
+
+        /// <summary>
+        /// 是否全屏窗口
+        /// </summary>
+        public virtual bool FullScreen => false;
+
+        /// <summary>
+        /// 是否是Resources资源 无需AB包加载
+        /// </summary>
+        public virtual bool FromResources => false;
+
+        /// <summary>
+        /// 隐藏窗口关闭时间
+        /// </summary>
+        public virtual int HideTimeToClose => 10;
+
+        /// <summary>
+        /// 隐藏窗口关闭时间计时器句柄
+        /// </summary>
+        public GameTimer HideTimer { get; set; }
+
+        /// <summary>
+        /// 排序层级
+        /// </summary>
+        public int SortingOrder
+        {
+            get=> m_canvas != null ? m_canvas.sortingOrder : 0;
+            set
+            {
+                if (m_canvas == null || m_canvas.sortingOrder == value)
+                {
+                    return;
+                }
+
+                var oldOrder = m_canvas.sortingOrder;
+
+                if (m_isChildCanvasDirty)
+                {
+                    m_childCanvas = gameObject.GetComponentsInChildren<Canvas>(true);
+                    m_isChildCanvasDirty = false;
+                }
+
+                //设置子类
+                if (m_childCanvas != null && m_childCanvas.Length > 0)
+                {
+                    for (int i = 0; i < m_childCanvas.Length; i++)
+                    {
+                        var childCanvas = m_childCanvas[i];
+
+                        if (childCanvas != m_canvas)
+                        {
+                            childCanvas.sortingOrder = value + (childCanvas.sortingOrder - oldOrder);
+                        }
+                    }
+                }
+                m_canvas.sortingOrder = value;
+
+                // 虚函数
+                if (Visible)
+                {
+                    _OnSortingOrderChange();
+                }
+                else
+                {
+                    m_isSortingOrderDirty = true;
+                }
+            }
+        }
+
+        protected override bool Visible
+        {
+            get => m_canvas != null && CanvasGroup?.alpha >= 1;
+            set
+            {
+                if (m_canvas == null || !IsPrepared || IsDestroyed)
+                {
+                    return;
+                }
+
+                if (m_canvasGroup == null)
+                {
+                    m_canvasGroup = DGame.Utility.UnityUtil.AddMonoBehaviour<CanvasGroup>(gameObject);
+                }
+
+                int alpha = value ? 1 : 0;
+                if (m_canvasGroup.alpha == alpha)
+                {
+                    return;
+                }
+                m_canvasGroup.alpha = alpha;
+                // 关闭CanvasGroup上的射线检测
+                m_canvasGroup.blocksRaycasts = value;
+                Interactable = value;
+
+                if (m_isCreated)
+                {
+                    return;
+                }
+
+                if (m_isSortingOrderDirty)
+                {
+                    _OnSortingOrderChange();
+                }
+
+                if (value)
+                {
+                    OnVisible();
+                }
+                else
+                {
+                    OnHidden();
+                }
+            }
+        }
+        
+        /// <summary>
+        /// 当前窗口是否已经显示且可见。
+        /// </summary>
+        public bool IsVisible => IsPrepared && !IsDestroyed && Visible;
+
+        /// <summary>
+        /// 是否可交互
+        /// </summary>
+        public bool Interactable
+        {
+            get => m_graphicRaycaster != null && m_graphicRaycaster.enabled;
+            set
+            {
+                if (m_graphicRaycaster == null)
+                {
+                    return;
+                }
+                m_graphicRaycaster.enabled = value;
+
+                if (m_childGraphicRaycasters != null)
+                {
+                    for (int i = 0; i < m_childGraphicRaycasters.Length; i++)
+                    {
+                        m_childGraphicRaycasters[i].enabled = value;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 是否加载完成
+        /// </summary>
+        internal bool IsLoadDone = false;
+
+        /// <summary>
+        /// 等待窗口完成资源加载和生命周期初始化
+        /// </summary>
+        /// <param name="cancellationToken">外部取消令牌</param>
+        /// <returns>窗口是否可安全使用</returns>
+        internal UniTask<bool> WaitUntilPreparedAsync(CancellationToken cancellationToken = default)
+        {
+            var task = m_prepareCompletionSource.Task;
+            return cancellationToken.CanBeCanceled
+                ? task.AttachExternalCancellation(cancellationToken)
+                : task;
+        }
+
+        /// <summary>
+        /// UI是否隐藏
+        /// </summary>
+        public bool IsHide { get; internal set; } = false;
+
+        protected virtual bool NeedTweenPop => true;
+
+        private bool m_isTweenPopping = false;
+
+        /// <summary>
+        /// 是否队列弹窗
+        /// </summary>
+        public bool IsInQueue { get; set; } = false;
+
+        /// <summary>
+        /// 是否可以通过返回关闭
+        /// </summary>
+        public virtual bool CanEscClose { get; private set; } = true;
+
+        public System.Action OnEscCloseLastOneWindowCallback { get; private set; }
+
+        #endregion
+
+        /// <summary>
+        /// 初始化窗口
+        /// </summary>
+        /// <param name="windowName">窗口名称</param>
+        /// <param name="assetLocation">资源位置</param>
+        public void Initialize(string windowName, string assetLocation)
+        {
+            WindowFullName = windowName;
+            AssetLocation = assetLocation;
+            AllocWindowId();
+            // 确保无等待者时也消费完成信号，避免 UniTaskTracker 残留。
+            m_prepareCompletionSource.Task.Forget();
+        }
+
+        #region 刘海屏适配
+
+        /// <summary>
+        /// 移动设备屏幕适配
+        /// </summary>
+        /// <param name="fitRect">安全区容器，其父节点须覆盖完整屏幕</param>
+        /// <param name="liuHaiFit">是否适配刘海侧安全区</param>
+        /// <param name="topSpacing">刘海侧回补距离（屏幕像素，Windows/iOS 按机型覆盖）</param>
+        /// <param name="bottomFit">是否适配另一侧及底部手势区</param>
+        /// <param name="bottomSpacing">另一侧回补距离（屏幕像素，Windows/iOS 按机型覆盖）</param>
+        public void SetUIFit(RectTransform fitRect, bool liuHaiFit = true, float topSpacing = 0, bool bottomFit = true, float bottomSpacing = 0)
+        {
+            if (m_setUISafeFitHelper == null)
+            {
+                m_setUISafeFitHelper = new SetUISafeFitHelper();
+            }
+            m_setUISafeFitHelper.SetUIFit(fitRect, liuHaiFit, topSpacing, bottomFit, bottomSpacing);
+        }
+
+        /// <summary>
+        /// 将安全区直属子节点恢复到容器未适配时的布局；重复调用不累积偏移。
+        /// 在 SetUIFit 后调用，容器再次适配后需再次调用。
+        /// </summary>
+        /// <param name="rect">安全区直属子节点；嵌套 UI 对其直属容器调用，避免外部布局组件驱动</param>
+        public void SetUINotFit(RectTransform rect)
+        {
+            if (rect == null)
+            {
+                return;
+            }
+
+            m_setUISafeFitHelper?.SetUINotFit(rect);
+        }
+
+        /// <summary>
+        /// 将指定安全区直属子节点恢复到容器铺满其父节点时的布局；重复调用不累积偏移。
+        /// </summary>
+        /// <param name="rect">refRect 的直属子节点，避免外部布局组件驱动其位置和尺寸</param>
+        /// <param name="refRect">仅通过锚点和偏移适配的安全区容器，保持单位缩放和零旋转</param>
+        public void SetUINotFit(RectTransform rect, RectTransform refRect)
+        {
+            if (rect == null || refRect == null)
+            {
+                return;
+            }
+            if (m_setUISafeFitHelper == null)
+            {
+                m_setUISafeFitHelper = new SetUISafeFitHelper();
+            }
+            m_setUISafeFitHelper?.SetUINotFit(rect, refRect);
+        }
+
+        #endregion
+
+        /// <summary>
+        /// 分配窗口ID
+        /// </summary>
+        public void AllocWindowId()
+        {
+            if (s_nextWindowId == 0)
+            {
+                s_nextWindowId++;
+            }
+
+            WindowID = s_nextWindowId++;
+        }
+
+        /// <summary>
+        /// 手动设置模态背景透明度
+        /// </summary>
+        /// <param name="alpha">透明度值</param>
+        public void SetModelAlphaManually(float alpha)
+        {
+            m_manualAlpha = alpha;
+        }
+
+        protected virtual ModelType GetModelType()
+        {
+            if (FullScreen || WindowLayer == (int)UILayer.Top)
+            {
+                return ModelType.TransparentType;
+            }
+
+            return ModelType.NormalType;
+        }
+
+        /// <summary>
+        /// 设置ESC键关闭最后一个窗口时的回调
+        /// </summary>
+        /// <param name="callback">回调函数</param>
+        public void SetEscCloseLastOneWindowCallback(System.Action callback)
+            => OnEscCloseLastOneWindowCallback = callback;
+
+        internal void TryInvokePrepareCallback(System.Action<UIWindow> prepareCallback, System.Object[] userData)
+        {
+            CancelHideToCloseTimer();
+            base.m_userDatas = userData;
+
+            if (IsPrepared)
+            {
+                prepareCallback?.Invoke(this);
+            }
+            else
+            {
+                m_prepareCallback = prepareCallback;
+            }
+        }
+
+        internal async UniTask InternalLoad(string location, System.Action<UIWindow> prepareCallback, bool isAsync,
+            System.Object[] userData)
+        {
+            m_prepareCallback = prepareCallback;
+            m_userDatas = userData;
+
+            GameObject uiInstance = null;
+
+            try
+            {
+                if (!FromResources)
+                {
+                    if (isAsync)
+                    {
+                        uiInstance = await UIModule.ResourceLoader.LoadGameObjectAsync(location, UIModule.UICanvas,
+                            LifetimeToken);
+                    }
+                    else
+                    {
+                        uiInstance = UIModule.ResourceLoader.LoadGameObject(location, UIModule.UICanvas);
+                    }
+                }
+                else
+                {
+                    uiInstance = Object.Instantiate(Resources.Load<GameObject>(location), UIModule.UICanvas);
+                }
+            }
+            catch (System.OperationCanceledException)
+            {
+            }
+            catch (System.Exception exception)
+            {
+                DLogger.Error($"加载UI窗口 {WindowFullName} 失败: {exception.Message}");
+            }
+
+            try
+            {
+                Handle_Completed(uiInstance);
+            }
+            catch (System.Exception exception)
+            {
+                DLogger.Error($"初始化UI窗口 {WindowFullName} 失败: {exception.Message}");
+                if (!IsDestroyed)
+                {
+                    Close();
+                }
+            }
+        }
+
+        internal void InternalRefresh()
+        {
+            OnRefresh();
+        }
+
+        internal void InternalCreate()
+        {
+            if (IsDestroyed || m_isCreated)
+            {
+                return;
+            }
+
+            m_isCreated = true;
+            ScriptGenerator();
+            BindMemberProperty();
+            RegisterEvent();
+            OnCreate();
+            SetModelState(GetModelType());
+            if (NeedTweenPop && !FullScreen)
+            {
+                TweenPop();
+            }
+        }
+
+        private void SetModelState(ModelType modelType)
+        {
+            m_curModelAlpha = NORMAL_MODEL_ALPHA;
+            var canClose = false;
+            switch (modelType)
+            {
+                case ModelType.NormalType:
+                    break;
+
+                case ModelType.TransparentType:
+                    m_curModelAlpha = 0.01f;
+                    break;
+
+                case ModelType.NormalType75:
+                    m_curModelAlpha = 0.75f;
+                    break;
+
+                case ModelType.UndertintHaveClose:
+                    m_curModelAlpha = 0.4f;
+                    canClose = true;
+                    break;
+
+                case ModelType.NormalHaveClose:
+                    canClose = true;
+                    break;
+
+                case ModelType.TransparentHaveClose:
+                    m_curModelAlpha = 0.01f;
+                    canClose = true;
+                    break;
+
+                default:
+                    m_curModelAlpha = 0f;
+                    break;
+            }
+
+            m_curModelAlpha = m_manualAlpha > 0 ? m_manualAlpha : m_curModelAlpha;
+
+            if (m_curModelAlpha <= 0)
+            {
+                return;
+            }
+            GameObject modelObj = UIModule.ResourceLoader.LoadGameObject(m_modelSpritePath, transform);
+
+            if (modelObj != null)
+            {
+                modelObj.transform.SetAsFirstSibling();
+                modelObj.transform.localScale = Vector3.one;
+                modelObj.transform.localPosition = Vector3.zero;
+                modelObj.name = m_modelSpritePath;
+                if (canClose)
+                {
+                    m_modelCloseBtn = DGame.Utility.UnityUtil.AddMonoBehaviour<UIButton>(modelObj);
+                    m_modelCloseBtn.onClick.AddListener(Close);
+                }
+                m_modelSprite = DGame.Utility.UnityUtil.AddMonoBehaviour<UIImage>(modelObj);
+                m_modelSprite.color = new Color(0, 0, 0, m_curModelAlpha);
+            }
+        }
+
+        private void TweenPop()
+        {
+            if (m_isTweenPopping || gameObject == null)
+            {
+                return;
+            }
+            m_isTweenPopping = true;
+            transform.localScale = Vector3.one * 0.8f;
+            transform.DOScale(Vector3.one, NORMAL_TWEEN_POP_TIME)
+                .SetEase(Ease.OutBack)
+                .SetUpdate(true)
+                .SetAutoKill(true)
+                .onComplete += OnTweenPopComplete;
+        }
+
+        private void OnTweenPopComplete()
+        {
+            m_isTweenPopping = false;
+        }
+
+        internal bool InternalUpdate()
+        {
+            if (!IsPrepared || !Visible || IsDestroyed)
+            {
+                return false;
+            }
+
+            List<UIWidget> listNextUpdateChild = null;
+
+            if (ChildList != null && ChildList.Count > 0)
+            {
+                listNextUpdateChild = m_updateChildList;
+                var updateListDirty = m_updateListDirty;
+                List<UIWidget> childList = null;
+                if (updateListDirty)
+                {
+                    if (listNextUpdateChild == null)
+                    {
+                        listNextUpdateChild = new List<UIWidget>();
+                        m_updateChildList = listNextUpdateChild;
+                    }
+                    else
+                    {
+                        listNextUpdateChild.Clear();
+                    }
+                    childList = ChildList;
+                }
+                else
+                {
+                    childList = listNextUpdateChild;
+                }
+
+                for (int i = 0; i < childList.Count; i++)
+                {
+                    var uiWidget = childList[i];
+
+                    if (uiWidget == null)
+                    {
+                        continue;
+                    }
+
+                    var needValid = uiWidget.InternalUpdate();
+
+                    if (updateListDirty && needValid)
+                    {
+                        listNextUpdateChild.Add(uiWidget);
+                    }
+                }
+
+                if (updateListDirty)
+                {
+                    m_updateListDirty = false;
+                }
+            }
+
+            bool needUpdate = false;
+
+            if (listNextUpdateChild == null || listNextUpdateChild.Count <= 0)
+            {
+                m_hasOverrideUpdate = true;
+                OnUpdate();
+                needUpdate = m_hasOverrideUpdate;
+            }
+            else
+            {
+                OnUpdate();
+                needUpdate = true;
+            }
+            return needUpdate;
+        }
+
+        protected internal void Destroy()
+        {
+            m_isCreated = false;
+            OnEscCloseLastOneWindowCallback = null;
+            if (IsDestroyed)
+            {
+                return;
+            }
+
+            IsDestroyed = true;
+            m_prepareCompletionSource.TrySetResult(false);
+            transform?.DOKill();
+            m_cancellationTokenSource?.Cancel();
+            m_cancellationTokenSource?.Dispose();
+            RemoveAllUIEvents();
+
+            for (int i = ChildList.Count - 1; i >= 0; i--)
+            {
+                var uiChild = ChildList[i];
+                uiChild?.Destroy();
+            }
+
+            m_prepareCallback = null;
+            OnDestroy();
+
+            if (gameObject != null)
+            {
+                Object.Destroy(gameObject);
+                gameObject = null;
+            }
+
+            CancelHideToCloseTimer();
+        }
+
+        private void Handle_Completed(GameObject windowGo)
+        {
+            IsLoadDone = true;
+            if (IsDestroyed)
+            {
+                if (windowGo != null)
+                {
+                    Object.Destroy(windowGo);
+                }
+                return;
+            }
+
+            if (windowGo == null)
+            {
+                Close();
+                return;
+            }
+
+            windowGo.name = GetType().Name;
+            gameObject = windowGo;
+            m_transform = gameObject?.transform;
+            windowGo.transform.localPosition = Vector3.zero;
+
+            // UIDebugBehaviour.AddUIDebugBehaviour(windowGo);
+
+            m_canvas = windowGo.GetComponent<Canvas>();
+            if (m_canvas == null)
+            {
+                throw new DGameException($"在UI窗口 {WindowFullName} 没有找到 {nameof(Canvas)}");
+            }
+            m_canvas.overrideSorting = true;
+            m_canvas.sortingOrder = 0;
+            m_canvas.sortingLayerName = "Default";
+            m_graphicRaycaster = windowGo.GetComponent<GraphicRaycaster>();
+            m_childCanvas = windowGo.GetComponentsInChildren<Canvas>(true);
+            m_childGraphicRaycasters = windowGo.GetComponentsInChildren<GraphicRaycaster>(true);
+
+            m_isChildCanvasDirty = false;
+
+            IsPrepared = true;
+            try
+            {
+                m_prepareCallback?.Invoke(this);
+            }
+            catch (System.Exception exception)
+            {
+                DLogger.Error($"初始化UI窗口 {WindowFullName} 失败: {exception.Message}");
+                Close();
+                return;
+            }
+            finally
+            {
+                m_prepareCallback = null;
+            }
+            m_prepareCompletionSource.TrySetResult(IsPrepared && !IsDestroyed);
+        }
+
+        internal void CancelHideToCloseTimer()
+        {
+            IsHide = false;
+
+            if (!GameTimer.IsNull(HideTimer))
+            {
+                ModuleSystem.GetModule<IGameTimerModule>().DestroyGameTimer(HideTimer);
+            }
+            HideTimer = null;
+        }
+
+        /// <summary>
+        /// 显示/隐藏窗口
+        /// </summary>
+        /// <param name="isVisible">是否可见</param>
+        public void Show(bool isVisible = true)
+        {
+            Visible = isVisible;
+        }
+
+        /// <summary>
+        /// 标记子Canvas为脏（需要重新排序）
+        /// </summary>
+        public void MakeChildCanvasDirty()
+        {
+            m_isChildCanvasDirty = true;
+        }
+
+        /// <summary>
+        /// 隐藏窗口
+        /// </summary>
+        public virtual void Hide()
+        {
+            UIModule.Instance.HideWindow(this);
+        }
+
+        /// <summary>
+        /// 关闭窗口
+        /// </summary>
+        public virtual void Close()
+        {
+            UIModule.Instance.CloseWindow(this);
+        }
+    }
+}
