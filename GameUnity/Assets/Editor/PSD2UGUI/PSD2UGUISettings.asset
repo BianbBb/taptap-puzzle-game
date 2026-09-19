@@ -12,11 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 769495493c1661d4885fd2a8af30095f, type: 3}
   m_Name: PSD2UGUISettings
   m_EditorClassIdentifier: 
-  resolution: {x: 750, y: 1334}
+  resolution: {x: 1920, y: 1080}
   textComponentType: 0
   textComponentTypeName: GameLogic.UIText
   textMeshProComponentTypeName: TMPro.TextMeshProUGUI
-  uniTextComponentTypeName: LightSide.UniText
   imageComponentTypeName: GameLogic.UIImage
   buttonComponentTypeName: GameLogic.UIButton
   rawImageComponentTypeName: 
@@ -32,5 +31,3 @@ MonoBehaviour:
   defaultTmpFontAssetPath: Assets/Plugins/TextMesh Pro/Resources/Fonts & Materials/LiberationSans
     SDF.asset
   tmpFontAssetPaths: []
-  defaultUniTextFontAssetPath:
-  uniTextFontAssetPaths: []

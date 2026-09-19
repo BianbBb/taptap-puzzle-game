@@ -2,7 +2,7 @@ GenerateDatas/
 Ignore/
 Tools/LubanTools
 UnityPackage/*.unitypackage
-# GameConfig/Tools/LubanTools/
+GameConfig/Tools/LubanTools/
 
 *.vs
 *.idea
