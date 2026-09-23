@@ -165,7 +165,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1048526739}
   - component: {fileID: 1048526740}
-  - component: {fileID: 1048526741}
   m_Layer: 0
   m_Name: Key Light
   m_TagString: Untagged
@@ -250,29 +249,6 @@ Light:
   m_UseViewFrustumForShadowCasterCull: 1
   m_ShadowRadius: 0
   m_ShadowAngle: 0
---- !u!114 &1048526741
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1048526738}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_Version: 3
-  m_UsePipelineSettings: 1
-  m_AdditionalLightsShadowResolutionTier: 2
-  m_LightLayerMask: 1
-  m_RenderingLayers: 1
-  m_CustomShadowLayers: 0
-  m_ShadowLayerMask: 1
-  m_ShadowRenderingLayers: 1
-  m_LightCookieSize: {x: 1, y: 1}
-  m_LightCookieOffset: {x: 0, y: 0}
-  m_SoftShadowQuality: 0
 --- !u!1 &1276682739
 GameObject:
   m_ObjectHideFlags: 0
@@ -575,63 +551,6 @@ Transform:
   - {fileID: 1464902099}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1001 &2617561785652868098
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 1151857669589501035, guid: 0f5faa8b65aa14b948d527cc81d1319f, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1151857669589501035, guid: 0f5faa8b65aa14b948d527cc81d1319f, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1151857669589501035, guid: 0f5faa8b65aa14b948d527cc81d1319f, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1151857669589501035, guid: 0f5faa8b65aa14b948d527cc81d1319f, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 1151857669589501035, guid: 0f5faa8b65aa14b948d527cc81d1319f, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1151857669589501035, guid: 0f5faa8b65aa14b948d527cc81d1319f, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1151857669589501035, guid: 0f5faa8b65aa14b948d527cc81d1319f, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1151857669589501035, guid: 0f5faa8b65aa14b948d527cc81d1319f, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1151857669589501035, guid: 0f5faa8b65aa14b948d527cc81d1319f, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 1151857669589501035, guid: 0f5faa8b65aa14b948d527cc81d1319f, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2126947017866613515, guid: 0f5faa8b65aa14b948d527cc81d1319f, type: 3}
-      propertyPath: m_Name
-      value: SceneClickPuzzleTemplate
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 0f5faa8b65aa14b948d527cc81d1319f, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -641,4 +560,3 @@ SceneRoots:
   - {fileID: 245556537}
   - {fileID: 1458871331}
   - {fileID: 2082722330}
-  - {fileID: 2617561785652868098}
