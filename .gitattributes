@@ -1,0 +1,64 @@
+# ============================================================
+# Unity YAML 智能合并
+# 依赖本机 git config 里的 merge.unityyamlmerge 驱动，见 README 或执行：
+#   git config merge.unityyamlmerge.driver "'/Applications/Unity/Hub/Editor/<version>/Unity.app/Contents/Tools/UnityYAMLMerge' merge -h -p %O %B %A %A"
+# 未配置驱动的机器上，git 会退回普通文本三方合并（不会报错），
+# 但场景/预制体就又会变成一堆冲突标记。
+# ============================================================
+*.unity                 merge=unityyamlmerge
+*.prefab                merge=unityyamlmerge
+*.asset                 merge=unityyamlmerge
+*.meta                  merge=unityyamlmerge
+*.mat                   merge=unityyamlmerge
+*.anim                  merge=unityyamlmerge
+*.controller            merge=unityyamlmerge
+*.overridecontroller    merge=unityyamlmerge
+*.physicMaterial        merge=unityyamlmerge
+*.physicsMaterial2D     merge=unityyamlmerge
+*.playable              merge=unityyamlmerge
+*.mask                  merge=unityyamlmerge
+*.brush                 merge=unityyamlmerge
+*.flare                 merge=unityyamlmerge
+*.fontsettings          merge=unityyamlmerge
+*.guiskin               merge=unityyamlmerge
+*.giparams              merge=unityyamlmerge
+*.mixer                 merge=unityyamlmerge
+*.shadervariants        merge=unityyamlmerge
+*.spriteatlas           merge=unityyamlmerge
+*.spriteatlasv2         merge=unityyamlmerge
+*.terrainlayer          merge=unityyamlmerge
+*.preset                merge=unityyamlmerge
+*.lighting              merge=unityyamlmerge
+*.signal                merge=unityyamlmerge
+*.shadergraph           merge=unityyamlmerge
+*.uxml                  merge=unityyamlmerge
+
+# ============================================================
+# 真正的二进制资源：不要尝试文本 diff / 合并
+# ============================================================
+*.cubemap       binary
+*.unitypackage  binary
+*.dll           binary
+*.so            binary
+*.dylib         binary
+*.a             binary
+*.aar           binary
+*.jar           binary
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.tga           binary
+*.psd           binary
+*.exr           binary
+*.hdr           binary
+*.svg           -text
+*.wav           binary
+*.mp3           binary
+*.ogg           binary
+*.aiff          binary
+*.ttf           binary
+*.otf           binary
+*.fbx           binary
+*.obj           binary
+*.blend         binary
+*.3ds           binary
