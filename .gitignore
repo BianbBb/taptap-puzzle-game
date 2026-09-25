@@ -23,12 +23,6 @@ path_define.sh
 
 Tools/BuildTools/Log/
 
-# .claude 和 .codex 的hooks缓存文件
-.claude/hooks/.last_idle
-.claude/*/*.log
-.codex/*/*.log
-.codex/hooks/.last_idle
-
 # WorkBuddy：AI 工作记忆 / 会话缓存，属于本机私有数据，不入库
 .workbuddy/
 
