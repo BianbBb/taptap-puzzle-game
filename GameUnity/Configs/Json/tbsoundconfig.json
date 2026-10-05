@@ -1,0 +1,36 @@
+[
+  {
+    "ID": 100,
+    "Location": "zy_bgm",
+    "PlayMode": 0,
+    "VolumeMin": 1,
+    "VolumeMax": 1,
+    "PitchMin": 1,
+    "PitchMax": 1,
+    "FadeInTime": 0,
+    "FadeOutTime": 0.2,
+    "EndPauseTime": 0,
+    "SpatialBlend": 0,
+    "MinDistance": 1,
+    "MaxDistance": 500,
+    "Priority": 128,
+    "MaxPlayCount": 0
+  },
+  {
+    "ID": 1000002,
+    "Location": "zy_anniu",
+    "PlayMode": 0,
+    "VolumeMin": 1,
+    "VolumeMax": 1,
+    "PitchMin": 1,
+    "PitchMax": 1,
+    "FadeInTime": 0,
+    "FadeOutTime": 0.2,
+    "EndPauseTime": 0,
+    "SpatialBlend": 0,
+    "MinDistance": 1,
+    "MaxDistance": 500,
+    "Priority": 128,
+    "MaxPlayCount": 0
+  }
+]

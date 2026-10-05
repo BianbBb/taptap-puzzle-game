@@ -1,0 +1,104 @@
+[
+  {
+    "GuideId": 900001,
+    "GroupId": 9000,
+    "StepId": 1,
+    "NextStepId": 2,
+    "NeedTween": true,
+    "StepType": 1,
+    "StepParam": {
+      "IntParam": 0,
+      "StringParam1": "MainWindow",
+      "StringParam2": "m_btnStartGame"
+    },
+    "Skippable": true,
+    "SkipScope": 1,
+    "GuideType": 1,
+    "GuideTime": 5,
+    "InputMode": 0,
+    "MaskShape": 3,
+    "MaskPos": {
+      "X": 0,
+      "Y": 166
+    },
+    "MaskSize": {
+      "Width": 334,
+      "Height": 122
+    },
+    "MaskRadius": 24,
+    "MaskPadding": 0,
+    "ArrowMoveType": 1,
+    "ArrowStartPos": {
+      "X": 200,
+      "Y": 200
+    },
+    "ArrowTargetPos": {
+      "X": -20,
+      "Y": 0
+    },
+    "LoopDelayTime": 1,
+    "LoopMoveArrow": true,
+    "TipTextId": 0,
+    "TipPlacement": 0,
+    "TipsPos": {
+      "X": 100,
+      "Y": 200
+    },
+    "TipsSize": {
+      "Width": 300,
+      "Height": 100
+    },
+    "TimeoutMs": 0
+  },
+  {
+    "GuideId": 900002,
+    "GroupId": 9000,
+    "StepId": 2,
+    "NextStepId": 0,
+    "NeedTween": true,
+    "StepType": 1,
+    "StepParam": {
+      "IntParam": 0,
+      "StringParam1": "MainWindow",
+      "StringParam2": "m_btnQuitGame"
+    },
+    "Skippable": true,
+    "SkipScope": 0,
+    "GuideType": 0,
+    "GuideTime": 0,
+    "InputMode": 0,
+    "MaskShape": 3,
+    "MaskPos": {
+      "X": 0,
+      "Y": 14
+    },
+    "MaskSize": {
+      "Width": 334,
+      "Height": 122
+    },
+    "MaskRadius": 24,
+    "MaskPadding": 0,
+    "ArrowMoveType": 0,
+    "ArrowStartPos": {
+      "X": 0,
+      "Y": 0
+    },
+    "ArrowTargetPos": {
+      "X": 0,
+      "Y": 0
+    },
+    "LoopDelayTime": 0,
+    "LoopMoveArrow": false,
+    "TipTextId": 0,
+    "TipPlacement": 0,
+    "TipsPos": {
+      "X": 0,
+      "Y": 0
+    },
+    "TipsSize": {
+      "Width": 0,
+      "Height": 0
+    },
+    "TimeoutMs": 0
+  }
+]

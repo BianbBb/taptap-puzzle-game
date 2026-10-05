@@ -1,0 +1,19 @@
+[
+  {
+    "id": "R01",
+    "replyText": "你还记得那一天吗？",
+    "lockedText": "你似乎想起了什么……",
+    "requiredMemory": [
+      "M01",
+      "M02"
+    ],
+    "allowedEmotion": [
+      "E01",
+      "E02"
+    ],
+    "rewardMemory": [
+      "M03"
+    ],
+    "affectionRules": []
+  }
+]

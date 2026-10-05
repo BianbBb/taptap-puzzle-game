@@ -206,6 +206,90 @@ namespace GameProto
                 m_TbGuideStepConfig.ResolveRef(this);
             }
         }
+        /// <summary>
+        /// 情绪配置表
+        /// </summary>
+        private TbEmotionConfig m_TbEmotionConfig;
+        public TbEmotionConfig TbEmotionConfig 
+        {
+            get
+            {
+                if (m_TbEmotionConfig == null)
+                {
+                    m_TbEmotionConfig = new TbEmotionConfig(m_defaultLoader("tbemotionconfig"));
+                    m_TbEmotionConfig.ResolveRef(this);
+                }
+                return m_TbEmotionConfig;
+            }
+            set
+            {
+                m_TbEmotionConfig = value;
+                m_TbEmotionConfig.ResolveRef(this);
+            }
+        }
+        /// <summary>
+        /// 记忆配置表
+        /// </summary>
+        private TbMemoryConfig m_TbMemoryConfig;
+        public TbMemoryConfig TbMemoryConfig 
+        {
+            get
+            {
+                if (m_TbMemoryConfig == null)
+                {
+                    m_TbMemoryConfig = new TbMemoryConfig(m_defaultLoader("tbmemoryconfig"));
+                    m_TbMemoryConfig.ResolveRef(this);
+                }
+                return m_TbMemoryConfig;
+            }
+            set
+            {
+                m_TbMemoryConfig = value;
+                m_TbMemoryConfig.ResolveRef(this);
+            }
+        }
+        /// <summary>
+        /// 回复选项配置表
+        /// </summary>
+        private TbReplyOptionConfig m_TbReplyOptionConfig;
+        public TbReplyOptionConfig TbReplyOptionConfig 
+        {
+            get
+            {
+                if (m_TbReplyOptionConfig == null)
+                {
+                    m_TbReplyOptionConfig = new TbReplyOptionConfig(m_defaultLoader("tbreplyoptionconfig"));
+                    m_TbReplyOptionConfig.ResolveRef(this);
+                }
+                return m_TbReplyOptionConfig;
+            }
+            set
+            {
+                m_TbReplyOptionConfig = value;
+                m_TbReplyOptionConfig.ResolveRef(this);
+            }
+        }
+        /// <summary>
+        /// 剧情节点配置表
+        /// </summary>
+        private TbStoryNodeConfig m_TbStoryNodeConfig;
+        public TbStoryNodeConfig TbStoryNodeConfig 
+        {
+            get
+            {
+                if (m_TbStoryNodeConfig == null)
+                {
+                    m_TbStoryNodeConfig = new TbStoryNodeConfig(m_defaultLoader("tbstorynodeconfig"));
+                    m_TbStoryNodeConfig.ResolveRef(this);
+                }
+                return m_TbStoryNodeConfig;
+            }
+            set
+            {
+                m_TbStoryNodeConfig = value;
+                m_TbStoryNodeConfig.ResolveRef(this);
+            }
+        }
 
         #endregion
 
@@ -232,6 +316,10 @@ namespace GameProto
             m_TbGmConfig = null;
             m_TbGuideGroupConfig = null;
             m_TbGuideStepConfig = null;
+            m_TbEmotionConfig = null;
+            m_TbMemoryConfig = null;
+            m_TbReplyOptionConfig = null;
+            m_TbStoryNodeConfig = null;
         }
 
         public void Init(){}

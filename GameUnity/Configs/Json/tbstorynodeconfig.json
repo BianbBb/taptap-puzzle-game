@@ -1,0 +1,12 @@
+[
+  {
+    "id": "N01",
+    "npcId": "NPC_001",
+    "npcText": "今天路过这里的时候，我突然想起了一件以前的事。",
+    "replies": [
+      "R01"
+    ],
+    "branches": [],
+    "isSessionEnd": false
+  }
+]

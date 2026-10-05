@@ -1,0 +1,17 @@
+[
+  {
+    "id": "E01",
+    "emotionName": "温柔",
+    "displayColor": "#F5C6CB"
+  },
+  {
+    "id": "E02",
+    "emotionName": "好奇",
+    "displayColor": "#CDE7F0"
+  },
+  {
+    "id": "E03",
+    "emotionName": "克制",
+    "displayColor": "#D7D3E8"
+  }
+]

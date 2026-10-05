@@ -1,0 +1,14 @@
+[
+  {
+    "GroupId": 9000,
+    "Priority": 0,
+    "FirstStepId": 1,
+    "PrerequisiteGuideIds": [],
+    "ConditionKey": 0,
+    "ConditionParams": [],
+    "LocalSave": true,
+    "ResumePolicy": 0,
+    "FailurePolicy": 2,
+    "Enabled": true
+  }
+]

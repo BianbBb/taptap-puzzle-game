@@ -1,0 +1,27 @@
+[
+  {
+    "id": "M01",
+    "memoryName": "旧照片",
+    "description": "照片里的人站在车站前，笑得很轻松。",
+    "emotionCardSet": [
+      "E01"
+    ]
+  },
+  {
+    "id": "M02",
+    "memoryName": "车站",
+    "description": "那是一个很久以前去过的车站。",
+    "emotionCardSet": [
+      "E01",
+      "E02"
+    ]
+  },
+  {
+    "id": "M03",
+    "memoryName": "雨天",
+    "description": "那天一直在下雨。",
+    "emotionCardSet": [
+      "E03"
+    ]
+  }
+]
