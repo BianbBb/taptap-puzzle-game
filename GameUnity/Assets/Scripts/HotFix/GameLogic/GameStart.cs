@@ -34,6 +34,10 @@ public partial class GameStart
         DLogger.Warning("======= Entrance GameStart =======");
         DLogger.Warning("======= 开始游戏 =======");
         InitLanguageSettings();
+ 
+  
+        // GameNarrative.NarrativeDebugEntry.RunOnStart(); // Luban导表测试
+
         StartGame();
     }
 

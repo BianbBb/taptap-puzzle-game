@@ -17,6 +17,7 @@ MonoBehaviour:
   - GameProto.dll
   - GameBattle.dll
   - GameLogic.dll
+  - GameNarrative.dll
   AOTMetaAssemblies:
   - mscorlib.dll
   - System.dll
