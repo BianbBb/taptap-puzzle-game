@@ -21,7 +21,6 @@ MonoBehaviour:
   - GameProto
   - GameBattle
   - GameLogic
-  - GameNarrative
   preserveHotUpdateAssemblies: []
   hotUpdateDllCompileOutputRootDir: HybridCLRData/HotUpdateDlls
   externalHotUpdateAssembliyDirs: []
