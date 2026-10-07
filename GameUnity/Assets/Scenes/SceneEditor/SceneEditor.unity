@@ -951,6 +951,18 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 1071401260053766220, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1071401260053766220, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1071401260053766220, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 3226365254706254307, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
       propertyPath: m_Name
       value: HUDCanvas
@@ -958,6 +970,18 @@ PrefabInstance:
     - target: {fileID: 3226365254706254307, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
       propertyPath: m_IsActive
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4580392083021968677, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4580392083021968677, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4580392083021968677, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 5385832156844609569, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
       propertyPath: m_uiTextOutlineExtend.m_camera
@@ -1042,6 +1066,18 @@ PrefabInstance:
     - target: {fileID: 7843092427619306682, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8555447849517142227, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8555447849517142227, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8555447849517142227, guid: 8da7417abc6e84777b26cb992b736db4, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
