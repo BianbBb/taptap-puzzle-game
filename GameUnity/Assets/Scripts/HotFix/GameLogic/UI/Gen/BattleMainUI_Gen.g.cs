@@ -19,6 +19,8 @@ namespace GameLogic
 		private ScrollRect m_scrollMemoryList;
 		private Button m_btnSettings;
 		private ScrollRect m_scrollMessage;
+		private Transform m_tfReplayMessageNode;
+		private Transform m_tfReplayEmoNode;
 		private Button m_btnEmoCollection;
 
 		protected override void ScriptGenerator()
@@ -27,7 +29,9 @@ namespace GameLogic
 			m_scrollMemoryList = m_bindComponent.GetComponent<ScrollRect>(0);
 			m_btnSettings = m_bindComponent.GetComponent<Button>(1);
 			m_scrollMessage = m_bindComponent.GetComponent<ScrollRect>(2);
-			m_btnEmoCollection = m_bindComponent.GetComponent<Button>(3);
+			m_tfReplayMessageNode = m_bindComponent.GetComponent<Transform>(3);
+			m_tfReplayEmoNode = m_bindComponent.GetComponent<Transform>(4);
+			m_btnEmoCollection = m_bindComponent.GetComponent<Button>(5);
 			m_btnSettings.onClick.AddListener(OnClickSettingsBtn);
 			m_btnEmoCollection.onClick.AddListener(OnClickEmoCollectionBtn);
 		}
