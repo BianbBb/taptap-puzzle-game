@@ -17,6 +17,8 @@ namespace GameLogic
 
 		private partial void OnClickStartGameBtn()
 		{
+			Close();
+			GameModule.UIModule.ShowWindowAsync<BattleMainUI>();
 		}
 
 		private partial void OnClickQuitGameBtn()
