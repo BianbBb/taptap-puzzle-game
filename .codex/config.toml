@@ -1,0 +1,7 @@
+[mcp_servers.unity-cli-mcp.env]
+UNITY_NO_UPDATE_CHECK = "1"
+
+[mcp_servers.unity-cli-mcp]
+enabled = true
+command = 'D:\Unity\GitHub_Project\taptap-puzzle-game\GameUnity\Tools\unity.exe'
+args = ["mcp", "--project-path", 'D:\Unity\GitHub_Project\taptap-puzzle-game\GameUnity', "--no-log-proxy"]
