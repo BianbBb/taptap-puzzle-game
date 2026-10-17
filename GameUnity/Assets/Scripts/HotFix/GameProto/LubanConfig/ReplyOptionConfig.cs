@@ -25,6 +25,13 @@ public sealed partial class ReplyOptionConfig : Luban.BeanBase
         {int n0 = _buf.ReadSize(); AllowedEmotion = new System.Collections.Generic.List<string>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { string _e0;  _e0 = _buf.ReadString(); AllowedEmotion.Add(_e0);}}
         {int n0 = _buf.ReadSize(); RewardMemory = new System.Collections.Generic.List<string>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { string _e0;  _e0 = _buf.ReadString(); RewardMemory.Add(_e0);}}
         {int n0 = _buf.ReadSize(); AffectionRules = new System.Collections.Generic.List<EmotionAffectionRule>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { EmotionAffectionRule _e0;  _e0 = global::GameProto.EmotionAffectionRule.DeserializeEmotionAffectionRule(_buf); AffectionRules.Add(_e0);}}
+        NextNodeId = _buf.ReadString();
+        IsSessionEnd = _buf.ReadBool();
+        AffectionNpcId = _buf.ReadString();
+        AffectionDelta = _buf.ReadFloat();
+        OptionSetId = _buf.ReadString();
+        DisplayOrder = _buf.ReadInt();
+        {int n0 = _buf.ReadSize(); ActionIds = new System.Collections.Generic.List<string>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { string _e0;  _e0 = _buf.ReadString(); ActionIds.Add(_e0);}}
     }
 
     public static ReplyOptionConfig DeserializeReplyOptionConfig(ByteBuf _buf)
@@ -60,6 +67,34 @@ public sealed partial class ReplyOptionConfig : Luban.BeanBase
     /// 情绪好感规则(元素;分隔,字段,分隔)
     /// </summary>
     public System.Collections.Generic.List<EmotionAffectionRule> AffectionRules;
+    /// <summary>
+    /// 选项后继节点
+    /// </summary>
+    public string NextNodeId;
+    /// <summary>
+    /// 选项结束Session
+    /// </summary>
+    public bool IsSessionEnd;
+    /// <summary>
+    /// 好感变化对应NPC
+    /// </summary>
+    public string AffectionNpcId;
+    /// <summary>
+    /// NPC好感变化值
+    /// </summary>
+    public float AffectionDelta;
+    /// <summary>
+    /// 回复所属选项集
+    /// </summary>
+    public string OptionSetId;
+    /// <summary>
+    /// 回复显示顺序
+    /// </summary>
+    public int DisplayOrder;
+    /// <summary>
+    /// 回复选择动作
+    /// </summary>
+    public System.Collections.Generic.List<string> ActionIds;
 
     public const int __ID__ = 1843438593;
     public override int GetTypeId() => __ID__;
@@ -83,6 +118,13 @@ public sealed partial class ReplyOptionConfig : Luban.BeanBase
         other.AllowedEmotion = AllowedEmotion == null ? null : new System.Collections.Generic.List<string>(AllowedEmotion);
         other.RewardMemory = RewardMemory == null ? null : new System.Collections.Generic.List<string>(RewardMemory);
         other.AffectionRules = AffectionRules == null ? null : new System.Collections.Generic.List<EmotionAffectionRule>(); if (AffectionRules != null) foreach (var _e in AffectionRules) { var _copy = _e; _e?.CopyTo(ref _copy); other.AffectionRules.Add(_copy); }
+        other.NextNodeId = NextNodeId;
+        other.IsSessionEnd = IsSessionEnd;
+        other.AffectionNpcId = AffectionNpcId;
+        other.AffectionDelta = AffectionDelta;
+        other.OptionSetId = OptionSetId;
+        other.DisplayOrder = DisplayOrder;
+        other.ActionIds = ActionIds == null ? null : new System.Collections.Generic.List<string>(ActionIds);
     }
 
     public ReplyOptionConfig DeepCopy()
@@ -102,6 +144,13 @@ public sealed partial class ReplyOptionConfig : Luban.BeanBase
         + "allowedEmotion:" + Luban.StringUtil.CollectionToString(AllowedEmotion) + ","
         + "rewardMemory:" + Luban.StringUtil.CollectionToString(RewardMemory) + ","
         + "affectionRules:" + Luban.StringUtil.CollectionToString(AffectionRules) + ","
+        + "nextNodeId:" + NextNodeId + ","
+        + "isSessionEnd:" + IsSessionEnd + ","
+        + "affectionNpcId:" + AffectionNpcId + ","
+        + "affectionDelta:" + AffectionDelta + ","
+        + "optionSetId:" + OptionSetId + ","
+        + "displayOrder:" + DisplayOrder + ","
+        + "actionIds:" + Luban.StringUtil.CollectionToString(ActionIds) + ","
         + "}";
     }
 }

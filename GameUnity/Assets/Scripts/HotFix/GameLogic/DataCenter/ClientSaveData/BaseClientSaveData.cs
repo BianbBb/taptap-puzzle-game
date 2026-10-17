@@ -283,7 +283,21 @@ namespace GameLogic
                 Directory.CreateDirectory(directory);
             }
 
-            File.WriteAllText(filePath, jsonStr, Encoding.UTF8);
+            string temporaryPath = filePath + ".tmp";
+            try
+            {
+                File.WriteAllText(temporaryPath, jsonStr, Encoding.UTF8);
+                if (File.Exists(filePath))
+                    File.Replace(temporaryPath, filePath, null);
+                else
+                    File.Move(temporaryPath, filePath);
+            }
+            catch
+            {
+                if (File.Exists(temporaryPath))
+                    File.Delete(temporaryPath);
+                throw;
+            }
         }
 
         private static string GetSafeFileName(string fileName)

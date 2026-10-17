@@ -290,6 +290,90 @@ namespace GameProto
                 m_TbStoryNodeConfig.ResolveRef(this);
             }
         }
+        /// <summary>
+        /// 叙事Session配置表
+        /// </summary>
+        private TbNarrativeSessionConfig m_TbNarrativeSessionConfig;
+        public TbNarrativeSessionConfig TbNarrativeSessionConfig 
+        {
+            get
+            {
+                if (m_TbNarrativeSessionConfig == null)
+                {
+                    m_TbNarrativeSessionConfig = new TbNarrativeSessionConfig(m_defaultLoader("tbnarrativesessionconfig"));
+                    m_TbNarrativeSessionConfig.ResolveRef(this);
+                }
+                return m_TbNarrativeSessionConfig;
+            }
+            set
+            {
+                m_TbNarrativeSessionConfig = value;
+                m_TbNarrativeSessionConfig.ResolveRef(this);
+            }
+        }
+        /// <summary>
+        /// 叙事动作配置表
+        /// </summary>
+        private TbNarrativeActionConfig m_TbNarrativeActionConfig;
+        public TbNarrativeActionConfig TbNarrativeActionConfig 
+        {
+            get
+            {
+                if (m_TbNarrativeActionConfig == null)
+                {
+                    m_TbNarrativeActionConfig = new TbNarrativeActionConfig(m_defaultLoader("tbnarrativeactionconfig"));
+                    m_TbNarrativeActionConfig.ResolveRef(this);
+                }
+                return m_TbNarrativeActionConfig;
+            }
+            set
+            {
+                m_TbNarrativeActionConfig = value;
+                m_TbNarrativeActionConfig.ResolveRef(this);
+            }
+        }
+        /// <summary>
+        /// 叙事物品配置表
+        /// </summary>
+        private TbNarrativeItemConfig m_TbNarrativeItemConfig;
+        public TbNarrativeItemConfig TbNarrativeItemConfig 
+        {
+            get
+            {
+                if (m_TbNarrativeItemConfig == null)
+                {
+                    m_TbNarrativeItemConfig = new TbNarrativeItemConfig(m_defaultLoader("tbnarrativeitemconfig"));
+                    m_TbNarrativeItemConfig.ResolveRef(this);
+                }
+                return m_TbNarrativeItemConfig;
+            }
+            set
+            {
+                m_TbNarrativeItemConfig = value;
+                m_TbNarrativeItemConfig.ResolveRef(this);
+            }
+        }
+        /// <summary>
+        /// 叙事物品部件配置表
+        /// </summary>
+        private TbNarrativeItemPartConfig m_TbNarrativeItemPartConfig;
+        public TbNarrativeItemPartConfig TbNarrativeItemPartConfig 
+        {
+            get
+            {
+                if (m_TbNarrativeItemPartConfig == null)
+                {
+                    m_TbNarrativeItemPartConfig = new TbNarrativeItemPartConfig(m_defaultLoader("tbnarrativeitempartconfig"));
+                    m_TbNarrativeItemPartConfig.ResolveRef(this);
+                }
+                return m_TbNarrativeItemPartConfig;
+            }
+            set
+            {
+                m_TbNarrativeItemPartConfig = value;
+                m_TbNarrativeItemPartConfig.ResolveRef(this);
+            }
+        }
 
         #endregion
 
@@ -320,6 +404,10 @@ namespace GameProto
             m_TbMemoryConfig = null;
             m_TbReplyOptionConfig = null;
             m_TbStoryNodeConfig = null;
+            m_TbNarrativeSessionConfig = null;
+            m_TbNarrativeActionConfig = null;
+            m_TbNarrativeItemConfig = null;
+            m_TbNarrativeItemPartConfig = null;
         }
 
         public void Init(){}

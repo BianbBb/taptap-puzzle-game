@@ -109,87 +109,101 @@ namespace DGame
 
                     if (skeletonDataAsset != null)
                     {
-                        var assetName = skeletonDataAsset.name.Replace(AssetUtility.SkeletonDataSuffix, "");
-                        var uiSpinePrefabName = GetUISpinePrefabName(assetName);
                         var animationName = onePath.StartsWith(SPINE_PATH) ? "idle" : "run";
-
-                        GameObject canvasGameObject = new GameObject("Canvas");
-                        Canvas canvas = canvasGameObject.AddComponent<Canvas>();
-                        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-
-                        GameObject parentGameObject = new GameObject();
-                        parentGameObject.name = uiSpinePrefabName;
-                        parentGameObject.layer = LayerMask.NameToLayer("UI");
-                        parentGameObject.transform.SetParent(canvas.transform, false);
-                        parentGameObject.AddComponent<RectTransform>();
-
-                        GameObject shaPanGameObject = new GameObject("m_tfUISpineRoot");
-                        shaPanGameObject.transform.SetParent(parentGameObject.transform, false);
-                        shaPanGameObject.AddComponent<RectTransform>();
-
-                        GameObject effGameObject = new GameObject("m_tfEffRoot");
-                        effGameObject.transform.SetParent(parentGameObject.transform, false);
-                        effGameObject.AddComponent<RectTransform>();
-
-                        /*var skeletonGraphicInspectorType =
-                            System.Type.GetType("Spine.Unity.Editor.SkeletonGraphicInspector");
-                        var graphicInstantiateDelegate =
-                            skeletonGraphicInspectorType?.GetMethod("SpawnSkeletonGraphicFromDrop",
-                                BindingFlags.Static | BindingFlags.Public);
-                        var instantiateDelegate =
-                            System.Delegate.CreateDelegate(typeof(EditorInstantiation.InstantiateDelegate),
-                                graphicInstantiateDelegate) as EditorInstantiation.InstantiateDelegate;
-                        SkeletonGraphic newSkeletonComponent =
-                            (SkeletonGraphic)instantiateDelegate.Invoke(skeletonDataAsset);
-                        newSkeletonComponent.startingAnimation = animationName;
-                        newSkeletonComponent.raycastTarget = false;
-                        // var material =
-                        //     AssetDatabase.LoadAssetAtPath<Material>(
-                        //         "Assets/Plugins/Spine/Runtime/spine-unity/Materials/UI-PMATexture/SkeletonGraphicDefault.mat");
-                        // newSkeletonComponent.material = material;
-                        newSkeletonComponent.MeshGenerator.settings.useClipping = false;
-                        newSkeletonComponent.allowMultipleCanvasRenderers = true;
-                        GameObject newGameObject = newSkeletonComponent.gameObject;
-                        newGameObject.transform.position = Vector3.zero;
-                        newGameObject.name = "m_goSpineModel";
-                        newGameObject.transform.SetParent(shaPanGameObject.transform, false);*/
-
-                        GameObject spineGameObject = new GameObject("m_goSpineModel");
-                        SkeletonGraphic newSkeletonComponent = spineGameObject.AddComponent<SkeletonGraphic>();
-                        newSkeletonComponent.skeletonDataAsset = skeletonDataAsset;
-                        newSkeletonComponent.startingAnimation = animationName;
-                        newSkeletonComponent.raycastTarget = false;
-                        // newSkeletonComponent.material = null; // 使用默认材质
-                        newSkeletonComponent.MeshGenerator.settings.useClipping = true;
-                        newSkeletonComponent.allowMultipleCanvasRenderers = true;
-                        spineGameObject.transform.SetParent(shaPanGameObject.transform, false);
-
-                        SetExpandedRecursive(canvasGameObject, true);
-                        //Selection.activeGameObject = newGameObject;
-
-                        string savePath = GetSavePath(onePath, true);
-                        savePath += $"/{assetName}";
-                        if (string.IsNullOrEmpty(savePath))
-                        {
-                            Debug.Log("savePath error.");
-                            return;
-                        }
-
-                        if (!Directory.Exists(savePath))
-                        {
-                            Directory.CreateDirectory(savePath);
-                        }
-
-                        savePath = $"{savePath}/{uiSpinePrefabName}.prefab";
-                        PrefabUtility.SaveAsPrefabAsset(parentGameObject, savePath);
-                        Debug.LogFormat("UISpine模型生成结束. {0}", savePath);
-                        //GameObject.DestroyImmediate(newGameObject);
+                        GenerateUISpinePrefab(onePath, animationName);
                     }
                 }
             }
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
+        }
+
+        /// <summary>
+        /// 从 SkeletonData 生成 UI Spine 预制体，落到 BundleAssets/Prefabs/UISpineModel。
+        /// </summary>
+        public static string GenerateUISpinePrefab(string skeletonDataPath, string animationName = "zhengchang")
+        {
+            if (string.IsNullOrEmpty(skeletonDataPath))
+            {
+                Debug.LogError("GenerateUISpinePrefab: empty skeletonDataPath");
+                return string.Empty;
+            }
+
+            var skeletonDataAsset = AssetDatabase.LoadAssetAtPath<SkeletonDataAsset>(skeletonDataPath);
+            if (skeletonDataAsset == null || skeletonDataAsset.GetSkeletonData(true) == null)
+            {
+                Debug.LogError($"GenerateUISpinePrefab: invalid SkeletonDataAsset {skeletonDataPath}");
+                return string.Empty;
+            }
+
+            var skeletonData = skeletonDataAsset.GetSkeletonData(true);
+            if (string.IsNullOrEmpty(animationName) || skeletonData.FindAnimation(animationName) == null)
+            {
+                if (skeletonData.FindAnimation("zhengchang") != null)
+                {
+                    animationName = "zhengchang";
+                }
+                else if (skeletonData.FindAnimation("idle") != null)
+                {
+                    animationName = "idle";
+                }
+                else if (skeletonData.Animations.Count > 0)
+                {
+                    animationName = skeletonData.Animations.Items[0].Name;
+                }
+            }
+
+            var assetName = skeletonDataAsset.name.Replace(AssetUtility.SkeletonDataSuffix, "");
+            var uiSpinePrefabName = GetUISpinePrefabName(assetName);
+
+            GameObject canvasGameObject = new GameObject("Canvas");
+            Canvas canvas = canvasGameObject.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+            GameObject parentGameObject = new GameObject();
+            parentGameObject.name = uiSpinePrefabName;
+            parentGameObject.layer = LayerMask.NameToLayer("UI");
+            parentGameObject.transform.SetParent(canvas.transform, false);
+            parentGameObject.AddComponent<RectTransform>();
+
+            GameObject shaPanGameObject = new GameObject("m_tfUISpineRoot");
+            shaPanGameObject.transform.SetParent(parentGameObject.transform, false);
+            shaPanGameObject.AddComponent<RectTransform>();
+
+            GameObject effGameObject = new GameObject("m_tfEffRoot");
+            effGameObject.transform.SetParent(parentGameObject.transform, false);
+            effGameObject.AddComponent<RectTransform>();
+
+            GameObject spineGameObject = new GameObject("m_goSpineModel");
+            SkeletonGraphic newSkeletonComponent = spineGameObject.AddComponent<SkeletonGraphic>();
+            newSkeletonComponent.skeletonDataAsset = skeletonDataAsset;
+            newSkeletonComponent.startingAnimation = animationName;
+            newSkeletonComponent.startingLoop = true;
+            newSkeletonComponent.raycastTarget = false;
+            var uiMaterial = AssetDatabase.LoadAssetAtPath<Material>(
+                "Packages/com.esotericsoftware.spine.spine-unity/Runtime/spine-unity/Materials/SkeletonGraphicDefault.mat");
+            if (uiMaterial != null)
+            {
+                newSkeletonComponent.material = uiMaterial;
+            }
+            newSkeletonComponent.MeshGenerator.settings.useClipping = true;
+            newSkeletonComponent.allowMultipleCanvasRenderers = true;
+            spineGameObject.transform.SetParent(shaPanGameObject.transform, false);
+
+            string saveDir = $"{UI_SPINE_SAVE_PATH}/{assetName}";
+            if (!Directory.Exists(saveDir))
+            {
+                Directory.CreateDirectory(saveDir);
+            }
+
+            string savePath = $"{saveDir}/{uiSpinePrefabName}.prefab";
+            PrefabUtility.SaveAsPrefabAsset(parentGameObject, savePath);
+            Object.DestroyImmediate(canvasGameObject);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.LogFormat("UISpine模型生成结束. {0} anim={1}", savePath, animationName);
+            return savePath;
         }
 
         private static string GetUISpinePrefabName(string assetName)

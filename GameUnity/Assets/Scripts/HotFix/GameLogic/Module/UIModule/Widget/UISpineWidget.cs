@@ -55,6 +55,22 @@ namespace GameLogic
         private Skin m_view;
         private List<string> m_currentSkinNames = new List<string>();
 
+        public bool HasValidSkeleton
+        {
+            get
+            {
+                if (m_skeletonGraphic == null || m_skeletonGraphic.SkeletonDataAsset == null ||
+                    m_skeletonGraphic.SkeletonDataAsset.GetSkeletonData(true) == null)
+                {
+                    return false;
+                }
+
+                EnsureAnimationState();
+                return m_skeletonGraphic != null && m_skeletonGraphic.Skeleton != null &&
+                    m_curAnimState?.Data?.SkeletonData != null;
+            }
+        }
+
         #endregion
 
         #region 函数
@@ -94,6 +110,60 @@ namespace GameLogic
             {
                 m_goSpineModel.transform.localPosition = pos;
             }
+        }
+
+        /// <summary>
+        /// 把骨骼按原始比例缩进 slot 内，底对齐、水平居中。
+        /// </summary>
+        public void FitToSlot(Vector2 slotSize)
+        {
+            StretchFull(rectTransform);
+            StretchFull(m_tfUISpineRoot as RectTransform);
+            StretchFull(m_tfEffRoot as RectTransform);
+
+            EnsureAnimationState();
+            if (m_skeletonGraphic == null || m_skeletonGraphic.Skeleton == null ||
+                slotSize.x < 1f || slotSize.y < 1f)
+            {
+                return;
+            }
+
+            Skeleton skeleton = m_skeletonGraphic.Skeleton;
+            skeleton.UpdateWorldTransform();
+            float[] vertexBuffer = new float[2048];
+            float x;
+            float y;
+            float width;
+            float height;
+            skeleton.GetBounds(out x, out y, out width, out height, ref vertexBuffer);
+
+            if (width < 0.01f || height < 0.01f)
+            {
+                return;
+            }
+
+            float scale = Mathf.Min(slotSize.x / width, slotSize.y / height);
+            ChangeScale(scale);
+            float offsetX = -(x + width * 0.5f) * scale;
+            float offsetY = -slotSize.y * 0.5f - y * scale;
+            ChangeLocalPos(new Vector3(offsetX, offsetY, 0f));
+            m_skeletonGraphic.raycastTarget = false;
+        }
+
+        private static void StretchFull(RectTransform rt)
+        {
+            if (rt == null)
+            {
+                return;
+            }
+
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.localScale = Vector3.one;
+            rt.localRotation = Quaternion.identity;
+            rt.anchoredPosition = Vector2.zero;
         }
 
         /// <summary>
@@ -277,6 +347,12 @@ namespace GameLogic
 
             if (!m_skeletonGraphic.IsValid)
             {
+                if (m_skeletonGraphic.SkeletonDataAsset == null ||
+                    m_skeletonGraphic.SkeletonDataAsset.GetSkeletonData(true) == null)
+                {
+                    return;
+                }
+
                 m_skeletonGraphic.Initialize(false);
             }
 

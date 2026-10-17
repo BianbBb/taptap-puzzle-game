@@ -1,0 +1,62 @@
+[
+  {
+    "id": "ADD_GLASS",
+    "actionType": "GrantItem",
+    "targetId": "GLASS",
+    "inputValue": ""
+  },
+  {
+    "id": "REMOVE_GLASS",
+    "actionType": "RemoveItem",
+    "targetId": "GLASS",
+    "inputValue": ""
+  },
+  {
+    "id": "ADD_CAMERA",
+    "actionType": "GrantItem",
+    "targetId": "CAMERA",
+    "inputValue": ""
+  },
+  {
+    "id": "REMOVE_CAMERA",
+    "actionType": "RemoveItem",
+    "targetId": "CAMERA",
+    "inputValue": ""
+  },
+  {
+    "id": "ADD_CLOCK",
+    "actionType": "GrantItem",
+    "targetId": "CLOCK",
+    "inputValue": ""
+  },
+  {
+    "id": "REMOVE_CLOCK",
+    "actionType": "RemoveItem",
+    "targetId": "CLOCK",
+    "inputValue": ""
+  },
+  {
+    "id": "ADD_DOLL",
+    "actionType": "GrantItem",
+    "targetId": "DOLL",
+    "inputValue": ""
+  },
+  {
+    "id": "ADD_RADIO_DAD",
+    "actionType": "GrantItem",
+    "targetId": "RADIO_DAD",
+    "inputValue": ""
+  },
+  {
+    "id": "ADD_RADIO_ZHOU",
+    "actionType": "GrantItem",
+    "targetId": "RADIO_ZHOU",
+    "inputValue": ""
+  },
+  {
+    "id": "ADD_RADIO_REPAIRED",
+    "actionType": "GrantItem",
+    "targetId": "RADIO_REPAIRED",
+    "inputValue": ""
+  }
+]

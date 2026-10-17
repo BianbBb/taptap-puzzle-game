@@ -681,6 +681,16 @@ namespace GameLogic
             }
 
             windowGo.name = GetType().Name;
+            int uiLayer = LayerMask.NameToLayer("UI");
+            if (uiLayer < 0)
+            {
+                throw new DGameException("UI layer is not configured in Project Settings.");
+            }
+            foreach (Transform child in windowGo.GetComponentsInChildren<Transform>(true))
+            {
+                child.gameObject.layer = uiLayer;
+            }
+
             gameObject = windowGo;
             m_transform = gameObject?.transform;
             windowGo.transform.localPosition = Vector3.zero;

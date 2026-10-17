@@ -1,0 +1,114 @@
+[
+  {
+    "id": "CAMERA_PART_01",
+    "partName": "相机部件1",
+    "imageId": "narrative_camera",
+    "memoryId": "M01",
+    "hotspotX": 0.43,
+    "hotspotY": 0.72
+  },
+  {
+    "id": "CAMERA_PART_02",
+    "partName": "相机部件2",
+    "imageId": "narrative_camera",
+    "memoryId": "M02",
+    "hotspotX": 0.68,
+    "hotspotY": 0.45
+  },
+  {
+    "id": "GLASS_PART_01",
+    "partName": "镜架",
+    "imageId": "narrative_glasses",
+    "memoryId": "M03",
+    "hotspotX": 0.5,
+    "hotspotY": 0.51
+  },
+  {
+    "id": "GLASS_PART_02",
+    "partName": "镜腿",
+    "imageId": "narrative_glasses",
+    "memoryId": "M04",
+    "hotspotX": 0.89,
+    "hotspotY": 0.55
+  },
+  {
+    "id": "GLASS_PART_03",
+    "partName": "镜片",
+    "imageId": "narrative_glasses",
+    "memoryId": "M05",
+    "hotspotX": 0.28,
+    "hotspotY": 0.48
+  },
+  {
+    "id": "CLOCK_PART_01",
+    "partName": "钟表盘",
+    "imageId": "narrative_clock",
+    "memoryId": "M06",
+    "hotspotX": 0.5,
+    "hotspotY": 0.5
+  },
+  {
+    "id": "DOLL_SEAM",
+    "partName": "侧边补缀",
+    "imageId": "scene_chenguo_cat_broken",
+    "memoryId": "M07",
+    "hotspotX": 0.29,
+    "hotspotY": 0.55
+  },
+  {
+    "id": "DOLL_NOTE",
+    "partName": "夹层纸条",
+    "imageId": "scene_chenguo_cat_broken",
+    "memoryId": "M08",
+    "hotspotX": 0.67,
+    "hotspotY": 0.35
+  },
+  {
+    "id": "RADIO_READER",
+    "partName": "读取模块",
+    "imageId": "scene_shop_old_radio",
+    "memoryId": "M10",
+    "hotspotX": 0.49,
+    "hotspotY": 0.69
+  },
+  {
+    "id": "RADIO_STORAGE",
+    "partName": "存储模块",
+    "imageId": "scene_shop_old_radio",
+    "memoryId": "M11",
+    "hotspotX": 0.83,
+    "hotspotY": 0.5
+  },
+  {
+    "id": "ZHOU_RADIO_READER",
+    "partName": "可拆卸读取部件",
+    "imageId": "scene_zhou_radio",
+    "memoryId": "M16",
+    "hotspotX": 0.49,
+    "hotspotY": 0.69
+  },
+  {
+    "id": "ZHOU_RADIO_RECORDING",
+    "partName": "录音存储部分",
+    "imageId": "scene_zhou_radio",
+    "memoryId": "M17",
+    "hotspotX": 0.82,
+    "hotspotY": 0.5
+  },
+  {
+    "id": "RECORDING_NAME",
+    "partName": "录音里的称呼",
+    "imageId": "scene_shop_new_radio",
+    "memoryId": "M19",
+    "hotspotX": 0.51,
+    "hotspotY": 0.78
+  },
+  {
+    "id": "RECORDING_PAUSE",
+    "partName": "录音里的停顿",
+    "imageId": "scene_shop_new_radio",
+    "memoryId": "M20",
+    "hotspotX": 0.69,
+    "hotspotY": 0.53
+  }
+]

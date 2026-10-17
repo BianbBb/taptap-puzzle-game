@@ -239,7 +239,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 46222450bca5b634fb11b9dd0c96853a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  editorLanguage: 0
   stringUtilHelperTypeName: DGame.DGameStringUtilHelper
   logHelperTypeName: DGame.DGameLogHelper
   jsonHelperTypeName: DGame.NewtonsoftJsonHelper
@@ -247,6 +246,7 @@ MonoBehaviour:
   gameSpeed: 1
   runInBackground: 1
   neverSleep: 1
+  screenOrientation: 1
   m_memoryStrictCheckType: 2
 --- !u!1 &8901822936673353119
 GameObject:

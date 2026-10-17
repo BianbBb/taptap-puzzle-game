@@ -334,10 +334,6 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
-    - target: {fileID: 419457098496666668, guid: 3375c1da4c80d8e40bca1675c3990457, type: 3}
-      propertyPath: screenOrientation
-      value: 1
-      objectReference: {fileID: 0}
     - target: {fileID: 8427157544136828061, guid: 3375c1da4c80d8e40bca1675c3990457, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0

@@ -9,6 +9,12 @@ namespace GameLogic
 {
 	public partial class MainWindow
 	{
+		protected override void OnCreate()
+		{
+			m_tmpTitle.text = "记忆终会消散";
+			m_tmpTitle.color = new Color(0.98f, 0.91f, 0.72f, 1f);
+		}
+
 		public void RefreshUI()
 		{
 		}
@@ -23,6 +29,7 @@ namespace GameLogic
 
 		private partial void OnClickQuitGameBtn()
 		{
+			Application.Quit();
 		}
 
 		#endregion

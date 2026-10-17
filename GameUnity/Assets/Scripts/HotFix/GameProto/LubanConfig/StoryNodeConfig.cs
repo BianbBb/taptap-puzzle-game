@@ -24,6 +24,14 @@ public sealed partial class StoryNodeConfig : Luban.BeanBase
         {int n0 = _buf.ReadSize(); Replies = new System.Collections.Generic.List<string>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { string _e0;  _e0 = _buf.ReadString(); Replies.Add(_e0);}}
         {int n0 = _buf.ReadSize(); Branches = new System.Collections.Generic.List<BranchRule>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { BranchRule _e0;  _e0 = global::GameProto.BranchRule.DeserializeBranchRule(_buf); Branches.Add(_e0);}}
         IsSessionEnd = _buf.ReadBool();
+        DefaultNextNodeId = _buf.ReadString();
+        MinAffection = _buf.ReadFloat();
+        TurnType = _buf.ReadString();
+        AnimationAsset = _buf.ReadString();
+        {int n0 = _buf.ReadSize(); OnEnterActionIds = new System.Collections.Generic.List<string>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { string _e0;  _e0 = _buf.ReadString(); OnEnterActionIds.Add(_e0);}}
+        {int n0 = _buf.ReadSize(); OnExitActionIds = new System.Collections.Generic.List<string>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { string _e0;  _e0 = _buf.ReadString(); OnExitActionIds.Add(_e0);}}
+        {int n0 = _buf.ReadSize(); ExtraNextNodeIds = new System.Collections.Generic.List<string>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { string _e0;  _e0 = _buf.ReadString(); ExtraNextNodeIds.Add(_e0);}}
+        Priority = _buf.ReadInt();
     }
 
     public static StoryNodeConfig DeserializeStoryNodeConfig(ByteBuf _buf)
@@ -55,6 +63,38 @@ public sealed partial class StoryNodeConfig : Luban.BeanBase
     /// 是否会话结束
     /// </summary>
     public bool IsSessionEnd;
+    /// <summary>
+    /// 默认后继节点
+    /// </summary>
+    public string DefaultNextNodeId;
+    /// <summary>
+    /// 最低说话人好感
+    /// </summary>
+    public float MinAffection;
+    /// <summary>
+    /// Turn类型
+    /// </summary>
+    public string TurnType;
+    /// <summary>
+    /// 演出资源
+    /// </summary>
+    public string AnimationAsset;
+    /// <summary>
+    /// 进入动作
+    /// </summary>
+    public System.Collections.Generic.List<string> OnEnterActionIds;
+    /// <summary>
+    /// 离开动作
+    /// </summary>
+    public System.Collections.Generic.List<string> OnExitActionIds;
+    /// <summary>
+    /// 额外后继候选
+    /// </summary>
+    public System.Collections.Generic.List<string> ExtraNextNodeIds;
+    /// <summary>
+    /// 节点优先级
+    /// </summary>
+    public int Priority;
 
     public const int __ID__ = 1445114521;
     public override int GetTypeId() => __ID__;
@@ -77,6 +117,14 @@ public sealed partial class StoryNodeConfig : Luban.BeanBase
         other.Replies = Replies == null ? null : new System.Collections.Generic.List<string>(Replies);
         other.Branches = Branches == null ? null : new System.Collections.Generic.List<BranchRule>(); if (Branches != null) foreach (var _e in Branches) { var _copy = _e; _e?.CopyTo(ref _copy); other.Branches.Add(_copy); }
         other.IsSessionEnd = IsSessionEnd;
+        other.DefaultNextNodeId = DefaultNextNodeId;
+        other.MinAffection = MinAffection;
+        other.TurnType = TurnType;
+        other.AnimationAsset = AnimationAsset;
+        other.OnEnterActionIds = OnEnterActionIds == null ? null : new System.Collections.Generic.List<string>(OnEnterActionIds);
+        other.OnExitActionIds = OnExitActionIds == null ? null : new System.Collections.Generic.List<string>(OnExitActionIds);
+        other.ExtraNextNodeIds = ExtraNextNodeIds == null ? null : new System.Collections.Generic.List<string>(ExtraNextNodeIds);
+        other.Priority = Priority;
     }
 
     public StoryNodeConfig DeepCopy()
@@ -95,6 +143,14 @@ public sealed partial class StoryNodeConfig : Luban.BeanBase
         + "replies:" + Luban.StringUtil.CollectionToString(Replies) + ","
         + "branches:" + Luban.StringUtil.CollectionToString(Branches) + ","
         + "isSessionEnd:" + IsSessionEnd + ","
+        + "defaultNextNodeId:" + DefaultNextNodeId + ","
+        + "minAffection:" + MinAffection + ","
+        + "turnType:" + TurnType + ","
+        + "animationAsset:" + AnimationAsset + ","
+        + "onEnterActionIds:" + Luban.StringUtil.CollectionToString(OnEnterActionIds) + ","
+        + "onExitActionIds:" + Luban.StringUtil.CollectionToString(OnExitActionIds) + ","
+        + "extraNextNodeIds:" + Luban.StringUtil.CollectionToString(ExtraNextNodeIds) + ","
+        + "priority:" + Priority + ","
         + "}";
     }
 }

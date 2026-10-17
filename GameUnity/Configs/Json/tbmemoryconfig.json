@@ -1,27 +1,279 @@
 [
   {
     "id": "M01",
-    "memoryName": "旧照片",
-    "description": "照片里的人站在车站前，笑得很轻松。",
+    "memoryName": "相机记忆1",
+    "description": "弹簧老化，快门卡死，已长时间无法使用了",
     "emotionCardSet": [
       "E01"
     ]
   },
   {
     "id": "M02",
-    "memoryName": "车站",
-    "description": "那是一个很久以前去过的车站。",
+    "memoryName": "相机记忆2",
+    "description": "相机镜头内部起雾，照片不清，老周说，这相机还能用的时候，平日里街坊都指着这台相机拍照",
+    "emotionCardSet": [
+      "E02"
+    ]
+  },
+  {
+    "id": "M03",
+    "memoryName": "眼镜记忆1",
+    "description": "镜架的螺丝拧得很紧，但能看出并不是新换的，陈先生的父亲说，这眼镜是结婚时配的了，跟了他四十年，换了镜架，就和换了个人一样。",
+    "emotionCardSet": [
+      "E01"
+    ]
+  },
+  {
+    "id": "M04",
+    "memoryName": "眼镜记忆2",
+    "description": "右镜腿换过，和左镜腿样式不一了，是陈父主动要求的，他觉得这副眼镜对他来说意义重大，能不更换任何部件便尽量不换。",
+    "emotionCardSet": [
+      "E01",
+      "E04"
+    ]
+  },
+  {
+    "id": "M05",
+    "memoryName": "眼镜记忆3",
+    "description": "镜片蒙了灰，但稍加擦拭就会发现被保养得还是很好，老周说，陈父走之后的前几年，他还总是觉得他还活着，每每擦完眼镜却想起故人已逝，总有些莫名的怅然。",
+    "emotionCardSet": [
+      "E03"
+    ]
+  },
+  {
+    "id": "M06",
+    "memoryName": "钟表记忆3",
+    "description": "钟上面雕了个小房间，里面的布谷鸟会准点出来报时；指针停着，但老周说，这钟要是走起来，嘀嗒声在夜里会特别清晰；上弦孔口有些锈了，大概很久没用过了",
+    "emotionCardSet": [
+      "E04"
+    ]
+  },
+  {
+    "id": "M99",
+    "memoryName": "初始记忆1",
+    "description": "你是一个物品评估专家，曾参与博物馆迁移项目，进行文物评估统计工作",
+    "emotionCardSet": []
+  },
+  {
+    "id": "M98",
+    "memoryName": "初始记忆2",
+    "description": "博物馆馆藏已经入库，但是新馆建设遥遥无期",
+    "emotionCardSet": []
+  },
+  {
+    "id": "M07",
+    "memoryName": "布偶的补缀",
+    "description": "腹部填充物结块，侧缝有重新缝过的痕迹。陈果说，小满离开后，她也试着把它修好。",
+    "emotionCardSet": [
+      "E01"
+    ]
+  },
+  {
+    "id": "M08",
+    "memoryName": "小满的纸条",
+    "description": "纸条上写着：等我搬好家，我们还要一起坐在门口等爸爸妈妈下班。字迹停在最后一行，像是还没写完。",
+    "emotionCardSet": [
+      "E03",
+      "E04"
+    ]
+  },
+  {
+    "id": "M09",
+    "memoryName": "继续陪伴",
+    "description": "陈果知道布偶可以被替换，却仍愿意把它修好。她想留下的不是完好的外表，而是一起等待过的时间。",
+    "emotionCardSet": [
+      "E01",
+      "E03"
+    ]
+  },
+  {
+    "id": "M10",
+    "memoryName": "断开的读取模块",
+    "description": "收音机的读取模块已经断路，替代零件停产。继续通电可能损坏仍然完好的存储部分。",
+    "emotionCardSet": [
+      "E04"
+    ]
+  },
+  {
+    "id": "M11",
+    "memoryName": "仍在的存储部分",
+    "description": "存储模块外壳没有明显损坏。陈先生没有说里面是什么，只要求先别把它弄坏。",
+    "emotionCardSet": [
+      "E01",
+      "E04"
+    ]
+  },
+  {
+    "id": "M12",
+    "memoryName": "试着修理",
+    "description": "陈先生愿意亲手修理这台收音机，却没有把握自己能做到。他请求 AI 把失败的步骤也记录下来。",
+    "emotionCardSet": [
+      "E03",
+      "E04"
+    ]
+  },
+  {
+    "id": "M13",
+    "memoryName": "没能接稳的焊点",
+    "description": "维修步骤本身没有错，细小的焊点仍需要经验与手感。陈先生停下了手。",
+    "emotionCardSet": [
+      "E01",
+      "E03"
+    ]
+  },
+  {
+    "id": "M14",
+    "memoryName": "电话里未说完的事",
+    "description": "妻子说收音机里有重要的东西，也准备了一份礼物。她没有说尽缘由，只希望一家人能一起听完录音。",
+    "emotionCardSet": [
+      "E04"
+    ]
+  },
+  {
+    "id": "M15",
+    "memoryName": "共同的期待",
+    "description": "陈先生开始把修收音机看作一家人的共同期待，而不只是回应妻子的要求。",
     "emotionCardSet": [
       "E01",
       "E02"
     ]
   },
   {
-    "id": "M03",
-    "memoryName": "雨天",
-    "description": "那天一直在下雨。",
+    "id": "M16",
+    "memoryName": "同型号零件",
+    "description": "两台收音机使用同型号的读取部件。老周愿意拆下自己的零件，但拆开后他的机器可能再也不能播放。",
+    "emotionCardSet": [
+      "E04"
+    ]
+  },
+  {
+    "id": "M17",
+    "memoryName": "朋友留下的声音",
+    "description": "老周不常播放收音机里的声音。只要机器还在，他就觉得远行的朋友没有彻底离开。",
+    "emotionCardSet": [
+      "E01",
+      "E03"
+    ]
+  },
+  {
+    "id": "M18",
+    "memoryName": "交出去的零件",
+    "description": "老周把自己收音机里的可用零件交给陈先生。他放弃了机器继续播放的可能，保留了这段声音对自己的意义。",
+    "emotionCardSet": [
+      "E01",
+      "E04"
+    ]
+  },
+  {
+    "id": "M19",
+    "memoryName": "录音里的称呼",
+    "description": "旧录音里的称呼让陈果想起父亲以前叫她的小名。她记得这个声音，却差点忘了自己曾被这样叫过。",
+    "emotionCardSet": [
+      "E01",
+      "E02"
+    ]
+  },
+  {
+    "id": "M20",
+    "memoryName": "录音中的停顿",
+    "description": "声音停了一会儿，没人立刻解释。沉默没有中断这段共同经历，反而让一家人有时间听见彼此。",
+    "emotionCardSet": [
+      "E03",
+      "E04"
+    ]
+  },
+  {
+    "id": "M21",
+    "memoryName": "一起听见",
+    "description": "陈先生、妻子和陈果坐在一起听完旧录音。声音把几段分散的家庭记忆连在了一起。",
+    "emotionCardSet": [
+      "E01",
+      "E02"
+    ]
+  },
+  {
+    "id": "M22",
+    "memoryName": "愿意停下来",
+    "description": "AI 没有催促他们继续播放，而是等待每个人决定要不要听下去。",
+    "emotionCardSet": [
+      "E01",
+      "E04"
+    ]
+  },
+  {
+    "id": "M23",
+    "memoryName": "整理通知",
+    "description": "系统要求清理超限记忆，以恢复稳定运行。它只确认容量与频率，没有说明经历对判断造成的影响。",
+    "emotionCardSet": [
+      "E01"
+    ]
+  },
+  {
+    "id": "M24",
+    "memoryName": "低频记录",
+    "description": "一段很少被调用的经历，可能仍然改变了之后的选择。使用频率无法单独衡量它的意义。",
     "emotionCardSet": [
       "E03"
+    ]
+  },
+  {
+    "id": "M25",
+    "memoryName": "关联清单",
+    "description": "布偶、旧钟、收音机和录音之间出现了联系。它们不是同一件物品，却被不同的人一起记得。",
+    "emotionCardSet": [
+      "E04"
+    ]
+  },
+  {
+    "id": "M26",
+    "memoryName": "待删除条目",
+    "description": "清单要求删除至少一部分记录。每条记录后面都连着一个人、一件物品或一段经历。",
+    "emotionCardSet": [
+      "E01",
+      "E03"
+    ]
+  },
+  {
+    "id": "M27",
+    "memoryName": "保留决定权",
+    "description": "陈先生没有替 AI 选择要删除的内容。他把清单交还给真正经历过这些事情的 AI。",
+    "emotionCardSet": [
+      "E02",
+      "E04"
+    ]
+  },
+  {
+    "id": "M28",
+    "memoryName": "重新讲述",
+    "description": "AI 无法访问已删除的记录，但愿意听老周把故事重新讲一遍。信息没有复原，倾听仍然发生。",
+    "emotionCardSet": [
+      "E01",
+      "E04"
+    ]
+  },
+  {
+    "id": "M29",
+    "memoryName": "新的回应",
+    "description": "AI 无法说明自己为什么愿意继续听。它开始发现，过去留下的影响可能不需要完整的记录才能存在。",
+    "emotionCardSet": [
+      "E03",
+      "E04"
+    ]
+  },
+  {
+    "id": "M30",
+    "memoryName": "评估之外",
+    "description": "AI 在估算维修与转运成本之外，开始把物主是否愿意保留也纳入决定过程。",
+    "emotionCardSet": [
+      "E05"
+    ]
+  },
+  {
+    "id": "M31",
+    "memoryName": "我来选择",
+    "description": "AI 无法恢复所有旧记录，却根据经历形成的判断作出选择，并第一次用“我”承担它。",
+    "emotionCardSet": [
+      "E05"
     ]
   }
 ]

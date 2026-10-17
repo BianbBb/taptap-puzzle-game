@@ -11,24 +11,52 @@ namespace GameLogic
         private static Tables Tables => ConfigSystem.Instance.Tables;
 
         public EmotionConfig GetEmotion(string id)
-            => Tables.TbEmotionConfig.GetOrDefaultNoStatic(id);
+            => string.IsNullOrWhiteSpace(id) ? null : Tables.TbEmotionConfig.GetOrDefaultNoStatic(id);
 
         public MemoryConfig GetMemory(string id)
-            => Tables.TbMemoryConfig.GetOrDefaultNoStatic(id);
+            => string.IsNullOrWhiteSpace(id) ? null : Tables.TbMemoryConfig.GetOrDefaultNoStatic(id);
 
         public ReplyOptionConfig GetReply(string id)
-            => Tables.TbReplyOptionConfig.GetOrDefaultNoStatic(id);
+            => string.IsNullOrWhiteSpace(id) ? null : Tables.TbReplyOptionConfig.GetOrDefaultNoStatic(id);
 
         public StoryNodeConfig GetStoryNode(string id)
-            => Tables.TbStoryNodeConfig.GetOrDefaultNoStatic(id);
+            => string.IsNullOrWhiteSpace(id) ? null : Tables.TbStoryNodeConfig.GetOrDefaultNoStatic(id);
 
-        public bool HasEmotion(string id) => Tables.TbEmotionConfig.dataMap.ContainsKey(id);
+        public NarrativeSessionConfig GetSession(string id)
+            => string.IsNullOrWhiteSpace(id) ? null : Tables.TbNarrativeSessionConfig.GetOrDefaultNoStatic(id);
 
-        public bool HasMemory(string id) => Tables.TbMemoryConfig.dataMap.ContainsKey(id);
+        public NarrativeActionConfig GetAction(string id)
+            => string.IsNullOrWhiteSpace(id) ? null : Tables.TbNarrativeActionConfig.GetOrDefaultNoStatic(id);
 
-        public bool HasReply(string id) => Tables.TbReplyOptionConfig.dataMap.ContainsKey(id);
+        public NarrativeItemConfig GetNarrativeItem(string id)
+            => string.IsNullOrWhiteSpace(id) ? null : Tables.TbNarrativeItemConfig.GetOrDefaultNoStatic(id);
 
-        public bool HasStoryNode(string id) => Tables.TbStoryNodeConfig.dataMap.ContainsKey(id);
+        public NarrativeItemPartConfig GetNarrativeItemPart(string id)
+            => string.IsNullOrWhiteSpace(id) ? null : Tables.TbNarrativeItemPartConfig.GetOrDefaultNoStatic(id);
+
+        public bool HasEmotion(string id)
+            => !string.IsNullOrWhiteSpace(id) && Tables.TbEmotionConfig.dataMap.ContainsKey(id);
+
+        public bool HasMemory(string id)
+            => !string.IsNullOrWhiteSpace(id) && Tables.TbMemoryConfig.dataMap.ContainsKey(id);
+
+        public bool HasReply(string id)
+            => !string.IsNullOrWhiteSpace(id) && Tables.TbReplyOptionConfig.dataMap.ContainsKey(id);
+
+        public bool HasStoryNode(string id)
+            => !string.IsNullOrWhiteSpace(id) && Tables.TbStoryNodeConfig.dataMap.ContainsKey(id);
+
+        public bool HasSession(string id)
+            => !string.IsNullOrWhiteSpace(id) && Tables.TbNarrativeSessionConfig.dataMap.ContainsKey(id);
+
+        public bool HasAction(string id)
+            => !string.IsNullOrWhiteSpace(id) && Tables.TbNarrativeActionConfig.dataMap.ContainsKey(id);
+
+        public bool HasNarrativeItem(string id)
+            => !string.IsNullOrWhiteSpace(id) && Tables.TbNarrativeItemConfig.dataMap.ContainsKey(id);
+
+        public bool HasNarrativeItemPart(string id)
+            => !string.IsNullOrWhiteSpace(id) && Tables.TbNarrativeItemPartConfig.dataMap.ContainsKey(id);
 
         public IReadOnlyList<EmotionConfig> AllEmotions => Tables.TbEmotionConfig.dataList;
 
@@ -37,6 +65,14 @@ namespace GameLogic
         public IReadOnlyList<ReplyOptionConfig> AllReplies => Tables.TbReplyOptionConfig.dataList;
 
         public IReadOnlyList<StoryNodeConfig> AllStoryNodes => Tables.TbStoryNodeConfig.dataList;
+
+        public IReadOnlyList<NarrativeSessionConfig> AllSessions => Tables.TbNarrativeSessionConfig.dataList;
+
+        public IReadOnlyList<NarrativeActionConfig> AllActions => Tables.TbNarrativeActionConfig.dataList;
+
+        public IReadOnlyList<NarrativeItemConfig> AllNarrativeItems => Tables.TbNarrativeItemConfig.dataList;
+
+        public IReadOnlyList<NarrativeItemPartConfig> AllNarrativeItemParts => Tables.TbNarrativeItemPartConfig.dataList;
 
         public int EmotionCount => Tables.TbEmotionConfig.dataList.Count;
 

@@ -42,3 +42,13 @@ Tools/BuildTools/Log/
 /.agents/runs/
 /.agents/**/__pycache__/
 /.agents/**/*.pyc
+
+# Local generated artifacts and playtest captures
+/outputs/
+/.agents/tasks/backups/
+/GameUnity/Assets/Temp/
+/GameUnity/Assets/Temp.meta
+/GameUnity/Assets/Screenshots/
+/GameUnity/Assets/Screenshots.meta
+/GameUnity/Tools/eval_*.cs
+/GameUnity/Tools/eval_*.csx

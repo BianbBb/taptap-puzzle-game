@@ -1,17 +1,32 @@
 [
   {
     "id": "E01",
-    "emotionName": "温柔",
+    "emotionName": "理解",
     "displayColor": "#F5C6CB"
   },
   {
     "id": "E02",
-    "emotionName": "好奇",
+    "emotionName": "喜悦",
     "displayColor": "#CDE7F0"
   },
   {
     "id": "E03",
-    "emotionName": "克制",
+    "emotionName": "失落",
     "displayColor": "#D7D3E8"
+  },
+  {
+    "id": "E04",
+    "emotionName": "好奇",
+    "displayColor": "#D5E8D4"
+  },
+  {
+    "id": "E00",
+    "emotionName": "无情绪",
+    "displayColor": "#E6E6E6"
+  },
+  {
+    "id": "E05",
+    "emotionName": "珍惜",
+    "displayColor": "#FCE5CD"
   }
 ]
