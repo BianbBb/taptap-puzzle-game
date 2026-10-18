@@ -1,6 +1,5 @@
 ﻿using System.Threading;
 using Cysharp.Threading.Tasks;
-using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using DGame;
@@ -13,13 +12,8 @@ namespace GameLogic
 
 		public void SetMessage(string message)
 		{
-			m_tmpMessage.text = message;
-			m_tmpMessage.fontSize = 26f;
-			m_tmpMessage.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, 440f);
-			m_tmpMessage.color = new Color(0.28f, 0.22f, 0.16f, 1f);
-			m_tmpMessage.enableWordWrapping = true;
-			m_tmpMessage.overflowMode = TextOverflowModes.Overflow;
-			m_tmpMessage.ForceMeshUpdate();
+			MessageBubbleLayout.Apply(rectTransform, m_tmpMessage, m_imgIcon,
+				transform.Find("Bg") as RectTransform, message, false);
 			ApplyBubbleArt();
 		}
 
@@ -35,7 +29,6 @@ namespace GameLogic
 			Transform bg = transform.Find("Bg");
 			if (bg != null)
 			{
-				(bg as RectTransform)?.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, 500f);
 				Image bgImage = bg.GetComponent<Image>();
 				if (bgImage != null)
 				{

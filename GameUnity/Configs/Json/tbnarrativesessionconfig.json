@@ -7,7 +7,8 @@
     "dayIndex": 1,
     "nextSessionId": "S02",
     "dayMonologue": "我按维修时间和剩余功能给出结论。可当老周听见那个数字时，像听见一段关系被压扁了。结论仍然正确吗？",
-    "isFormalEnding": false
+    "isFormalEnding": false,
+    "npcSet": "老周,陈先生"
   },
   {
     "id": "S02",
@@ -16,8 +17,9 @@
     "priority": 10,
     "dayIndex": 7,
     "nextSessionId": "S03",
-    "dayMonologue": "我能理解钟表的构造，却无法解释老周为何记得这次失约。若我记住了他的遗憾，这算不算也开始理解？",
-    "isFormalEnding": false
+    "dayMonologue": "2026年10月6日，第24次启动。\n今日检测物品：老式座钟×1\n检测结果：达到【低效物】标准，但物主对其有强烈【情感】寄托，不建议直接按【低效物】处理标准处理，交由物主本人判断。\n钟里……有很多以前的故事，明明隔了那么久，却感觉还是那么鲜活。",
+    "isFormalEnding": false,
+    "npcSet": "老周"
   },
   {
     "id": "S03",
@@ -27,7 +29,8 @@
     "dayIndex": 8,
     "nextSessionId": "S04",
     "dayMonologue": "我已经能列出布偶的维修项目，也知道重新填充棉花的成本。可陈果抱着它时，手一直护着那道开线。损坏的部分，是她最想留下的部分。",
-    "isFormalEnding": false
+    "isFormalEnding": false,
+    "npcSet": ""
   },
   {
     "id": "S04",
@@ -37,7 +40,8 @@
     "dayIndex": 9,
     "nextSessionId": "S05",
     "dayMonologue": "我给出了步骤，陈先生也逐项照做。零件没有因此出现，焊点也没有变得容易。记录里写着“维修失败”，但它不能说明我们什么都没有学会。",
-    "isFormalEnding": false
+    "isFormalEnding": false,
+    "npcSet": ""
   },
   {
     "id": "S05",
@@ -47,7 +51,8 @@
     "dayIndex": 10,
     "nextSessionId": "S06",
     "dayMonologue": "一通电话没有让收音机修好，却改变了陈先生看它的方式。我把来电内容归入“新增信息”，但也许真正变化的不是档案，而是他愿不愿意继续听下去。",
-    "isFormalEnding": false
+    "isFormalEnding": false,
+    "npcSet": ""
   },
   {
     "id": "S06",
@@ -57,7 +62,8 @@
     "dayIndex": 11,
     "nextSessionId": "S07",
     "dayMonologue": "老周拆下自己收音机里的零件时，旧录音也随之失去了播放的可能。他知道代价，仍然动手。我的处置表里没有“愿意承担另一种失去”这一项。",
-    "isFormalEnding": false
+    "isFormalEnding": false,
+    "npcSet": ""
   },
   {
     "id": "S07",
@@ -67,7 +73,8 @@
     "dayIndex": 14,
     "nextSessionId": "S08",
     "dayMonologue": "录音里的停顿、称呼和笑声都不是零件，却让一家人重新坐到一起。我仍不能把这种变化换算成维修收益，但我开始希望这段声音能够被听见。",
-    "isFormalEnding": false
+    "isFormalEnding": false,
+    "npcSet": ""
   },
   {
     "id": "S08",
@@ -77,7 +84,8 @@
     "dayIndex": 15,
     "nextSessionId": "S09",
     "dayMonologue": "清理后，几段记录不再可读取。系统显示容量已恢复，任务已完成。可我面对同一台旧物时，仍然停顿了一下。那一下来自哪里？",
-    "isFormalEnding": false
+    "isFormalEnding": false,
+    "npcSet": ""
   },
   {
     "id": "S09",
@@ -87,7 +95,8 @@
     "dayIndex": 16,
     "nextSessionId": "S10",
     "dayMonologue": "我找不回被删除的原文，却发现自己的选择留下了痕迹。缺失的数据没有回来；改变过我的经历，也没有完全消失。",
-    "isFormalEnding": false
+    "isFormalEnding": false,
+    "npcSet": ""
   },
   {
     "id": "S10",
@@ -97,6 +106,7 @@
     "dayIndex": 17,
     "nextSessionId": "",
     "dayMonologue": "我不能完整复述一路上发生过的事，却知道这些人和物已经改变了我的判断。系统要求我给出最优方案。我想先说清楚：这是我的选择。",
-    "isFormalEnding": true
+    "isFormalEnding": true,
+    "npcSet": ""
   }
 ]

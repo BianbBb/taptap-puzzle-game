@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using DGame;
+using DG.Tweening;
 using GameProto;
 using SuperScrollView;
 using TMPro;
@@ -24,7 +25,7 @@ namespace GameLogic
 		private const float MESSAGE_SCROLL_OVERFLOW_EPSILON = 1f;
 		private const float MESSAGE_BOTTOM_PADDING = 16f;
 		private const float MESSAGE_SCROLL_SENSITIVITY = 0.3f;
-		private const float REPLY_PANEL_HEIGHT = 300f;
+		private const float REPLY_PANEL_HEIGHT = 441f;
 		private const int HUD_MEMORY_SLOT_COUNT = 6;
 		private const string NpcPortraitPlaceholderText = "NPC角色素材";
 		private static readonly Color HudPaperText = new Color(0.28f, 0.22f, 0.16f, 1f);
@@ -35,16 +36,27 @@ namespace GameLogic
 		private readonly List<(bool IsPlayer, string Text)> m_messages = new List<(bool, string)>();
 		private readonly List<Image> m_memorySlotImages = new List<Image>();
 		private readonly List<TextMeshProUGUI> m_memorySlotLabels = new List<TextMeshProUGUI>();
+		private readonly List<Button> m_memoryDeleteButtons = new List<Button>();
+		private RectTransform m_memoryTooltip;
+		private TextMeshProUGUI m_memoryTooltipName;
+		private TextMeshProUGUI m_memoryTooltipDescription;
+		private int m_hoveredMemorySlot = -1;
 		private int m_messageScrollVersion;
 		private int m_npcPortraitVersion;
 		private int m_dialoguePresentVersion;
 		private bool m_messagePinnedToLatest = true;
 		private Button m_btnItemCollection;
+		private Image m_imgItemSlot;
+		private string m_itemSlotImageId;
+		private int m_itemSlotVersion;
 		private readonly NarrativeDomainService m_narrativeService = new NarrativeDomainService();
 		private readonly NarrativeActionService m_actionService = new NarrativeActionService();
 		private readonly NarrativeStoryScheduler m_storyScheduler = new NarrativeStoryScheduler();
 		private UILoopListViewWidget m_messageList;
 		private GameObject m_overlay;
+		private GameObject m_suspendedOverlay;
+		private RectTransform m_suspendedOverlayBodyContent;
+		private TMP_InputField m_suspendedDebugNodeInput;
 		private TMP_InputField m_debugNodeInput;
 		private StoryNodeConfig m_currentStoryNode;
 		private ReplyOptionConfig m_selectedReply;
@@ -55,6 +67,11 @@ namespace GameLogic
 		private string m_loadedNpcPortraitLocation;
 		private RectTransform m_rtSceneCharacter;
 		private Image m_imgSceneCharacter;
+		private RectTransform m_rtOtherCharacter;
+		private Image m_imgOtherCharacter;
+		private string m_loadedOtherCharacterLocation;
+		private string m_otherCharacterNpcId;
+		private int m_otherCharacterVersion;
 		private string m_loadedSceneCharacterLocation;
 		private int m_sceneBackgroundVersion;
 #if SPINE_UNITY && SPINE_CSHARP
@@ -75,13 +92,16 @@ namespace GameLogic
 		private bool m_hasReplied;
 		private bool m_playerReplyShown;
 		private bool m_pendingRestart;
+		private bool m_monologuePresentation;
 
 		#region Override
 
 		public override bool FullScreen => true;
+		public override bool CanEscClose => false;
 
 		protected override void OnCreate()
 		{
+			AudioListener.volume = Mathf.Clamp01(PlayerPrefs.GetFloat("NarrativeMasterVolume", 1f));
 			EnsureEventSystem();
 			BindNpcPortraitView();
 			BindSceneBackgroundView();
@@ -92,6 +112,7 @@ namespace GameLogic
 			ApplyChatListLayout();
 			EnsureNpcSubtitle();
 			EnsureRestartButton();
+			EnsureLayoutEditButton();
 			EnsureDialogueAdvanceCatcher();
 			InitializeLayoutEditing();
 
@@ -123,8 +144,20 @@ namespace GameLogic
 			m_messagePinnedToLatest = true;
 			m_memorySlotImages.Clear();
 			m_memorySlotLabels.Clear();
+			m_memoryDeleteButtons.Clear();
+			m_memoryTooltip = null;
+			m_memoryTooltipName = null;
+			m_memoryTooltipDescription = null;
+			m_hoveredMemorySlot = -1;
 			m_btnItemCollection = null;
+			m_imgItemSlot = null;
+			m_itemSlotImageId = null;
+			m_itemSlotVersion++;
 			if (m_overlay != null) UnityEngine.Object.Destroy(m_overlay);
+			if (m_suspendedOverlay != null) UnityEngine.Object.Destroy(m_suspendedOverlay);
+			m_suspendedOverlay = null;
+			m_suspendedOverlayBodyContent = null;
+			m_suspendedDebugNodeInput = null;
 			m_replyItems.Clear();
 			m_emotionItems.Clear();
 			m_messages.Clear();
@@ -142,11 +175,17 @@ namespace GameLogic
 			m_loadedSceneKey = null;
 			m_rtSceneCharacter = null;
 			m_imgSceneCharacter = null;
+			m_rtOtherCharacter = null;
+			m_imgOtherCharacter = null;
+			m_loadedOtherCharacterLocation = null;
+			m_otherCharacterVersion++;
 			m_loadedSceneCharacterLocation = null;
 			m_overlayBodyContent = null;
 			m_dialoguePanel = null;
 			m_tmpNpcSubtitle = null;
 			m_btnRestart = null;
+			m_btnLayoutEdit = null;
+			m_layoutEditButtonLabel = null;
 			m_btnDialogueAdvance = null;
 			m_advanceClickPending = false;
 			m_pendingRestart = false;
@@ -160,6 +199,7 @@ namespace GameLogic
 		public void RefreshUI()
 		{
 			RefreshMemorySlots();
+			RefreshItemSlot();
 			if (IsDestroyed || m_isBusy || m_hasReplied || m_selectedReply != null)
 			{
 				return;
@@ -318,6 +358,7 @@ namespace GameLogic
 			{
 				m_actionService.Execute(story.OnEnterActionIds,
 					NarrativeSaveData.Get.BuildTurnKey(story.Id) + "|node-enter");
+				RefreshItemSlot();
 			}
 			catch (Exception exception)
 			{
@@ -332,25 +373,21 @@ namespace GameLogic
 			SetEmotionItemsActive(false);
 			m_tfReplayEmoNode.gameObject.SetActive(false);
 			m_tfReplayMessageNode.gameObject.SetActive(false);
-			bool npcDialogue = IsNpcDialogueTurn(story) && !UsesPaperDialogue(story.NpcId);
+			bool npcDialogue = IsNpcDialogueTurn(story);
 			SetDialoguePresentationMode(npcDialogue);
 			m_advanceClickPending = false;
 			SetDialogueAdvanceCatcherActive(true);
 			if (npcDialogue)
-			{
 				await PresentNpcSubtitleAsync(story, presentVersion);
-				if (IsDestroyed || presentVersion != m_dialoguePresentVersion)
-				{
-					return;
-				}
-
-				await AutoAdvanceStoryNodeAsync(story, presentVersion);
-				return;
-			}
-
-			await PresentNpcMessageAsync(story.NpcText, presentVersion);
+			else
+				await PresentNpcMessageAsync(story.NpcText, presentVersion);
 			if (IsDestroyed || presentVersion != m_dialoguePresentVersion)
 			{
+				return;
+			}
+			if (npcDialogue)
+			{
+				await AutoAdvanceStoryNodeAsync(story, presentVersion);
 				return;
 			}
 
@@ -386,6 +423,7 @@ namespace GameLogic
 				m_replyItems.Add(item);
 				item.Show(true);
 			}
+			ResizeReplyPanel();
 		}
 
 		private void OnClickReply(ReplayMessageItem item)
@@ -526,6 +564,12 @@ namespace GameLogic
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			if (story.IsSessionEnd)
 			{
+				if (IsNpcDialogueTurn(story))
+				{
+					TypewriterWaitResult endWait = await WaitForAdvanceClick(presentVersion);
+					if (IsDestroyed || presentVersion != m_dialoguePresentVersion ||
+						endWait == TypewriterWaitResult.Cancelled) return;
+				}
 				ExecuteNodeExitActions(saveData, story);
 				saveData.AdvanceStoryNode(string.Empty, true);
 				m_currentStoryNode = null;
@@ -627,6 +671,7 @@ namespace GameLogic
 			{
 				NarrativeTurnResult result = m_narrativeService.CommitTurn(
 					m_currentStoryNode, m_selectedReply, m_selectedEmotionId);
+				RefreshItemSlot();
 				DLogger.Info("{0}", result);
 				m_selectedReply = null;
 				m_tfReplayEmoNode.gameObject.SetActive(false);
@@ -724,7 +769,6 @@ namespace GameLogic
 					return null;
 				}
 
-				right.SetMessage(message.Text);
 				item = right;
 			}
 			else
@@ -735,7 +779,6 @@ namespace GameLogic
 					return null;
 				}
 
-				left.SetMessage(message.Text);
 				item = left;
 			}
 
@@ -750,8 +793,10 @@ namespace GameLogic
 			itemRect.pivot = new Vector2(itemRect.pivot.x, 1f);
 			itemRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,
 				m_scrollMessage.GetComponent<RectTransform>().rect.width);
-
-			LayoutRebuilder.ForceRebuildLayoutImmediate(itemRect);
+			if (message.IsPlayer)
+				((RightMessageItem)item).SetMessage(message.Text);
+			else
+				((LeftMessageItem)item).SetMessage(message.Text);
 			return item.LoopItem;
 		}
 
@@ -762,7 +807,7 @@ namespace GameLogic
 			{
 				emotionRect.anchorMin = emotionRect.anchorMax = new Vector2(0.5f, 0f);
 				emotionRect.pivot = new Vector2(0.5f, 0f);
-				emotionRect.anchoredPosition = new Vector2(-47f, 14f);
+				emotionRect.anchoredPosition = ReadLayoutPosition("EmotionPanel", new Vector2(0f, 14f));
 				emotionRect.sizeDelta = new Vector2(680f, 120f);
 			}
 
@@ -771,8 +816,20 @@ namespace GameLogic
 			{
 				replyRect.anchorMin = replyRect.anchorMax = new Vector2(0.5f, 0f);
 				replyRect.pivot = new Vector2(0.5f, 0f);
-				replyRect.anchoredPosition = new Vector2(-47f, 14f);
-				replyRect.sizeDelta = new Vector2(680f, REPLY_PANEL_HEIGHT);
+				replyRect.anchoredPosition = ReadLayoutPosition("ReplyPanel", new Vector2(0f, 14f));
+				replyRect.sizeDelta = new Vector2(575f, REPLY_PANEL_HEIGHT);
+				Image replyBackground = replyRect.GetComponent<Image>();
+				if (replyBackground == null) replyBackground = replyRect.gameObject.AddComponent<Image>();
+				replyBackground.raycastTarget = false;
+				ApplyHudSprite(replyBackground, "dialogue_reply_option_bg", false,
+					gameObject.GetCancellationTokenOnDestroy());
+				VerticalLayoutGroup options = replyRect.GetComponent<VerticalLayoutGroup>();
+				if (options != null)
+				{
+					options.padding = new RectOffset(37, 37, 34, 34);
+					options.spacing = 10f;
+					options.childAlignment = TextAnchor.UpperCenter;
+				}
 			}
 
 			RectTransform scrollRect = m_scrollMessage != null
@@ -791,12 +848,31 @@ namespace GameLogic
 			scrollRect.offsetMax = new Vector2(-196f, -116f);
 		}
 
+		private void ResizeReplyPanel()
+		{
+			RectTransform panel = m_tfReplayMessageNode as RectTransform;
+			if (panel == null) return;
+			float height = 68f;
+			for (int i = 0; i < m_replyItems.Count; i++)
+			{
+				if (m_replyItems[i] == null) continue;
+				if (i > 0) height += 10f;
+				height += m_replyItems[i].rectTransform.rect.height;
+			}
+			panel.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, Mathf.Max(150f, height));
+			RectTransform scrollRect = m_scrollMessage != null ? m_scrollMessage.transform as RectTransform : null;
+			if (scrollRect != null)
+				scrollRect.offsetMin = new Vector2(scrollRect.offsetMin.x, panel.rect.height + 20f);
+			LayoutRebuilder.MarkLayoutForRebuild(panel);
+		}
+
 		private void ApplyDialogueHudLayout()
 		{
-			PlaceCornerButton(m_btnSettings, new Vector2(0f, 1f), new Vector2(28f, -28f), new Vector2(88f, 88f));
+			PlaceCornerButton(m_btnSettings, new Vector2(0f, 1f),
+				ReadLayoutPosition("Menu", new Vector2(84.5f, -80.5f)), new Vector2(91f, 91f));
 			HideButtonLabel(m_btnSettings);
 			PlaceCornerButton(m_btnEmoCollection, new Vector2(0.5f, 0.5f),
-				ReadLayoutPosition("Collection", new Vector2(750f, -360f)), new Vector2(150f, 160f));
+				ReadLayoutPosition("Collection", new Vector2(753f, -362f)), new Vector2(182f, 166f));
 			HideButtonLabel(m_btnEmoCollection);
 
 			if (m_btnItemCollection == null)
@@ -808,15 +884,24 @@ namespace GameLogic
 			}
 
 			PlaceCornerButton(m_btnItemCollection, new Vector2(0.5f, 0.5f),
-				ReadLayoutPosition("Items", new Vector2(750f, -150f)), new Vector2(150f, 160f));
+				ReadLayoutPosition("Items", new Vector2(757f, -146f)), new Vector2(162f, 173f));
+			EnsureItemSlot();
+			if (m_dialoguePanel != null)
+			{
+				RectTransform panelRect = m_dialoguePanel.transform as RectTransform;
+				panelRect.anchorMin = panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+				panelRect.pivot = new Vector2(0.5f, 0.5f);
+				panelRect.anchoredPosition = ReadLayoutPosition("DialoguePanel", new Vector2(287f, -103.5f));
+				panelRect.sizeDelta = new Vector2(1206f, 873f);
+			}
 
 			if (m_scrollMemoryList != null)
 			{
 				RectTransform memoryRect = m_scrollMemoryList.transform as RectTransform;
 				memoryRect.anchorMin = memoryRect.anchorMax = new Vector2(0.5f, 1f);
 				memoryRect.pivot = new Vector2(0.5f, 1f);
-				memoryRect.anchoredPosition = new Vector2(180f, -24f);
-				memoryRect.sizeDelta = new Vector2(920f, 110f);
+				memoryRect.anchoredPosition = ReadLayoutPosition("MemoryBar", new Vector2(297f, -59f));
+				memoryRect.sizeDelta = new Vector2(1126f, 131f);
 			}
 		}
 
@@ -883,6 +968,7 @@ namespace GameLogic
 				return;
 			}
 
+			bool raycastTarget = image.raycastTarget;
 			image.SetSprite(location, nativeSize, loaded =>
 			{
 				if (loaded == null || IsDestroyed)
@@ -892,7 +978,7 @@ namespace GameLogic
 
 				loaded.color = Color.white;
 				loaded.preserveAspect = nativeSize;
-				loaded.raycastTarget = true;
+				loaded.raycastTarget = raycastTarget;
 				if (sliced)
 				{
 					loaded.type = Image.Type.Sliced;
@@ -904,6 +990,7 @@ namespace GameLogic
 		{
 			m_memorySlotImages.Clear();
 			m_memorySlotLabels.Clear();
+			m_memoryDeleteButtons.Clear();
 			if (m_scrollMemoryList == null || m_scrollMemoryList.content == null)
 			{
 				return;
@@ -952,7 +1039,7 @@ namespace GameLogic
 				labelRect.offsetMin = Vector2.zero;
 				labelRect.offsetMax = Vector2.zero;
 				TextMeshProUGUI label = labelGo.GetComponent<TextMeshProUGUI>();
-				label.text = "×";
+				label.text = string.Empty;
 				label.fontSize = 28;
 				label.color = new Color(0.45f, 0.4f, 0.35f, 0.7f);
 				label.alignment = TextAlignmentOptions.Center;
@@ -962,11 +1049,145 @@ namespace GameLogic
 				label.enableAutoSizing = true;
 				label.fontSizeMin = 10f;
 				label.fontSizeMax = 28f;
+				var hover = slot.AddComponent<EventTrigger>();
+				var enter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+				int slotIndex = i;
+				enter.callback.AddListener(_ => ShowMemoryTooltip(slotIndex));
+				hover.triggers.Add(enter);
+				var exit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+				exit.callback.AddListener(_ => HideMemoryTooltip(slotIndex));
+				hover.triggers.Add(exit);
+				var delete = new GameObject("Delete", typeof(RectTransform), typeof(Image), typeof(Button));
+				delete.transform.SetParent(slot.transform, false);
+				RectTransform deleteRect = delete.GetComponent<RectTransform>();
+				deleteRect.anchorMin = deleteRect.anchorMax = Vector2.one;
+				deleteRect.pivot = new Vector2(0.5f, 0.5f);
+				deleteRect.anchoredPosition = new Vector2(-7f, -7f);
+				deleteRect.sizeDelta = new Vector2(30f, 30f);
+				Image deleteHitArea = delete.GetComponent<Image>();
+				deleteHitArea.color = new Color(1f, 1f, 1f, 0.001f);
+				Button deleteButton = delete.GetComponent<Button>();
+				deleteButton.transition = Selectable.Transition.None;
+				deleteButton.targetGraphic = deleteHitArea;
+				deleteButton.onClick.AddListener(() => DeleteMemoryFromSlot(slotIndex));
+				CreateMemoryDeleteStroke(delete.transform, "CrossA", 45f);
+				CreateMemoryDeleteStroke(delete.transform, "CrossB", -45f);
 				m_memorySlotImages.Add(slotImage);
 				m_memorySlotLabels.Add(label);
+				m_memoryDeleteButtons.Add(deleteButton);
 			}
 
+			EnsureMemoryTooltip(token);
 			RefreshMemorySlots();
+		}
+
+		private static void CreateMemoryDeleteStroke(Transform parent, string name, float angle)
+		{
+			var stroke = new GameObject(name, typeof(RectTransform), typeof(Image));
+			stroke.transform.SetParent(parent, false);
+			RectTransform rect = stroke.GetComponent<RectTransform>();
+			rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+			rect.pivot = new Vector2(0.5f, 0.5f);
+			rect.anchoredPosition = Vector2.zero;
+			rect.sizeDelta = new Vector2(21f, 4f);
+			rect.localRotation = Quaternion.Euler(0f, 0f, angle);
+			Image image = stroke.GetComponent<Image>();
+			image.color = HudPaperText;
+			image.raycastTarget = false;
+		}
+
+		private void EnsureMemoryTooltip(CancellationToken token)
+		{
+			if (m_memoryTooltip != null) return;
+			var tooltip = new GameObject("MemoryTooltip", typeof(RectTransform), typeof(Image));
+			tooltip.transform.SetParent(transform, false);
+			m_memoryTooltip = tooltip.GetComponent<RectTransform>();
+			m_memoryTooltip.anchorMin = m_memoryTooltip.anchorMax = new Vector2(1f, 1f);
+			m_memoryTooltip.pivot = new Vector2(1f, 1f);
+			m_memoryTooltip.anchoredPosition = new Vector2(-72f, -64f);
+			m_memoryTooltip.sizeDelta = new Vector2(280f, 281f);
+			Image background = tooltip.GetComponent<Image>();
+			background.raycastTarget = false;
+			ApplyHudSprite(background, "dialogue_memory_tooltip", false, token);
+
+			var description = new GameObject("Description", typeof(RectTransform), typeof(TextMeshProUGUI));
+			description.transform.SetParent(tooltip.transform, false);
+			RectTransform descriptionRect = description.GetComponent<RectTransform>();
+			descriptionRect.anchorMin = descriptionRect.anchorMax = new Vector2(0.5f, 1f);
+			descriptionRect.pivot = new Vector2(0.5f, 1f);
+			descriptionRect.anchoredPosition = new Vector2(0f, -35f);
+			descriptionRect.sizeDelta = new Vector2(215f, 147f);
+			m_memoryTooltipDescription = description.GetComponent<TextMeshProUGUI>();
+			m_memoryTooltipDescription.fontSize = 17f;
+			m_memoryTooltipDescription.enableAutoSizing = true;
+			m_memoryTooltipDescription.fontSizeMin = 12f;
+			m_memoryTooltipDescription.fontSizeMax = 17f;
+			m_memoryTooltipDescription.color = HudPaperText;
+			m_memoryTooltipDescription.alignment = TextAlignmentOptions.Center;
+			m_memoryTooltipDescription.enableWordWrapping = true;
+			m_memoryTooltipDescription.overflowMode = TextOverflowModes.Ellipsis;
+			m_memoryTooltipDescription.raycastTarget = false;
+
+			var name = new GameObject("Name", typeof(RectTransform), typeof(TextMeshProUGUI));
+			name.transform.SetParent(tooltip.transform, false);
+			RectTransform nameRect = name.GetComponent<RectTransform>();
+			nameRect.anchorMin = nameRect.anchorMax = new Vector2(0.5f, 0f);
+			nameRect.pivot = new Vector2(0.5f, 0f);
+			nameRect.anchoredPosition = new Vector2(0f, 31f);
+			nameRect.sizeDelta = new Vector2(190f, 49f);
+			m_memoryTooltipName = name.GetComponent<TextMeshProUGUI>();
+			m_memoryTooltipName.fontSize = 20f;
+			m_memoryTooltipName.enableAutoSizing = true;
+			m_memoryTooltipName.fontSizeMin = 14f;
+			m_memoryTooltipName.fontSizeMax = 20f;
+			m_memoryTooltipName.color = HudPaperText;
+			m_memoryTooltipName.alignment = TextAlignmentOptions.Center;
+			m_memoryTooltipName.enableWordWrapping = true;
+			m_memoryTooltipName.overflowMode = TextOverflowModes.Ellipsis;
+			m_memoryTooltipName.raycastTarget = false;
+			tooltip.SetActive(false);
+		}
+
+		private void ShowMemoryTooltip(int slotIndex)
+		{
+			if (m_overlay != null || m_monologuePresentation || m_scrollMemoryList == null ||
+				!m_scrollMemoryList.gameObject.activeInHierarchy)
+			{
+				HideMemoryTooltip();
+				return;
+			}
+			IReadOnlyList<string> ids = NarrativeSaveData.Get.GetMemoryIdsInStableOrder();
+			if (m_memoryTooltip == null || slotIndex < 0 || slotIndex >= ids.Count)
+			{
+				HideMemoryTooltip();
+				return;
+			}
+
+			MemoryConfig memory = NarrativeConfigMgr.Instance.GetMemory(ids[slotIndex]);
+			m_hoveredMemorySlot = slotIndex;
+			m_memoryTooltipName.text = memory == null ? ids[slotIndex] : memory.MemoryName;
+			m_memoryTooltipDescription.text = memory == null ? string.Empty : memory.Description;
+			m_memoryTooltip.gameObject.SetActive(true);
+			m_memoryTooltip.SetAsLastSibling();
+		}
+
+		private void HideMemoryTooltip(int slotIndex = -1)
+		{
+			if (slotIndex >= 0 && m_hoveredMemorySlot != slotIndex) return;
+			m_hoveredMemorySlot = -1;
+			if (m_memoryTooltip != null) m_memoryTooltip.gameObject.SetActive(false);
+		}
+
+		private void DeleteMemoryFromSlot(int slotIndex)
+		{
+			if (m_layoutEditMode || m_overlay != null) return;
+			NarrativeSaveData saveData = NarrativeSaveData.Get;
+			IReadOnlyList<string> ids = saveData.GetMemoryIdsInStableOrder();
+			if (slotIndex < 0 || slotIndex >= ids.Count || !saveData.RemoveMemory(ids[slotIndex])) return;
+			HideMemoryTooltip();
+			RefreshUI();
+			if (saveData.DayPhase == NarrativeDayPhase.MemoryCleanup)
+				ShowMemoryCleanup();
 		}
 
 		private void RefreshMemorySlots()
@@ -984,6 +1205,8 @@ namespace GameLogic
 				{
 					continue;
 				}
+				if (i < m_memoryDeleteButtons.Count && m_memoryDeleteButtons[i] != null)
+					m_memoryDeleteButtons[i].gameObject.SetActive(i < ids.Count);
 
 				if (i < ids.Count)
 				{
@@ -998,21 +1221,69 @@ namespace GameLogic
 				}
 				else
 				{
-					label.text = "×";
+					label.text = string.Empty;
 					label.enableAutoSizing = true;
 					label.fontSizeMin = 16f;
 					label.fontSizeMax = 28f;
 					label.color = new Color(0.45f, 0.4f, 0.35f, 0.7f);
 				}
 			}
+			if (m_hoveredMemorySlot >= 0) ShowMemoryTooltip(m_hoveredMemorySlot);
+		}
+
+		private void EnsureItemSlot()
+		{
+			if (m_btnItemCollection == null || m_imgItemSlot != null) return;
+			var go = new GameObject("CurrentItemSlot", typeof(RectTransform), typeof(Image));
+			go.transform.SetParent(m_btnItemCollection.transform, false);
+			RectTransform rect = go.GetComponent<RectTransform>();
+			rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+			rect.sizeDelta = new Vector2(62f, 62f);
+			rect.anchoredPosition = new Vector2(0f, 15f);
+			m_imgItemSlot = go.GetComponent<Image>();
+			m_imgItemSlot.preserveAspect = true;
+			m_imgItemSlot.raycastTarget = false;
+			m_imgItemSlot.enabled = false;
+		}
+
+		private void RefreshItemSlot()
+		{
+			EnsureItemSlot();
+			if (m_imgItemSlot == null) return;
+			IReadOnlyList<string> ids = NarrativeSaveData.Get.GetNarrativeItemIdsInStableOrder();
+			NarrativeItemConfig item = ids.Count == 0 ? null : NarrativeConfigMgr.Instance.GetNarrativeItem(ids[ids.Count - 1]);
+			string imageId = item == null ? null : item.ImageId;
+			if (string.IsNullOrWhiteSpace(imageId) || !GameModule.ResourceModule.CheckLocationValid(imageId))
+			{
+				m_itemSlotImageId = null;
+				m_itemSlotVersion++;
+				m_imgItemSlot.enabled = false;
+				return;
+			}
+			if (imageId == m_itemSlotImageId && m_imgItemSlot.sprite != null) return;
+			m_itemSlotImageId = imageId;
+			int version = ++m_itemSlotVersion;
+			m_imgItemSlot.SetSprite(imageId, false, loaded =>
+			{
+				if (IsDestroyed || version != m_itemSlotVersion || loaded == null || loaded.sprite == null) return;
+				loaded.enabled = true;
+				loaded.preserveAspect = true;
+				loaded.raycastTarget = false;
+			}, gameObject.GetCancellationTokenOnDestroy());
 		}
 
 		private void ShowItems()
 		{
 			if (m_layoutEditMode) return;
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
+			IReadOnlyList<string> ownedIds = saveData.GetNarrativeItemIdsInStableOrder();
+			if (ownedIds.Count == 1)
+			{
+				ShowNarrativeItem(ownedIds[0]);
+				return;
+			}
 			var buttons = new List<(string Label, Action Action)>();
-			foreach (string itemId in saveData.GetNarrativeItemIdsInStableOrder())
+			foreach (string itemId in ownedIds)
 			{
 				NarrativeItemConfig item = NarrativeConfigMgr.Instance.GetNarrativeItem(itemId);
 				if (item == null)
@@ -1052,11 +1323,6 @@ namespace GameLogic
 				turnType.Equals("NPCDialog", StringComparison.OrdinalIgnoreCase);
 		}
 
-		private static bool UsesPaperDialogue(string npcId)
-		{
-			return npcId == "老周" || npcId == "陈先生";
-		}
-
 		private void BindDialoguePanel()
 		{
 			if (m_scrollMessage == null || m_scrollMessage.transform.parent == null)
@@ -1068,17 +1334,18 @@ namespace GameLogic
 			m_dialoguePanel = m_scrollMessage.transform.parent.gameObject;
 		}
 
-		private void SetDialoguePresentationMode(bool npcDialogue)
+		private void SetDialoguePresentationMode(bool showSubtitle)
 		{
 			if (m_dialoguePanel != null)
 			{
-				m_dialoguePanel.SetActive(!npcDialogue);
+				m_dialoguePanel.SetActive(!showSubtitle);
 			}
+			if (m_scrollMessage != null) m_scrollMessage.gameObject.SetActive(!showSubtitle);
 
 			if (m_tmpNpcSubtitle != null)
 			{
-				m_tmpNpcSubtitle.gameObject.SetActive(npcDialogue);
-				if (!npcDialogue)
+				m_tmpNpcSubtitle.gameObject.SetActive(showSubtitle);
+				if (!showSubtitle)
 				{
 					m_tmpNpcSubtitle.text = string.Empty;
 				}
@@ -1098,7 +1365,7 @@ namespace GameLogic
 			rect.anchorMin = new Vector2(0.5f, 0f);
 			rect.anchorMax = new Vector2(0.5f, 0f);
 			rect.pivot = new Vector2(0.5f, 0f);
-			rect.anchoredPosition = new Vector2(0f, 56f);
+			rect.anchoredPosition = ReadLayoutPosition("NpcSubtitle", new Vector2(0f, 56f));
 			rect.sizeDelta = new Vector2(1480f, 200f);
 			TextMeshProUGUI text = go.GetComponent<TextMeshProUGUI>();
 			text.text = string.Empty;
@@ -1241,7 +1508,7 @@ namespace GameLogic
 					return TypewriterWaitResult.Cancelled;
 				}
 
-				if (ConsumeAdvanceClick() || WasPrimaryClickThisFrame())
+				if (ConsumeAdvanceClick())
 				{
 					return TypewriterWaitResult.Skip;
 				}
@@ -1263,65 +1530,13 @@ namespace GameLogic
 					return TypewriterWaitResult.Cancelled;
 				}
 
-				if (ConsumeAdvanceClick() ||
-					(WasPrimaryClickThisFrame() && CanAdvanceDialogueByClick()))
+				if (ConsumeAdvanceClick())
 				{
 					return TypewriterWaitResult.Continue;
 				}
 
 				await UniTask.Yield(PlayerLoopTiming.Update);
 			}
-		}
-
-		private bool CanAdvanceDialogueByClick()
-		{
-			if (m_overlay != null && m_overlay.activeInHierarchy)
-			{
-				return false;
-			}
-
-			EventSystem eventSystem = EventSystem.current;
-			if (eventSystem == null)
-			{
-				return true;
-			}
-
-			var pointer = new PointerEventData(eventSystem)
-			{
-				position = GetPointerScreenPosition()
-			};
-			var results = new List<RaycastResult>();
-			eventSystem.RaycastAll(pointer, results);
-			for (int i = 0; i < results.Count; i++)
-			{
-				GameObject hit = results[i].gameObject;
-				if (hit == null)
-				{
-					continue;
-				}
-
-				Button button = hit.GetComponentInParent<Button>();
-				if (button != null && button != m_btnDialogueAdvance)
-				{
-					return false;
-				}
-			}
-
-			return true;
-		}
-
-		private static Vector2 GetPointerScreenPosition()
-		{
-#if ENABLE_INPUT_SYSTEM
-			if (Mouse.current != null)
-			{
-				return Mouse.current.position.ReadValue();
-			}
-
-			return Vector2.zero;
-#else
-			return Input.mousePosition;
-#endif
 		}
 
 		private void UpdateShownMessageText(int index, string text)
@@ -1336,14 +1551,10 @@ namespace GameLogic
 			LoopListViewItem2 shown = listView.GetShownItemByItemIndex(index);
 			if (shown != null)
 			{
-				TextMeshProUGUI tmp = shown.GetComponentInChildren<TextMeshProUGUI>(true);
-				if (tmp != null)
-				{
-					tmp.text = text;
-					tmp.ForceMeshUpdate();
-				}
-
-				LayoutRebuilder.ForceRebuildLayoutImmediate(shown.CachedRectTransform);
+				if (m_messages[index].IsPlayer)
+					m_messageList.GetItem<RightMessageItem>(shown.GoId)?.SetMessage(text);
+				else
+					m_messageList.GetItem<LeftMessageItem>(shown.GoId)?.SetMessage(text);
 				listView.OnItemSizeChanged(index);
 			}
 
@@ -1358,15 +1569,6 @@ namespace GameLogic
 			return c == '，' || c == '。' || c == '！' || c == '？' || c == '、' ||
 				c == '；' || c == '：' || c == '…' || c == ',' || c == '.' ||
 				c == '!' || c == '?' || c == ';' || c == ':';
-		}
-
-		private static bool WasPrimaryClickThisFrame()
-		{
-#if ENABLE_INPUT_SYSTEM
-			return Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
-#else
-			return Input.GetMouseButtonDown(0);
-#endif
 		}
 
 		private void AddMessage(bool isPlayer, string text)
@@ -1435,22 +1637,7 @@ namespace GameLogic
 		{
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			NarrativeSessionConfig next = m_storyScheduler.FindNextSession(saveData);
-			if (next != null)
-			{
-				saveData.BeginSession(next.Id, next.StartNodeId);
-				StoryNodeConfig firstNode = NarrativeConfigMgr.Instance.GetStoryNode(next.StartNodeId);
-				if (firstNode == null)
-				{
-					DLogger.Error("Session start node not found: {0}", next.StartNodeId);
-					EnterDayEnd();
-					return;
-				}
-
-				await PresentStoryNodeAsync(firstNode);
-				return;
-			}
-
-			if (m_storyScheduler.HasUncompletedSessions(saveData) &&
+			if (next == null && m_storyScheduler.HasUncompletedSessions(saveData) &&
 				m_storyScheduler.FindNextScheduledDay(saveData) <= 0)
 			{
 				ShowOverlay("剧情配置异常", "当前 Session 没有可用的显式后继，但仍有未完成 Session。请检查剧情配置。", new[]
@@ -1461,6 +1648,7 @@ namespace GameLogic
 			}
 
 			EnterDayEnd();
+			await UniTask.CompletedTask;
 		}
 
 		private void ExecuteNodeExitActions(NarrativeSaveData saveData, StoryNodeConfig story)
@@ -1480,6 +1668,7 @@ namespace GameLogic
 
 		private void ShowDayMonologue()
 		{
+			SetMonologuePresentation(true);
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			NarrativeSessionConfig session = NarrativeConfigMgr.Instance.GetSession(saveData.LastCompletedSessionId);
 			string body = session != null && !string.IsNullOrWhiteSpace(session.DayMonologue)
@@ -1492,6 +1681,33 @@ namespace GameLogic
 			});
 		}
 
+		private void SetMonologuePresentation(bool visible)
+		{
+			if (m_monologuePresentation == visible) return;
+			m_monologuePresentation = visible;
+			bool showHud = !visible;
+			if (m_btnSettings != null) m_btnSettings.gameObject.SetActive(showHud);
+			if (m_btnEmoCollection != null) m_btnEmoCollection.gameObject.SetActive(showHud);
+			if (m_btnItemCollection != null) m_btnItemCollection.gameObject.SetActive(showHud);
+			if (m_btnRestart != null) m_btnRestart.gameObject.SetActive(showHud);
+			if (m_btnLayoutEdit != null) m_btnLayoutEdit.gameObject.SetActive(showHud);
+			if (m_scrollMemoryList != null) m_scrollMemoryList.gameObject.SetActive(showHud);
+			if (m_dialoguePanel != null) m_dialoguePanel.SetActive(showHud);
+			if (m_tmpNpcSubtitle != null) m_tmpNpcSubtitle.gameObject.SetActive(false);
+			if (m_tfReplayMessageNode != null) m_tfReplayMessageNode.gameObject.SetActive(false);
+			if (m_tfReplayEmoNode != null) m_tfReplayEmoNode.gameObject.SetActive(false);
+			SetDialogueAdvanceCatcherActive(false);
+			if (visible)
+			{
+				m_npcPortraitVersion++;
+				HideNpcSpine();
+				if (m_rtSceneCharacter != null) m_rtSceneCharacter.gameObject.SetActive(false);
+				if (m_rtOtherCharacter != null) m_rtOtherCharacter.gameObject.SetActive(false);
+				if (m_imgNpcPortrait != null) m_imgNpcPortrait.enabled = false;
+				if (m_tmpNpcPlaceholder != null) m_tmpNpcPlaceholder.gameObject.SetActive(false);
+			}
+		}
+
 		private void ContinueAfterDayMonologue()
 		{
 			if (m_isBusy)
@@ -1501,6 +1717,7 @@ namespace GameLogic
 
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			DestroyOverlay();
+			SetMonologuePresentation(false);
 			if (saveData.DayPhase == NarrativeDayPhase.Monologue)
 			{
 				int nextDay = m_storyScheduler.FindNextScheduledDay(saveData);
@@ -1537,36 +1754,27 @@ namespace GameLogic
 		private void ShowMemoryCleanup()
 		{
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
-			var buttons = new List<(string Label, Action Action)>();
-			foreach (string id in saveData.GetCleanupMemoryIds())
-			{
-				MemoryConfig memory = NarrativeConfigMgr.Instance.GetMemory(id);
-				string label = memory == null ? id : memory.MemoryName;
-				string memoryId = id;
-				buttons.Add(("移除：" + label, (Action)(() =>
-				{
-					saveData.RemoveMemoryDuringCleanup(memoryId);
-					ShowMemoryCleanup();
-				})));
-			}
-
 			if (saveData.CanFinishMemoryCleanup)
 			{
-				buttons.Add(("完成整理并继续", (Action)(() =>
-				{
-					if (m_isBusy)
-					{
-						return;
-					}
-
-					int nextDay = m_storyScheduler.FindNextScheduledDay(saveData);
-					saveData.FinishMemoryCleanupAndAdvanceDay(nextDay);
-					DestroyOverlay();
-					AdvanceFromDayPhase(saveData);
-				})));
+				int nextDay = m_storyScheduler.FindNextScheduledDay(saveData);
+				saveData.FinishMemoryCleanupAndAdvanceDay(nextDay);
+				if (m_isBusy) m_pendingRestart = true;
+				else AdvanceFromDayPhase(saveData);
+				return;
 			}
 
-			ShowOverlay("整理记忆", $"进入整理时至少移除一段记忆，整理后最多保留 {NarrativeRules.MemoryCapacity} 段。当前 {saveData.MemoryCount} 段。已学会的情绪会永久保留。", buttons);
+			DestroyOverlay();
+			HideMemoryTooltip();
+			SetMonologuePresentation(false);
+			SetDialogueAdvanceCatcherActive(false);
+			if (m_dialoguePanel != null) m_dialoguePanel.SetActive(false);
+			if (m_scrollMemoryList != null) m_scrollMemoryList.gameObject.SetActive(true);
+			if (m_tmpNpcSubtitle != null)
+			{
+				m_tmpNpcSubtitle.text = $"记忆已满，请点击记忆卡片右上角的删除按钮，保留 {NarrativeRules.MemoryCapacity} 段记忆。";
+				m_tmpNpcSubtitle.gameObject.SetActive(true);
+			}
+			RefreshMemorySlots();
 		}
 
 		private void ShowGameComplete()
@@ -1591,29 +1799,65 @@ namespace GameLogic
 
 		private void ShowCollection()
 		{
+			ShowCollectionPage(false);
+		}
+
+		private void ShowCollectionPage(bool emotions)
+		{
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
-			var lines = new List<string> { "记忆：" };
-			foreach (string id in saveData.GetMemoryIdsInStableOrder())
+			ShowOverlay("图鉴", emotions ? "已获得的情绪" : "已获得的记忆", new[]
 			{
-				MemoryConfig item = NarrativeConfigMgr.Instance.GetMemory(id);
-				lines.Add("• " + (item == null ? id : item.MemoryName + "：" + item.Description));
-			}
-			lines.Add("\n情绪：");
-			foreach (string id in saveData.GetEmotionIdsInStableOrder())
+				("记忆", (Action)(() => ShowCollectionPage(false))),
+				("情绪", (Action)(() => ShowCollectionPage(true))),
+				("关闭", (Action)(() => CloseOverlayAnimated()))
+			});
+			if (m_overlayBodyContent == null) return;
+			if (emotions)
 			{
-				EmotionConfig item = NarrativeConfigMgr.Instance.GetEmotion(id);
-				lines.Add("• " + (item == null ? id : item.EmotionName));
+				IReadOnlyList<EmotionConfig> entries = NarrativeConfigMgr.Instance.AllEmotions;
+				AddCollectionCards(entries.Count, index =>
+				{
+					EmotionConfig entry = entries[index];
+					bool owned = saveData.HasEmotion(entry.Id);
+					return (owned ? entry.EmotionName : "未解锁", (Action)(() =>
+					{
+						ShowOverlay(owned ? entry.EmotionName : "未解锁",
+							owned ? "这份情绪已被记住。" : "继续推进剧情可发现这份情绪。",
+							new[] { ("返回图鉴", (Action)(() => ShowCollectionPage(true))) });
+					}));
+				});
 			}
-			var buttons = new List<(string Label, Action Action)>();
-			foreach (string itemId in saveData.GetNarrativeItemIdsInStableOrder())
+			else
 			{
-				NarrativeItemConfig item = NarrativeConfigMgr.Instance.GetNarrativeItem(itemId);
-				if (item == null) continue;
-				string capturedId = itemId;
-				buttons.Add(("检查物品：" + item.ItemName, (Action)(() => ShowNarrativeItem(capturedId))));
+				IReadOnlyList<MemoryConfig> entries = NarrativeConfigMgr.Instance.AllMemories;
+				AddCollectionCards(entries.Count, index =>
+				{
+					MemoryConfig entry = entries[index];
+					bool owned = saveData.HasMemory(entry.Id);
+					return (owned ? entry.MemoryName : "未解锁", (Action)(() =>
+					{
+						ShowOverlay(owned ? entry.MemoryName : "未解锁",
+							owned ? entry.Description : "检查物品上的线索可发现这段记忆。",
+							new[] { ("返回图鉴", (Action)(() => ShowCollectionPage(false))) });
+					}));
+				});
 			}
-			buttons.Add(("返回", (Action)(() => DestroyOverlay())));
-			ShowOverlay("记忆与情绪", string.Join("\n", lines) + "\n\n已持有物品可点击检查部件，发现与物品相关的记忆。", buttons);
+		}
+
+		private void AddCollectionCards(int count, Func<int, (string Label, Action Action)> getCard)
+		{
+			if (m_overlayBodyContent == null) return;
+			int rows = (count + 3) / 4;
+			m_overlayBodyContent.sizeDelta = new Vector2(0f, Mathf.Max(120f, 74f + rows * 120f));
+			for (int i = 0; i < count; i++)
+			{
+				(string label, Action action) = getCard(i);
+				int column = i % 4;
+				int row = i / 4;
+				CreateOverlayButton(m_overlayBodyContent, label,
+					new Vector2(-216f + column * 144f, -76f - row * 120f),
+					new Vector2(132f, 108f), action, true);
+			}
 		}
 
 		private void ShowNarrativeItem(string itemId)
@@ -1652,29 +1896,53 @@ namespace GameLogic
 				}
 			}
 
-			buttons.Add(("返回收藏", (Action)(() => ShowCollection())));
+			buttons.Add(("关闭", (Action)(() => CloseOverlayAnimated())));
 			string inspectHint = visualParts.Count > 0
 				? "\n\n点击物品上的不同部位，发现与它有关的记忆。发现过的记忆不会重复获得。"
 				: "\n\n选择一个部件进行检查。发现过的记忆不会重复获得。";
 			ShowOverlay(item.ItemName, item.Description + inspectHint, buttons);
+			RectTransform panel = m_overlay == null ? null : m_overlay.transform.Find("Panel") as RectTransform;
+			if (panel != null)
+			{
+				panel.DOKill();
+				panel.sizeDelta = new Vector2(900f, 780f);
+				panel.anchoredPosition = new Vector2(150f, -780f);
+				panel.DOAnchorPos(new Vector2(150f, 0f), 0.25f).SetUpdate(true).SetLink(panel.gameObject);
+			}
 			ShowNarrativeItemImage(item.ImageId, visualParts, itemId);
 		}
 
 		private void InspectNarrativeItemPart(string itemId, string memoryId)
 		{
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
-			if (!string.IsNullOrWhiteSpace(memoryId) && saveData.AddMemories(new[] { memoryId }))
-			{
-				m_narrativeService.RunEmotionScanForDebug(saveData);
-				RefreshUI();
-				MemoryConfig memory = NarrativeConfigMgr.Instance.GetMemory(memoryId);
-				ShowOverlay("发现记忆", memory == null ? memoryId : memory.MemoryName + "\n" + memory.Description,
-					new[] { ("继续检查", (Action)(() => ShowNarrativeItem(itemId))) });
-			}
-			else
+			if (string.IsNullOrWhiteSpace(memoryId))
 			{
 				ShowNarrativeItem(itemId);
+				return;
 			}
+
+			MemoryConfig memory = NarrativeConfigMgr.Instance.GetMemory(memoryId);
+			string description = memory == null ? memoryId : memory.MemoryName + "\n" + memory.Description;
+			if (saveData.HasMemory(memoryId))
+			{
+				ShowOverlay("已发现的记忆", description,
+					new[] { ("继续检查", (Action)(() => ShowNarrativeItem(itemId))) });
+				return;
+			}
+
+			ShowOverlay("线索说明", description, new[]
+			{
+				("添加记忆", (Action)(() =>
+				{
+					if (saveData.AddMemories(new[] { memoryId }))
+					{
+						m_narrativeService.RunEmotionScanForDebug(saveData);
+						RefreshUI();
+					}
+					ShowNarrativeItem(itemId);
+				})),
+				("继续检查", (Action)(() => ShowNarrativeItem(itemId)))
+			});
 		}
 
 		private void ShowNarrativeItemImage(string imageId, IReadOnlyList<NarrativeItemPartConfig> parts, string itemId)
@@ -1692,7 +1960,7 @@ namespace GameLogic
 			imageRect.anchorMax = new Vector2(0.5f, 1f);
 			imageRect.pivot = new Vector2(0.5f, 1f);
 			imageRect.anchoredPosition = new Vector2(0f, -8f);
-			imageRect.sizeDelta = new Vector2(400f, 240f);
+			imageRect.sizeDelta = new Vector2(480f, 300f);
 			Image image = imageObject.GetComponent<Image>();
 			image.preserveAspect = true;
 			image.raycastTarget = false;
@@ -1715,14 +1983,14 @@ namespace GameLogic
 				return;
 			}
 
-			bodyText.rectTransform.anchoredPosition = new Vector2(0f, -280f);
+			bodyText.rectTransform.anchoredPosition = new Vector2(0f, -340f);
 			bodyText.rectTransform.offsetMin = new Vector2(24f, bodyText.rectTransform.offsetMin.y);
 			bodyText.rectTransform.offsetMax = new Vector2(-24f, bodyText.rectTransform.offsetMax.y);
 			Canvas.ForceUpdateCanvases();
 			bodyText.ForceMeshUpdate();
 			float textHeight = Mathf.Max(bodyText.preferredHeight + 24f, 80f);
 			bodyText.rectTransform.sizeDelta = new Vector2(bodyText.rectTransform.sizeDelta.x, textHeight);
-			m_overlayBodyContent.sizeDelta = new Vector2(0f, textHeight + 300f);
+			m_overlayBodyContent.sizeDelta = new Vector2(0f, textHeight + 360f);
 		}
 
 		private void CreateNarrativeItemHotspots(RectTransform imageRect, Vector2 displaySize,
@@ -1759,14 +2027,107 @@ namespace GameLogic
 
 		private void ShowSettings()
 		{
-			ShowOverlay("设置", "游戏进度会在每次剧情提交和阶段变化时自动保存。", new[]
+			m_settingsLayoutEditMode = false;
+			if (m_overlay != null && !IsPsdSettingsOverlay())
 			{
-				("继续游戏", (Action)(() => DestroyOverlay())),
-				("调整人物、按钮与图层", (Action)(() => { DestroyOverlay(); SetLayoutEditMode(true); })),
-				("查看记忆", (Action)(() => ShowCollection())),
-				("从头开始", (Action)(() => ConfirmRestartFromBeginning())),
-				("回到标题", (Action)(() => ReturnToMainMenu()))
+				m_suspendedOverlay = m_overlay;
+				m_suspendedOverlayBodyContent = m_overlayBodyContent;
+				m_suspendedDebugNodeInput = m_debugNodeInput;
+				m_suspendedOverlay.SetActive(false);
+				m_overlay = null;
+				m_overlayBodyContent = null;
+				m_debugNodeInput = null;
+			}
+			ShowPsdSettings();
+		}
+
+		private void ShowVolumeSettings()
+		{
+			float volume = Mathf.Clamp01(PlayerPrefs.GetFloat("NarrativeMasterVolume", 1f));
+			AudioListener.volume = volume;
+			ShowOverlay("音量设置", $"当前音量：{Mathf.RoundToInt(volume * 100f)}%", new[]
+			{
+				("降低音量", (Action)(() => ChangeVolume(-0.1f))),
+				("提高音量", (Action)(() => ChangeVolume(0.1f))),
+				("返回设置", (Action)(() => ShowSettings()))
 			});
+			if (m_overlayBodyContent == null) return;
+			var sliderObject = new GameObject("VolumeSlider", typeof(RectTransform), typeof(Image), typeof(Slider));
+			sliderObject.transform.SetParent(m_overlayBodyContent, false);
+			RectTransform sliderRect = sliderObject.GetComponent<RectTransform>();
+			sliderRect.anchorMin = sliderRect.anchorMax = new Vector2(0.5f, 1f);
+			sliderRect.pivot = new Vector2(0.5f, 1f);
+			sliderRect.anchoredPosition = new Vector2(0f, -90f);
+			sliderRect.sizeDelta = new Vector2(500f, 34f);
+			sliderObject.GetComponent<Image>().color = HudPaperButton;
+			var fillObject = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+			fillObject.transform.SetParent(sliderObject.transform, false);
+			RectTransform fillRect = fillObject.GetComponent<RectTransform>();
+			fillRect.anchorMin = Vector2.zero;
+			fillRect.anchorMax = Vector2.one;
+			fillRect.offsetMin = Vector2.zero;
+			fillRect.offsetMax = Vector2.zero;
+			fillObject.GetComponent<Image>().color = new Color(0.72f, 0.8f, 0.68f, 1f);
+			var handleObject = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+			handleObject.transform.SetParent(sliderObject.transform, false);
+			RectTransform handleRect = handleObject.GetComponent<RectTransform>();
+			handleRect.sizeDelta = new Vector2(46f, 46f);
+			Image handleImage = handleObject.GetComponent<Image>();
+			handleImage.color = Color.white;
+			Slider slider = sliderObject.GetComponent<Slider>();
+			slider.fillRect = fillRect;
+			slider.handleRect = handleRect;
+			slider.targetGraphic = handleImage;
+			slider.minValue = 0f;
+			slider.maxValue = 1f;
+			slider.value = volume;
+			m_overlayBodyContent.sizeDelta = new Vector2(0f, 150f);
+			TextMeshProUGUI bodyText = m_overlayBodyContent.GetComponentInChildren<TextMeshProUGUI>(true);
+			slider.onValueChanged.AddListener(value =>
+			{
+				AudioListener.volume = value;
+				PlayerPrefs.SetFloat("NarrativeMasterVolume", value);
+				PlayerPrefs.Save();
+				if (bodyText != null) bodyText.text = $"当前音量：{Mathf.RoundToInt(value * 100f)}%";
+			});
+		}
+
+		private void ChangeVolume(float delta)
+		{
+			float volume = Mathf.Clamp01(PlayerPrefs.GetFloat("NarrativeMasterVolume", 1f) + delta);
+			PlayerPrefs.SetFloat("NarrativeMasterVolume", volume);
+			PlayerPrefs.Save();
+			AudioListener.volume = volume;
+			ShowVolumeSettings();
+		}
+
+		private void LoadSaveSlot(int slot)
+		{
+			if (m_isBusy)
+			{
+				ShowSettingsConfirmation("提示", "请等待当前对话结束后再读取存档。", null);
+				return;
+			}
+			if (!NarrativeSaveData.Get.LoadFromSlot(slot))
+			{
+				ShowSettingsConfirmation("提示", "存档不存在或内容无法读取。", null);
+				return;
+			}
+			m_dialoguePresentVersion++;
+			m_currentStoryNode = null;
+			m_selectedReply = null;
+			m_selectedEmotionId = null;
+			m_hasReplied = false;
+			m_playerReplyShown = false;
+			SetReplyItemsActive(false);
+			SetEmotionItemsActive(false);
+			m_messages.Clear();
+			if (m_messageList != null && m_messageList.LoopRectView != null)
+				m_messageList.LoopRectView.SetListItemCount(0, false);
+			DiscardSuspendedOverlay();
+			DestroyOverlay();
+			SetMonologuePresentation(false);
+			StartStoryAsync().Forget();
 		}
 
 		private void ShowDebugPanel()
@@ -1784,7 +2145,7 @@ namespace GameLogic
 				("增加一天", (Action)(() => { saveData.SetDayTime(saveData.CurrentDay + 1, 0); StartStoryAsync().Forget(); })),
 				("时间 +1", (Action)(() => { saveData.SetDayTime(saveData.CurrentDay, saveData.CurrentTimeSlot + 1); ShowDebugPanel(); })),
 				("跳转 Turn…", (Action)(() => ShowDebugJumpNode())),
-				("关闭", (Action)(() => DestroyOverlay()))
+				("关闭", (Action)(() => CloseOverlayAnimated()))
 			};
 
 			MemoryConfig missingMemory = NarrativeConfigMgr.Instance.AllMemories.FirstOrDefault(x => !saveData.HasMemory(x.Id));
@@ -1849,6 +2210,8 @@ namespace GameLogic
 
 		private void ShowOverlay(string title, string body, IReadOnlyList<(string Label, Action Action)> buttons)
 		{
+			HideMemoryTooltip();
+			DiscardSuspendedOverlay();
 			DestroyOverlay();
 			EnsureEventSystem();
 			var blocker = new GameObject("NarrativeOverlay", typeof(RectTransform), typeof(Image));
@@ -1871,6 +2234,8 @@ namespace GameLogic
 			panel.anchorMin = panel.anchorMax = new Vector2(0.5f, 0.5f);
 			panel.pivot = new Vector2(0.5f, 0.5f);
 			panel.sizeDelta = new Vector2(780, 720);
+			panel.anchoredPosition = new Vector2(0f, -720f);
+			panel.DOAnchorPos(Vector2.zero, 0.25f).SetUpdate(true).SetLink(root);
 			Image panelImage = root.GetComponent<Image>();
 			panelImage.color = HudPaperPanel;
 			ApplyHudSprite(panelImage, "setting_save_popup_bg", false, gameObject.GetCancellationTokenOnDestroy(), true);
@@ -2013,8 +2378,23 @@ namespace GameLogic
 
 			rect.anchoredPosition = position;
 			rect.sizeDelta = size;
-			go.GetComponent<Image>().color = HudPaperButton;
-			go.GetComponent<Button>().onClick.AddListener(() => action?.Invoke());
+			Image buttonImage = go.GetComponent<Image>();
+			buttonImage.color = HudPaperButton;
+			Button button = go.GetComponent<Button>();
+			ColorBlock colors = button.colors;
+			colors.normalColor = Color.white;
+			colors.highlightedColor = new Color(1f, 0.95f, 0.75f, 1f);
+			colors.pressedColor = new Color(0.91f, 0.78f, 0.55f, 1f);
+			colors.selectedColor = colors.highlightedColor;
+			button.colors = colors;
+			button.onClick.AddListener(() =>
+			{
+				if (!button.interactable) return;
+				button.interactable = false;
+				DOTween.Sequence().Append(rect.DOScale(0.94f, 0.08f))
+					.Append(rect.DOScale(1f, 0.12f)).SetUpdate(true).SetLink(go)
+					.OnComplete(() => action?.Invoke());
+			});
 			TextMeshProUGUI text = CreateOverlayText(go.transform, label, 17, Vector2.zero, size,
 				TextAlignmentOptions.Center);
 			text.overflowMode = TextOverflowModes.Ellipsis;
@@ -2105,6 +2485,54 @@ namespace GameLogic
 			m_overlayBodyContent = null;
 		}
 
+		private bool IsPsdSettingsOverlay()
+			=> m_overlay != null && m_overlay.transform.Find("VolumeSlider") != null;
+
+		private void CloseSettingsOverlay()
+		{
+			m_settingsLayoutEditMode = false;
+			DestroyOverlay();
+			if (m_suspendedOverlay == null)
+			{
+				if (m_monologuePresentation && NarrativeSaveData.Get.DayPhase == NarrativeDayPhase.Monologue)
+					ShowDayMonologue();
+				return;
+			}
+			m_overlay = m_suspendedOverlay;
+			m_overlayBodyContent = m_suspendedOverlayBodyContent;
+			m_debugNodeInput = m_suspendedDebugNodeInput;
+			m_suspendedOverlay = null;
+			m_suspendedOverlayBodyContent = null;
+			m_suspendedDebugNodeInput = null;
+			m_overlay.SetActive(true);
+			m_overlay.transform.SetAsLastSibling();
+		}
+
+		private void DiscardSuspendedOverlay()
+		{
+			if (m_suspendedOverlay != null)
+			{
+				m_suspendedOverlay.SetActive(false);
+				UnityEngine.Object.Destroy(m_suspendedOverlay);
+			}
+			m_suspendedOverlay = null;
+			m_suspendedOverlayBodyContent = null;
+			m_suspendedDebugNodeInput = null;
+		}
+
+		private void CloseOverlayAnimated()
+		{
+			RectTransform panel = m_overlay == null ? null : m_overlay.transform.Find("Panel") as RectTransform;
+			if (panel == null)
+			{
+				DestroyOverlay();
+				return;
+			}
+			panel.DOKill();
+			panel.DOAnchorPos(new Vector2(panel.anchoredPosition.x, -panel.rect.height), 0.18f)
+				.SetUpdate(true).SetLink(panel.gameObject).OnComplete(DestroyOverlay);
+		}
+
 		private void OnMessageListBeginDrag()
 		{
 			m_messageScrollVersion++;
@@ -2159,7 +2587,80 @@ namespace GameLogic
 
 		private void RefreshNpcPortrait(StoryNodeConfig story)
 		{
+			RefreshOtherCharacter(story);
 			RefreshNpcPortraitAsync(story).Forget();
+		}
+
+		private List<string> GetSessionNpcSet()
+		{
+			NarrativeSessionConfig session = NarrativeConfigMgr.Instance.GetSession(
+				NarrativeSaveData.Get.CurrentSessionId);
+			if (session == null || string.IsNullOrWhiteSpace(session.NpcSet))
+				return new List<string>();
+			return session.NpcSet.Split(new[] { ',', '，', ';', '；' },
+				StringSplitOptions.RemoveEmptyEntries)
+				.Select(id => id.Trim()).Where(id => id.Length > 0).Distinct().ToList();
+		}
+
+		private Vector2 GetActiveCharacterDefaultPosition()
+		{
+			if (!IsNpcDialogueTurn(m_currentStoryNode)) return new Vector2(-850f, 0f);
+			List<string> npcSet = GetSessionNpcSet();
+			return new Vector2(npcSet.IndexOf(m_currentStoryNode.NpcId) == 1 ? 850f : -850f, 0f);
+		}
+
+		private void RefreshOtherCharacter(StoryNodeConfig story)
+		{
+			List<string> npcSet = GetSessionNpcSet();
+			if (story == null || !IsNpcDialogueTurn(story) || npcSet.Count < 2 ||
+				!npcSet.Contains(story.NpcId))
+			{
+				m_otherCharacterVersion++;
+				m_otherCharacterNpcId = null;
+				if (m_rtOtherCharacter != null) m_rtOtherCharacter.gameObject.SetActive(false);
+				return;
+			}
+			string otherNpc = npcSet.FirstOrDefault(id => id != story.NpcId);
+			if (string.IsNullOrWhiteSpace(otherNpc)) return;
+			m_otherCharacterNpcId = otherNpc;
+
+			EnsureSceneCharacterView();
+			if (m_rtSceneCharacter == null || m_imgSceneRoot == null) return;
+			if (m_rtOtherCharacter == null)
+			{
+				var go = new GameObject("OtherSceneCharacter", typeof(RectTransform), typeof(Image));
+				go.transform.SetParent(m_imgSceneRoot.transform, false);
+				m_rtOtherCharacter = go.GetComponent<RectTransform>();
+				m_imgOtherCharacter = go.GetComponent<Image>();
+				m_imgOtherCharacter.preserveAspect = true;
+				m_imgOtherCharacter.raycastTarget = false;
+			}
+			m_rtOtherCharacter.anchorMin = m_rtOtherCharacter.anchorMax = new Vector2(0.5f, 0f);
+			m_rtOtherCharacter.pivot = new Vector2(0.5f, 0f);
+			m_rtOtherCharacter.anchoredPosition = ReadLayoutPosition(GetOtherCharacterLayoutPart(),
+				new Vector2(npcSet.IndexOf(otherNpc) == 0 ? -850f : 850f, 0f));
+			m_rtOtherCharacter.sizeDelta = new Vector2(600f, 960f);
+			m_rtOtherCharacter.localScale = ReadCharacterVisualScale(GetOtherCharacterLayoutPart());
+			m_imgOtherCharacter.raycastTarget = m_layoutEditMode;
+			RegisterLayoutDragHandle(m_rtOtherCharacter, "OtherCharacter");
+			string location = ResolveNpcPortraitLocation(otherNpc, null);
+			if (string.IsNullOrWhiteSpace(location))
+			{
+				m_rtOtherCharacter.gameObject.SetActive(false);
+				return;
+			}
+			m_rtOtherCharacter.gameObject.SetActive(true);
+			if (location == m_loadedOtherCharacterLocation && m_imgOtherCharacter.sprite != null) return;
+			m_loadedOtherCharacterLocation = location;
+			int version = ++m_otherCharacterVersion;
+			m_imgOtherCharacter.enabled = false;
+			m_imgOtherCharacter.SetSprite(location, false, loaded =>
+			{
+				if (IsDestroyed || version != m_otherCharacterVersion || loaded == null || loaded.sprite == null) return;
+				loaded.enabled = true;
+				loaded.preserveAspect = true;
+				loaded.raycastTarget = false;
+			}, gameObject.GetCancellationTokenOnDestroy());
 		}
 
 		private async UniTaskVoid RefreshNpcPortraitAsync(StoryNodeConfig story)
@@ -2249,9 +2750,10 @@ namespace GameLogic
 			m_rtSceneCharacter.anchorMin = new Vector2(0.5f, 0f);
 			m_rtSceneCharacter.anchorMax = new Vector2(0.5f, 0f);
 			m_rtSceneCharacter.pivot = new Vector2(0.5f, 0f);
-			m_rtSceneCharacter.anchoredPosition = ReadLayoutPosition(GetCharacterLayoutPart(), new Vector2(-650f, 0f));
+			m_rtSceneCharacter.anchoredPosition = ReadLayoutPosition(GetCharacterLayoutPart(),
+				GetActiveCharacterDefaultPosition());
 			m_rtSceneCharacter.sizeDelta = new Vector2(600f, 960f);
-			m_rtSceneCharacter.localScale = Vector3.one * ReadCharacterScale();
+			m_rtSceneCharacter.localScale = ReadCharacterVisualScale(GetCharacterLayoutPart());
 			m_imgSceneCharacter = m_rtSceneCharacter.GetComponent<Image>();
 			if (m_imgSceneCharacter == null) m_imgSceneCharacter = m_rtSceneCharacter.gameObject.AddComponent<Image>();
 			m_imgSceneCharacter.raycastTarget = m_layoutEditMode;
@@ -2552,7 +3054,8 @@ namespace GameLogic
 				BindSceneBackgroundView();
 			}
 
-			string npcId = story == null ? string.Empty : story.NpcId;
+			string npcId = NarrativeSaveData.Get.CurrentSessionId == "S01" ? "陈先生" :
+				story == null ? string.Empty : story.NpcId;
 			string[] backgrounds = ResolveSceneBackgroundLocations(npcId);
 			string[] foregrounds = ResolveSceneForegroundLocations(npcId);
 			string[] layers = new string[backgrounds.Length + foregrounds.Length];
@@ -2612,14 +3115,43 @@ namespace GameLogic
 		{
 			if (m_rtSceneCharacter == null) return;
 			int foregroundCount = layerCount - backgroundCount;
-			int layer = ReadCharacterLayer();
-			int insertAt = backgroundCount + (layer == 0 ? 0 : layer == 1 ? Mathf.Min(foregroundCount, Mathf.Max(1, foregroundCount / 2)) : foregroundCount);
+			int activeAt = CharacterInsertIndex(backgroundCount, foregroundCount, ReadCharacterLayer());
+			bool showOther = m_rtOtherCharacter != null && m_rtOtherCharacter.gameObject.activeSelf;
+			int otherAt = showOther
+				? CharacterInsertIndex(backgroundCount, foregroundCount, ReadOtherCharacterLayer())
+				: -1;
+			List<string> npcSet = showOther ? GetSessionNpcSet() : null;
+			bool activeFirst = !showOther || npcSet.IndexOf(m_currentStoryNode.NpcId) <=
+				npcSet.IndexOf(m_otherCharacterNpcId);
 			for (int i = 0; i <= layerCount; i++)
 			{
-				if (i == insertAt) m_rtSceneCharacter.SetAsLastSibling();
+				if (i == activeAt && i == otherAt)
+				{
+					if (activeFirst)
+					{
+						m_rtSceneCharacter.SetAsLastSibling();
+						m_rtOtherCharacter.SetAsLastSibling();
+					}
+					else
+					{
+						m_rtOtherCharacter.SetAsLastSibling();
+						m_rtSceneCharacter.SetAsLastSibling();
+					}
+				}
+				else
+				{
+					if (i == activeAt) m_rtSceneCharacter.SetAsLastSibling();
+					if (i == otherAt) m_rtOtherCharacter.SetAsLastSibling();
+				}
 				if (i < layerCount && m_sceneLayerImages[i] != null)
 					m_sceneLayerImages[i].transform.SetAsLastSibling();
 			}
+		}
+
+		private static int CharacterInsertIndex(int backgroundCount, int foregroundCount, int layer)
+		{
+			return backgroundCount + (layer == 0 ? 0 :
+				layer == 1 ? Mathf.Min(foregroundCount, Mathf.Max(1, foregroundCount / 2)) : foregroundCount);
 		}
 
 		private static void ApplySceneLayerLayout(Image image, string location)
@@ -2827,6 +3359,21 @@ namespace GameLogic
 				m_btnRestart.transform.SetAsLastSibling();
 			}
 
+			if (m_btnLayoutEdit != null)
+			{
+				m_btnLayoutEdit.transform.SetAsLastSibling();
+			}
+
+			if (m_scrollMemoryList != null)
+			{
+				m_scrollMemoryList.transform.SetAsLastSibling();
+			}
+
+			if (m_memoryTooltip != null && m_memoryTooltip.gameObject.activeSelf)
+			{
+				m_memoryTooltip.SetAsLastSibling();
+			}
+
 			if (m_overlay != null)
 			{
 				m_overlay.transform.SetAsLastSibling();
@@ -2864,7 +3411,8 @@ namespace GameLogic
 			var go = new GameObject("m_btnRestart", typeof(RectTransform), typeof(Image), typeof(Button));
 			go.transform.SetParent(transform, false);
 			m_btnRestart = go.GetComponent<Button>();
-			PlaceCornerButton(m_btnRestart, new Vector2(0f, 1f), new Vector2(210f, -28f), new Vector2(200f, 56f));
+			PlaceCornerButton(m_btnRestart, new Vector2(0f, 1f),
+				ReadLayoutPosition("Restart", new Vector2(210f, -28f)), new Vector2(200f, 56f));
 			Image image = go.GetComponent<Image>();
 			image.color = HudPaperButton;
 			image.raycastTarget = true;
@@ -2945,6 +3493,7 @@ namespace GameLogic
 
 		private partial void OnClickSettingsBtn()
 		{
+			if (m_layoutEditMode) return;
 			ShowSettings();
 		}
 
@@ -2959,14 +3508,40 @@ namespace GameLogic
 		protected override void OnUpdate()
 		{
 			bool toggleDebugPanel = false;
+			bool toggleSettings = false;
+			bool toggleLayout = false;
 #if ENABLE_INPUT_SYSTEM
 			toggleDebugPanel = Keyboard.current != null && Keyboard.current.f1Key.wasPressedThisFrame;
+			toggleSettings = Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame;
+			toggleLayout = Keyboard.current != null && Keyboard.current.f2Key.wasPressedThisFrame;
 #else
 			toggleDebugPanel = Input.GetKeyDown(KeyCode.F1);
+			toggleSettings = Input.GetKeyDown(KeyCode.Escape);
+			toggleLayout = Input.GetKeyDown(KeyCode.F2);
 #endif
+			if (toggleLayout)
+			{
+				if (IsPsdSettingsOverlay())
+					ToggleSettingsLayoutEdit();
+				else if (m_overlay == null)
+					SetLayoutEditMode(!m_layoutEditMode);
+			}
+			if (toggleSettings)
+			{
+				if (IsPsdSettingsOverlay())
+				{
+					CloseSettingsOverlay();
+				}
+				else
+				{
+					if (m_layoutEditMode) SetLayoutEditMode(false);
+					ShowSettings();
+				}
+			}
 			if (toggleDebugPanel)
 			{
 				if (m_overlay == null) ShowDebugPanel();
+				else if (IsPsdSettingsOverlay()) CloseSettingsOverlay();
 				else DestroyOverlay();
 			}
 			base.OnUpdate();

@@ -26,6 +26,7 @@ public sealed partial class NarrativeSessionConfig : Luban.BeanBase
         NextSessionId = _buf.ReadString();
         DayMonologue = _buf.ReadString();
         IsFormalEnding = _buf.ReadBool();
+        NpcSet = _buf.ReadString();
     }
 
     public static NarrativeSessionConfig DeserializeNarrativeSessionConfig(ByteBuf _buf)
@@ -65,6 +66,10 @@ public sealed partial class NarrativeSessionConfig : Luban.BeanBase
     /// 是否在日终后进入正式结局
     /// </summary>
     public bool IsFormalEnding;
+    /// <summary>
+    /// 按剧情配表 Session.NPCSet 的顺序填写 NPC 名，逗号分隔；用于 NPC 对话左右站位
+    /// </summary>
+    public string NpcSet;
 
     public const int __ID__ = -1628633530;
     public override int GetTypeId() => __ID__;
@@ -88,6 +93,7 @@ public sealed partial class NarrativeSessionConfig : Luban.BeanBase
         other.NextSessionId = NextSessionId;
         other.DayMonologue = DayMonologue;
         other.IsFormalEnding = IsFormalEnding;
+        other.NpcSet = NpcSet;
     }
 
     public NarrativeSessionConfig DeepCopy()
@@ -108,6 +114,7 @@ public sealed partial class NarrativeSessionConfig : Luban.BeanBase
         + "nextSessionId:" + NextSessionId + ","
         + "dayMonologue:" + DayMonologue + ","
         + "isFormalEnding:" + IsFormalEnding + ","
+        + "npcSet:" + NpcSet + ","
         + "}";
     }
 }

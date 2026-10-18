@@ -17,15 +17,28 @@ namespace GameLogic
 		{
 			ReplyId = replyId;
 			IsUnlocked = isUnlocked;
-			rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, 650f);
-			rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 88f);
+			const float width = 500f;
+			const float horizontalInset = 30f;
+			const float verticalInset = 20f;
 			m_tmpContent.text = displayText ?? string.Empty;
 			m_tmpContent.fontSize = 26f;
 			m_tmpContent.enableWordWrapping = true;
-			m_tmpContent.overflowMode = TextOverflowModes.Ellipsis;
+			m_tmpContent.overflowMode = TextOverflowModes.Overflow;
+			m_tmpContent.enableAutoSizing = false;
+			m_tmpContent.alignment = TextAlignmentOptions.Center;
 			m_tmpContent.color = isUnlocked
 				? new Color(0.28f, 0.22f, 0.16f, 1f)
 				: new Color(0.45f, 0.42f, 0.4f, 1f);
+			float textHeight = Mathf.Ceil(m_tmpContent.GetPreferredValues(m_tmpContent.text,
+				width - horizontalInset * 2f, 10000f).y);
+			float height = Mathf.Max(118f, textHeight + verticalInset * 2f);
+			rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
+			rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+			RectTransform contentRect = m_tmpContent.rectTransform;
+			contentRect.anchorMin = Vector2.zero;
+			contentRect.anchorMax = Vector2.one;
+			contentRect.offsetMin = new Vector2(horizontalInset, verticalInset);
+			contentRect.offsetMax = new Vector2(-horizontalInset, -verticalInset);
 			Transform bgTransform = transform.Find("Bg");
 			Image bg = bgTransform != null
 				? bgTransform.GetComponent<Image>()

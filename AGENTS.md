@@ -13,6 +13,8 @@
 
 ## 工作方式
 
+处理本仓库的 Unity 项目任务前，必须先在当前 Codex 对话中确认 Unity MCP 工具已加载，并实际调用 `editor_status`，核对 `projectPath` 为本仓库的 `GameUnity`。只有连接成功且工程匹配后，才开始 Unity 项目的读取、修改或验证。终端中 `unity mcp` 可用、CLI `status` 成功或旧对话的连接记录，均不能替代当前对话的 MCP 调用。若当前对话未加载 Unity MCP 工具，先恢复连接；恢复前暂停 Unity 项目任务并告知用户。
+
 1. 先阅读相关实现和 `git status`，确认已有改动边界。
 2. 按任务影响范围选择验证方式；跨模块、高风险或多阶段任务先明确目标和验收条件。
 3. 读取对应 skill 的 `SKILL.md` 及必要的 reference。配置表、Excel、导表脚本和 `GameConfig/` 数据优先使用 `.agents/skills/luban-dev/`。

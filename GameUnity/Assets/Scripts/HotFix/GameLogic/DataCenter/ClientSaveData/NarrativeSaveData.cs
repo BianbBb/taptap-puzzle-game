@@ -2,12 +2,14 @@ using System.Collections.Generic;
 using System.Linq;
 using GameProto;
 using Newtonsoft.Json;
+using UnityEngine;
 
 namespace GameLogic
 {
     [ClientSaveData("NarrativeSaveData")]
     public sealed class NarrativeSaveData : BaseClientSaveData
     {
+        private const string SaveSlotKeyPrefix = "NarrativeSaveSlot.";
         [JsonProperty("OwnedMemoryIds")]
         private HashSet<string> m_ownedMemoryIds = new HashSet<string>();
 
@@ -53,8 +55,6 @@ namespace GameLogic
         [JsonProperty("DayPhase")]
         private NarrativeDayPhase m_dayPhase = NarrativeDayPhase.Active;
 
-        [JsonProperty("MemoryCleanupRemovedAny")]
-        private bool m_memoryCleanupRemovedAny;
 
         [JsonProperty("LastCommittedTurnKey")]
         private string m_lastCommittedTurnKey = string.Empty;
@@ -62,6 +62,45 @@ namespace GameLogic
         protected override int CurrentSaveDataVersion => 5;
 
         public static NarrativeSaveData Get => BaseClientSaveData.Get<NarrativeSaveData>();
+
+        public const int ManualSaveSlotCount = 6;
+
+        public bool HasSaveSlot(int slot)
+            => slot >= 1 && slot <= ManualSaveSlotCount && PlayerPrefs.HasKey(SaveSlotKeyPrefix + slot);
+
+        public void SaveToSlot(int slot)
+        {
+            if (slot < 1 || slot > ManualSaveSlotCount) return;
+            PlayerPrefs.SetString(SaveSlotKeyPrefix + slot, JsonConvert.SerializeObject(this));
+            PlayerPrefs.Save();
+        }
+
+        public bool LoadFromSlot(int slot)
+        {
+            if (!HasSaveSlot(slot)) return false;
+            string json = PlayerPrefs.GetString(SaveSlotKeyPrefix + slot);
+            try
+            {
+                if (JsonConvert.DeserializeObject<NarrativeSaveData>(json) == null) return false;
+                JsonConvert.PopulateObject(json, this, new JsonSerializerSettings
+                {
+                    ObjectCreationHandling = ObjectCreationHandling.Replace
+                });
+                Save();
+                return true;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        public void DeleteSaveSlot(int slot)
+        {
+            if (slot < 1 || slot > ManualSaveSlotCount) return;
+            PlayerPrefs.DeleteKey(SaveSlotKeyPrefix + slot);
+            PlayerPrefs.Save();
+        }
 
         public bool HasMemory(string memoryId)
             => !string.IsNullOrWhiteSpace(memoryId) && m_ownedMemoryIds.Contains(memoryId);
@@ -95,12 +134,11 @@ namespace GameLogic
 
         public int MemoryCount => m_ownedMemoryIds.Count;
 
-        public bool NeedsMemoryCleanup => MemoryCount >= NarrativeRules.MemoryCapacity;
+        public bool NeedsMemoryCleanup => MemoryCount > NarrativeRules.MemoryCapacity;
 
         [JsonIgnore]
         public bool CanFinishMemoryCleanup => m_dayPhase == NarrativeDayPhase.MemoryCleanup &&
-            MemoryCount <= NarrativeRules.MemoryCapacity &&
-            (m_memoryCleanupRemovedAny || MemoryCount == 0);
+            MemoryCount <= NarrativeRules.MemoryCapacity;
 
         [JsonIgnore]
         public IReadOnlyCollection<string> StoryFlags => m_storyFlags;
@@ -183,7 +221,6 @@ namespace GameLogic
             m_turnIndex = 0;
             m_dayPhase = NarrativeDayPhase.Active;
             m_lastCommittedTurnKey = string.Empty;
-            m_memoryCleanupRemovedAny = false;
             Save();
         }
 
@@ -245,7 +282,10 @@ namespace GameLogic
         internal void ApplyNarrativeItemActionWithoutSaving(string actionType, string itemId)
         {
             if (string.Equals(actionType, "GrantItem", System.StringComparison.OrdinalIgnoreCase))
+            {
+                m_ownedNarrativeItemIds.Clear();
                 m_ownedNarrativeItemIds.Add(itemId);
+            }
             else if (string.Equals(actionType, "RemoveItem", System.StringComparison.OrdinalIgnoreCase))
                 m_ownedNarrativeItemIds.Remove(itemId);
         }
@@ -285,7 +325,6 @@ namespace GameLogic
             }
 
             m_dayPhase = NarrativeDayPhase.Monologue;
-            m_memoryCleanupRemovedAny = false;
             Save();
         }
 
@@ -315,24 +354,23 @@ namespace GameLogic
             }
 
             m_dayPhase = NarrativeDayPhase.MemoryCleanup;
-            m_memoryCleanupRemovedAny = false;
             Save();
             return true;
         }
 
-        /// <summary>只有进入记忆整理阶段后，才能删除记忆。</summary>
-        public bool RemoveMemoryDuringCleanup(string memoryId)
+        public bool RemoveMemory(string memoryId)
         {
-            if (m_dayPhase != NarrativeDayPhase.MemoryCleanup ||
-                string.IsNullOrWhiteSpace(memoryId) || !m_ownedMemoryIds.Remove(memoryId))
+            if (string.IsNullOrWhiteSpace(memoryId) || !m_ownedMemoryIds.Remove(memoryId))
             {
                 return false;
             }
 
-            m_memoryCleanupRemovedAny = true;
             Save();
             return true;
         }
+
+        public bool RemoveMemoryDuringCleanup(string memoryId)
+            => m_dayPhase == NarrativeDayPhase.MemoryCleanup && RemoveMemory(memoryId);
 
         public bool FinishMemoryCleanupAndAdvanceDay()
             => FinishMemoryCleanupAndAdvanceDay(0);
@@ -386,7 +424,6 @@ namespace GameLogic
             m_currentSessionId = string.Empty;
             m_currentNodeId = string.Empty;
             m_dayPhase = NarrativeDayPhase.GameComplete;
-            m_memoryCleanupRemovedAny = false;
             Save();
         }
 
@@ -395,7 +432,6 @@ namespace GameLogic
             m_currentSessionId = string.Empty;
             m_currentNodeId = string.Empty;
             m_dayPhase = NarrativeDayPhase.PrototypeContentExhausted;
-            m_memoryCleanupRemovedAny = false;
             Save();
         }
 
@@ -489,7 +525,6 @@ namespace GameLogic
             m_currentSessionId = string.Empty;
             m_currentNodeId = string.Empty;
             m_turnIndex = 0;
-            m_memoryCleanupRemovedAny = false;
             m_dayPhase = NarrativeDayPhase.Active;
             Save();
             return true;
