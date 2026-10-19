@@ -13,6 +13,9 @@ namespace GameLogic
         [JsonProperty("OwnedMemoryIds")]
         private HashSet<string> m_ownedMemoryIds = new HashSet<string>();
 
+        [JsonProperty("OwnedMemoryOrder")]
+        private List<string> m_ownedMemoryOrder = new List<string>();
+
         [JsonProperty("OwnedEmotionIds")]
         private HashSet<string> m_ownedEmotionIds = new HashSet<string>();
 
@@ -59,7 +62,7 @@ namespace GameLogic
         [JsonProperty("LastCommittedTurnKey")]
         private string m_lastCommittedTurnKey = string.Empty;
 
-        protected override int CurrentSaveDataVersion => 5;
+        protected override int CurrentSaveDataVersion => 6;
 
         public static NarrativeSaveData Get => BaseClientSaveData.Get<NarrativeSaveData>();
 
@@ -81,11 +84,13 @@ namespace GameLogic
             string json = PlayerPrefs.GetString(SaveSlotKeyPrefix + slot);
             try
             {
-                if (JsonConvert.DeserializeObject<NarrativeSaveData>(json) == null) return false;
+                NarrativeSaveData loaded = JsonConvert.DeserializeObject<NarrativeSaveData>(json);
+                if (loaded == null) return false;
                 JsonConvert.PopulateObject(json, this, new JsonSerializerSettings
                 {
                     ObjectCreationHandling = ObjectCreationHandling.Replace
                 });
+                m_ownedMemoryOrder = loaded.GetMemoryIdsInAcquisitionOrder().ToList();
                 Save();
                 return true;
             }
@@ -206,6 +211,7 @@ namespace GameLogic
         public void StartNewGame()
         {
             m_ownedMemoryIds.Clear();
+            m_ownedMemoryOrder.Clear();
             m_ownedEmotionIds.Clear();
             m_npcAffection.Clear();
             m_storyFlags.Clear();
@@ -365,6 +371,7 @@ namespace GameLogic
                 return false;
             }
 
+            m_ownedMemoryOrder?.RemoveAll(id => id == memoryId);
             Save();
             return true;
         }
@@ -415,6 +422,7 @@ namespace GameLogic
                 return false;
             }
 
+            m_ownedMemoryOrder?.RemoveAll(id => id == memoryId);
             Save();
             return true;
         }
@@ -542,12 +550,15 @@ namespace GameLogic
                 return added;
             }
 
+            m_ownedMemoryOrder = GetMemoryIdsInAcquisitionOrder().ToList();
+
             for (int i = 0; i < memoryIds.Count; i++)
             {
                 string id = memoryIds[i];
                 if (!string.IsNullOrWhiteSpace(id) && m_ownedMemoryIds.Add(id))
                 {
                     added.Add(id);
+                    m_ownedMemoryOrder.Add(id);
                 }
             }
 
@@ -620,6 +631,7 @@ namespace GameLogic
         protected override void OnUpgradeData(int oldVersion, int newVersion)
         {
             m_ownedMemoryIds = m_ownedMemoryIds ?? new HashSet<string>();
+            m_ownedMemoryOrder = GetMemoryIdsInAcquisitionOrder().ToList();
             m_ownedEmotionIds = m_ownedEmotionIds ?? new HashSet<string>();
             m_npcAffection = m_npcAffection ?? new Dictionary<string, float>();
             m_storyFlags = m_storyFlags ?? new HashSet<string>();
@@ -641,6 +653,23 @@ namespace GameLogic
 
         public IReadOnlyList<string> GetMemoryIdsInStableOrder()
             => m_ownedMemoryIds.OrderBy(id => id, System.StringComparer.Ordinal).ToList();
+
+        public IReadOnlyList<string> GetMemoryIdsInAcquisitionOrder()
+        {
+            var ordered = new List<string>();
+            var seen = new HashSet<string>();
+            if (m_ownedMemoryOrder != null)
+            {
+                foreach (string id in m_ownedMemoryOrder)
+                {
+                    if (m_ownedMemoryIds.Contains(id) && seen.Add(id)) ordered.Add(id);
+                }
+            }
+
+            ordered.AddRange(m_ownedMemoryIds.Where(id => !seen.Contains(id))
+                .OrderBy(id => id, System.StringComparer.Ordinal));
+            return ordered;
+        }
 
         public IReadOnlyList<string> GetEmotionIdsInStableOrder()
             => m_ownedEmotionIds.OrderBy(id => id, System.StringComparer.Ordinal).ToList();
