@@ -17,14 +17,14 @@ namespace GameEditor
 		private const string HostPrefabPath = "Assets/BundleAssets/UI/BattleMainUI.prefab";
 		private const string RootName = "NpcSubtitlePanel";
 
-		private const float PanelWidth = 1480f;
+		private const float PanelWidth = 1180f;
 		private const float PanelHeight = 220f;
 		private const float PanelBottom = 100f;
 		private const float NameInsetLeft = 36f;
 		private const float NameOverlap = 12f;
 		private const float BodyTopInset = 58f;
 		private const float BodyBottomInset = 46f;
-		private const float BodySideInset = 150f;
+		private const float BodySideInset = 140f;
 
 		private static readonly Color NameColor = new Color(0.243f, 0.161f, 0.086f, 1f);
 		private static readonly Color BodyColor = new Color(0.290f, 0.239f, 0.188f, 1f);

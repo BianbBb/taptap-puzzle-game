@@ -22,6 +22,10 @@ namespace GameLogic
 	{
 		private const string NpcSubtitleRootName = "NpcSubtitlePanel";
 		private const string NpcSpeakerLabelPrefix = "SpeakerLabel";
+		/// <summary>末行少于这个字数就算孤字，需要处理。</summary>
+		private const int SubtitleWidowMinChars = 4;
+		private const float SubtitleWidowInsetStep = 10f;
+		private const float SubtitleWidowInsetMaxExtra = 60f;
 		private const int TYPEWRITER_MS_PER_CHAR = 100;
 		private const int TYPEWRITER_PUNCTUATION_EXTRA_MS = 220;
 		/// <summary>打字机每 N 个字播一次音，避免长句变成机关枪。</summary>
@@ -148,6 +152,7 @@ namespace GameLogic
 		private CanvasGroup m_cgNpcContinueHint;
 		private float m_subtitleBodyTopInset;
 		private float m_subtitleBodyBottomInset;
+		private float m_subtitleBodySideInset;
 		private Button m_btnRestart;
 		private Button m_btnDialogueAdvance;
 		private bool m_advanceClickPending;
@@ -1663,6 +1668,7 @@ namespace GameLogic
 			{
 				m_subtitleBodyTopInset = -m_tmpNpcSubtitle.rectTransform.offsetMax.y;
 				m_subtitleBodyBottomInset = m_tmpNpcSubtitle.rectTransform.offsetMin.y;
+				m_subtitleBodySideInset = m_tmpNpcSubtitle.rectTransform.offsetMin.x;
 			}
 
 			Transform hint = root.Find("Frame/ContinueHint");
@@ -1762,6 +1768,125 @@ namespace GameLogic
 			m_rtNpcSubtitle.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
 		}
 
+		/// <summary>
+		/// 正文排版并规避末行孤字（一行只剩一两个字）。做法和 InDesign 的多行复合器同思路：
+		/// 先按 prefab 的基准宽度排，末行不足 <see cref="SubtitleWidowMinChars"/> 字就逐档收窄正文区重排，
+		/// 只在行数不变时接受；收窄救不回来才退回基准宽度、插换行把字挤到末行。
+		/// 收窄幅度只有几十像素且正文居中，实际看不出差别。
+		/// </summary>
+		private string ResolveSubtitleBodyLayout(string body)
+		{
+			ApplySubtitleSideInset(m_subtitleBodySideInset);
+			m_tmpNpcSubtitle.text = body;
+			Canvas.ForceUpdateCanvases();
+			m_tmpNpcSubtitle.ForceMeshUpdate();
+
+			int lineCount = m_tmpNpcSubtitle.textInfo.lineCount;
+			if (lineCount < 2 || CountLastLineChars() >= SubtitleWidowMinChars)
+			{
+				return body;
+			}
+
+			for (float extra = SubtitleWidowInsetStep; extra <= SubtitleWidowInsetMaxExtra; extra += SubtitleWidowInsetStep)
+			{
+				ApplySubtitleSideInset(m_subtitleBodySideInset + extra);
+				Canvas.ForceUpdateCanvases();
+				m_tmpNpcSubtitle.ForceMeshUpdate();
+				if (m_tmpNpcSubtitle.textInfo.lineCount != lineCount)
+				{
+					continue;
+				}
+
+				if (CountLastLineChars() >= SubtitleWidowMinChars)
+				{
+					return body;
+				}
+			}
+
+			ApplySubtitleSideInset(m_subtitleBodySideInset);
+			Canvas.ForceUpdateCanvases();
+			m_tmpNpcSubtitle.ForceMeshUpdate();
+			return PushCharsToLastLine(body);
+		}
+
+		private void ApplySubtitleSideInset(float inset)
+		{
+			if (m_tmpNpcSubtitle == null)
+			{
+				return;
+			}
+
+			RectTransform rect = m_tmpNpcSubtitle.rectTransform;
+			Vector2 min = rect.offsetMin;
+			Vector2 max = rect.offsetMax;
+			min.x = inset;
+			max.x = -inset;
+			rect.offsetMin = min;
+			rect.offsetMax = max;
+		}
+
+		private int CountLastLineChars()
+		{
+			TMP_TextInfo info = m_tmpNpcSubtitle == null ? null : m_tmpNpcSubtitle.textInfo;
+			if (info == null || info.lineCount == 0)
+			{
+				return 0;
+			}
+
+			return info.lineInfo[info.lineCount - 1].characterCount;
+		}
+
+		/// <summary>
+		/// 兜底：把倒数第二行末尾的几个字挪到末行。中文允许任意位置断行，所以总能补够字数；
+		/// 代价是断点可能落在词中间，只在收窄宽度也救不回来时才用。
+		/// </summary>
+		private string PushCharsToLastLine(string body)
+		{
+			// 换行符和富文本标签会让 TMP 的字符索引与 string 索引错位，这两种情况不挪字。
+			if (string.IsNullOrEmpty(body) || body.IndexOf('\n') >= 0 || body.IndexOf('<') >= 0)
+			{
+				return body;
+			}
+
+			TMP_TextInfo info = m_tmpNpcSubtitle.textInfo;
+			if (info == null || info.lineCount < 2)
+			{
+				return body;
+			}
+
+			int originalLineCount = info.lineCount;
+			int lastCount = info.lineInfo[originalLineCount - 1].characterCount;
+			int secondLine = originalLineCount - 2;
+			int secondStart = info.lineInfo[secondLine].firstCharacterIndex;
+			int secondCount = info.lineInfo[secondLine].characterCount;
+			int move = SubtitleWidowMinChars - lastCount;
+			if (move <= 0 || secondCount - move < SubtitleWidowMinChars)
+			{
+				return body;
+			}
+
+			int insertAt = secondStart + secondCount - move;
+			if (insertAt <= 0 || insertAt >= body.Length)
+			{
+				return body;
+			}
+
+			m_tmpNpcSubtitle.text = body.Insert(insertAt, "\n");
+			Canvas.ForceUpdateCanvases();
+			m_tmpNpcSubtitle.ForceMeshUpdate();
+
+			// 补字后多出一行说明末行放不下，回退到未处理版本。
+			if (m_tmpNpcSubtitle.textInfo.lineCount > originalLineCount)
+			{
+				m_tmpNpcSubtitle.text = body;
+				Canvas.ForceUpdateCanvases();
+				m_tmpNpcSubtitle.ForceMeshUpdate();
+				return body;
+			}
+
+			return m_tmpNpcSubtitle.text;
+		}
+
 		private async UniTask PresentNpcSubtitleAsync(StoryNodeConfig story, int presentVersion)
 		{
 			EnsureNpcSubtitle();
@@ -1785,13 +1910,12 @@ namespace GameLogic
 			}
 
 			// 先把整段排完版再逐字揭开，框高和居中位置一次定死，打字过程中不会抖。
-			m_tmpNpcSubtitle.text = body;
+			string layoutText = ResolveSubtitleBodyLayout(body);
 			m_tmpNpcSubtitle.maxVisibleCharacters = 0;
-			// 拉伸锚点的宽度要等 Canvas 刷新后才生效，否则 preferredHeight 会按旧宽度算。
-			Canvas.ForceUpdateCanvases();
-			m_tmpNpcSubtitle.ForceMeshUpdate();
 			LayoutNpcSubtitle(m_tmpNpcSubtitle.preferredHeight);
 
+			// 挪字兜底可能插了换行，标点节奏按去掉换行的文本算。
+			string pacingText = layoutText.IndexOf('\n') >= 0 ? layoutText.Replace("\n", string.Empty) : layoutText;
 			int total = m_tmpNpcSubtitle.textInfo.characterCount;
 			for (int i = 1; i <= total; i++)
 			{
@@ -1801,9 +1925,9 @@ namespace GameLogic
 				}
 
 				m_tmpNpcSubtitle.maxVisibleCharacters = i;
-				PlayTypewriterTick(i, body);
+				PlayTypewriterTick(i, pacingText);
 				int delayMs = TYPEWRITER_MS_PER_CHAR;
-				if (i - 1 < body.Length && IsTypewriterPunctuation(body[i - 1]))
+				if (i - 1 < pacingText.Length && IsTypewriterPunctuation(pacingText[i - 1]))
 				{
 					delayMs += TYPEWRITER_PUNCTUATION_EXTRA_MS;
 				}
