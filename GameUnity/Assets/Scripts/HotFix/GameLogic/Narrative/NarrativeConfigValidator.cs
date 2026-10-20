@@ -145,12 +145,18 @@ namespace GameLogic
                 bool isItemAction = string.Equals(action.ActionType, "GrantItem", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(action.ActionType, "RemoveItem", StringComparison.OrdinalIgnoreCase);
                 bool isEmotionAction = string.Equals(action.ActionType, "GrantEmotion", StringComparison.OrdinalIgnoreCase);
+                bool isMemoryAction = string.Equals(action.ActionType, "GrantMemory", StringComparison.OrdinalIgnoreCase);
 
-                if (!isItemAction && !isEmotionAction)
+                if (!isItemAction && !isEmotionAction && !isMemoryAction)
                 {
                     AddError(issues, "ACTION_TYPE_UNSUPPORTED", action.Id, $"unsupported action type {action.ActionType}.");
                     continue;
                 }
+
+                // GrantMemory 的 TargetId 是记忆 ID，和 GrantEmotion 一样不走物品校验。
+                if (isMemoryAction && !config.HasMemory(action.TargetId))
+                    AddError(issues, "ACTION_MEMORY_MISSING", action.Id,
+                        $"references unknown memory {action.TargetId}.");
 
                 // GrantEmotion 的 TargetId 指的是情绪 ID，不走物品校验。
                 if (isItemAction && !config.HasNarrativeItem(action.TargetId))
