@@ -230,7 +230,11 @@ namespace GameLogic
             return result;
         }
 
-        public IReadOnlyList<string> RunEmotionScanForDebug(NarrativeSaveData saveData = null)
+        /// <summary>
+        /// 外部先写入记忆（物品部件调查、调试面板）后补做的涌现扫描：加分、落盘、返回本次新获得的情绪。
+        /// 正常 Turn 走 CommitTurn 内部的同一步，不需要调这里。
+        /// </summary>
+        public IReadOnlyList<string> ScanEmergenceAndApply(NarrativeSaveData saveData = null)
         {
             saveData = saveData ?? NarrativeSaveData.Get;
             List<string> emerged = FindEmergentEmotions(saveData);
@@ -240,6 +244,38 @@ namespace GameLogic
             }
 
             return emerged.AsReadOnly();
+        }
+
+        /// <summary>
+        /// 按获得顺序返回 EmotionCardSet 含该情绪的已拥有记忆，用于过场里还原「哪两段记忆共同指认了这个情绪」。
+        /// 口径与 <see cref="FindEmergentEmotions"/> 一致：一段记忆对同一情绪只算一次。
+        /// </summary>
+        public IReadOnlyList<string> GetMemorySourcesForEmotion(string emotionId,
+            NarrativeSaveData saveData = null)
+        {
+            var result = new List<string>();
+            if (string.IsNullOrWhiteSpace(emotionId))
+            {
+                return result;
+            }
+
+            saveData = saveData ?? NarrativeSaveData.Get;
+            IReadOnlyList<string> ownedMemoryIds = saveData.GetMemoryIdsInAcquisitionOrder();
+            for (int i = 0; i < ownedMemoryIds.Count; i++)
+            {
+                MemoryConfig memory = NarrativeConfigMgr.Instance.GetMemory(ownedMemoryIds[i]);
+                if (memory?.EmotionCardSet == null)
+                {
+                    continue;
+                }
+
+                if (memory.EmotionCardSet.Contains(emotionId))
+                {
+                    result.Add(ownedMemoryIds[i]);
+                }
+            }
+
+            return result;
         }
 
         private static void InvokeSafely(Delegate handlers, Action<Delegate> invoke)

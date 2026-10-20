@@ -226,7 +226,8 @@ namespace GameLogic
 
 		private void OnEmotionEmerged(string emotionId)
 		{
-			SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryEmotionEmerge);
+			// 事件在 CommitTurn 内部同步派发，这里只入队；播放由调用方 await，避免盖住下一句对白。
+			EnqueueEmergeCutscene(emotionId);
 		}
 
 		protected override void OnRefresh()
@@ -259,6 +260,8 @@ namespace GameLogic
 			m_imgItemSlot = null;
 			m_itemSlotImageId = null;
 			m_itemSlotVersion++;
+			DestroyEmergenceCutscene();
+			m_pendingEmergeEmotionIds.Clear();
 			if (m_overlay != null) UnityEngine.Object.Destroy(m_overlay);
 			if (m_suspendedOverlay != null) UnityEngine.Object.Destroy(m_suspendedOverlay);
 			m_suspendedOverlay = null;
@@ -796,6 +799,8 @@ namespace GameLogic
 				SetEmotionItemsActive(false);
 				ShowPlayerReplyMessage(replyText);
 
+				// 涌现过场必须在下一节点表现和日终转场之前播完，否则会被盖掉。
+				await PlayPendingEmergeCutscenesAsync();
 				if (result.SessionEnded)
 				{
 					m_currentStoryNode = null;
@@ -2411,9 +2416,19 @@ namespace GameLogic
 
 			if (!saveData.AddMemories(new[] { memoryId })) return;
 			SoundConfigMgr.Instance.PlaySfx(SfxNames.ItemInspect);
-			m_narrativeService.RunEmotionScanForDebug(saveData);
+			IReadOnlyList<string> emergedEmotions = m_narrativeService.ScanEmergenceAndApply(saveData);
 			RefreshUI();
 			PlayItemMemoryFlyIn(memoryId, source);
+			// 调查部件绕过 CommitTurn，涌现不会派事件，这里补上过场触发。
+			for (int i = 0; i < emergedEmotions.Count; i++)
+			{
+				EnqueueEmergeCutscene(emergedEmotions[i]);
+			}
+
+			if (emergedEmotions.Count > 0)
+			{
+				PlayPendingEmergeCutscenesAsync().Forget();
+			}
 		}
 
 		private void PlayItemMemoryFlyIn(string memoryId, RectTransform source)
@@ -2688,7 +2703,7 @@ namespace GameLogic
 				("复制存档", (Action)(() => GUIUtility.systemCopyBuffer = saveData.ExportRuntimeStateJson())),
 				("扫描情绪", (Action)(() =>
 				{
-					IReadOnlyList<string> emotions = m_narrativeService.RunEmotionScanForDebug(saveData);
+					IReadOnlyList<string> emotions = m_narrativeService.ScanEmergenceAndApply(saveData);
 					ShowOverlay("情绪扫描", "新增情绪：" + (emotions.Count == 0 ? "无" : string.Join("、", emotions)), new[] { ("返回", (Action)(() => ShowDebugPanel())) });
 				})),
 				("清除剧情标记", (Action)(() => { saveData.ClearStoryFlags(); ShowDebugPanel(); })),
@@ -2700,7 +2715,22 @@ namespace GameLogic
 
 			MemoryConfig missingMemory = NarrativeConfigMgr.Instance.AllMemories.FirstOrDefault(x => !saveData.HasMemory(x.Id));
 			if (missingMemory != null)
-				buttons.Add(("添加记忆：" + missingMemory.MemoryName, (Action)(() => { saveData.AddMemories(new[] { missingMemory.Id }); ShowDebugPanel(); })));
+				buttons.Add(("添加记忆：" + missingMemory.MemoryName, (Action)(() =>
+				{
+					saveData.AddMemories(new[] { missingMemory.Id });
+					IReadOnlyList<string> emerged = m_narrativeService.ScanEmergenceAndApply(saveData);
+					for (int i = 0; i < emerged.Count; i++)
+					{
+						EnqueueEmergeCutscene(emerged[i]);
+					}
+
+					if (emerged.Count > 0)
+					{
+						PlayPendingEmergeCutscenesAsync().Forget();
+					}
+
+					ShowDebugPanel();
+				})));
 			string ownedMemoryId = saveData.GetMemoryIdsInStableOrder().FirstOrDefault();
 			if (ownedMemoryId != null)
 				buttons.Add(("移除记忆：" + ownedMemoryId, (Action)(() => { saveData.RemoveMemoryForDebug(ownedMemoryId); ShowDebugPanel(); })));
@@ -4385,7 +4415,7 @@ namespace GameLogic
 
 		private void OnClickDialogueAdvance()
 		{
-			if (m_overlay != null && m_overlay.activeInHierarchy)
+			if (m_cutscenePlaying || (m_overlay != null && m_overlay.activeInHierarchy))
 			{
 				return;
 			}
