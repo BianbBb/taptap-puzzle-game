@@ -34,11 +34,17 @@ namespace GameLogic
 		private readonly List<ReplayEmoItem> m_emotionItems = new List<ReplayEmoItem>();
 		private readonly List<(bool IsPlayer, string Text)> m_messages = new List<(bool, string)>();
 		private readonly List<Image> m_memorySlotImages = new List<Image>();
+		private readonly List<Image> m_memorySlotThumbs = new List<Image>();
+		private readonly List<Image> m_memorySlotLabelBacks = new List<Image>();
+		private readonly List<int> m_memorySlotVersions = new List<int>();
 		private readonly List<TextMeshProUGUI> m_memorySlotLabels = new List<TextMeshProUGUI>();
 		private readonly List<Button> m_memoryDeleteButtons = new List<Button>();
 		private RectTransform m_memoryTooltip;
 		private TextMeshProUGUI m_memoryTooltipName;
 		private TextMeshProUGUI m_memoryTooltipDescription;
+		private RectTransform m_memoryTooltipFrame;
+		private Image m_memoryTooltipImage;
+		private int m_memoryTooltipImageVersion;
 		private int m_hoveredMemorySlot = -1;
 		private int m_messageScrollVersion;
 		private int m_npcPortraitVersion;
@@ -150,11 +156,15 @@ namespace GameLogic
 			m_dialoguePresentVersion++;
 			m_messagePinnedToLatest = true;
 			m_memorySlotImages.Clear();
+			m_memorySlotThumbs.Clear();
+			m_memorySlotVersions.Clear();
 			m_memorySlotLabels.Clear();
 			m_memoryDeleteButtons.Clear();
 			m_memoryTooltip = null;
 			m_memoryTooltipName = null;
 			m_memoryTooltipDescription = null;
+			m_memoryTooltipFrame = null;
+			m_memoryTooltipImage = null;
 			m_hoveredMemorySlot = -1;
 			m_btnItemCollection = null;
 			m_imgItemSlot = null;
@@ -998,6 +1008,8 @@ namespace GameLogic
 		private void BuildMemorySlots()
 		{
 			m_memorySlotImages.Clear();
+			m_memorySlotThumbs.Clear();
+			m_memorySlotVersions.Clear();
 			m_memorySlotLabels.Clear();
 			m_memoryDeleteButtons.Clear();
 			if (m_scrollMemoryList == null || m_scrollMemoryList.content == null)
@@ -1045,6 +1057,9 @@ namespace GameLogic
 				int last = m_memorySlotLabels.Count - 1;
 				GameObject slot = m_memorySlotImages[last].gameObject;
 				m_memorySlotImages.RemoveAt(last);
+				m_memorySlotThumbs.RemoveAt(last);
+				m_memorySlotLabelBacks.RemoveAt(last);
+				m_memorySlotVersions.RemoveAt(last);
 				m_memorySlotLabels.RemoveAt(last);
 				m_memoryDeleteButtons.RemoveAt(last);
 				slot.SetActive(false);
@@ -1062,6 +1077,33 @@ namespace GameLogic
 				Image slotImage = slot.GetComponent<Image>();
 				slotImage.color = new Color(1f, 1f, 1f, 0.35f);
 				ApplyHudSprite(slotImage, "dialogue_memory_slot_bg", false, token, true);
+
+				// 记忆缩略图：压在底图之上、名字之下。无图时 disabled，回退原来的纯色底。
+				var thumbGo = new GameObject("Thumb", typeof(RectTransform), typeof(Image));
+				thumbGo.transform.SetParent(slot.transform, false);
+				RectTransform thumbRect = thumbGo.GetComponent<RectTransform>();
+				thumbRect.anchorMin = Vector2.zero;
+				thumbRect.anchorMax = Vector2.one;
+				thumbRect.offsetMin = new Vector2(3f, 3f);
+				thumbRect.offsetMax = new Vector2(-3f, -3f);
+				Image thumb = thumbGo.GetComponent<Image>();
+				thumb.raycastTarget = false;
+				thumb.enabled = false;
+
+				// 名字底板：有图时只占底部 18px，避免文字压在插画上。
+				var labelBackGo = new GameObject("LabelBack", typeof(RectTransform), typeof(Image));
+				labelBackGo.transform.SetParent(slot.transform, false);
+				RectTransform labelBackRect = labelBackGo.GetComponent<RectTransform>();
+				labelBackRect.anchorMin = new Vector2(0f, 0f);
+				labelBackRect.anchorMax = new Vector2(1f, 0f);
+				labelBackRect.pivot = new Vector2(0.5f, 0f);
+				labelBackRect.anchoredPosition = new Vector2(0f, 3f);
+				labelBackRect.sizeDelta = new Vector2(0f, 18f);
+				Image labelBack = labelBackGo.GetComponent<Image>();
+				labelBack.color = new Color(HudPaperPanel.r, HudPaperPanel.g, HudPaperPanel.b, 0.88f);
+				labelBack.raycastTarget = false;
+				labelBack.enabled = false;
+
 				var labelGo = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
 				labelGo.transform.SetParent(slot.transform, false);
 				RectTransform labelRect = labelGo.GetComponent<RectTransform>();
@@ -1104,6 +1146,9 @@ namespace GameLogic
 				CreateMemoryDeleteStroke(delete.transform, "CrossA", 45f);
 				CreateMemoryDeleteStroke(delete.transform, "CrossB", -45f);
 				m_memorySlotImages.Add(slotImage);
+				m_memorySlotThumbs.Add(thumb);
+				m_memorySlotLabelBacks.Add(labelBack);
+				m_memorySlotVersions.Add(0);
 				m_memorySlotLabels.Add(label);
 				m_memoryDeleteButtons.Add(deleteButton);
 			}
@@ -1150,13 +1195,37 @@ namespace GameLogic
 			background.raycastTarget = false;
 			ApplyHudSprite(background, "dialogue_memory_tooltip", false, token);
 
+			// 记忆图：用美术给的 imageframe（207×118）等比收到 160×91，512 方图会居中留边。
+			var frameGo = new GameObject("ImageFrame", typeof(RectTransform), typeof(Image));
+			frameGo.transform.SetParent(tooltip.transform, false);
+			m_memoryTooltipFrame = frameGo.GetComponent<RectTransform>();
+			m_memoryTooltipFrame.anchorMin = m_memoryTooltipFrame.anchorMax = new Vector2(0.5f, 1f);
+			m_memoryTooltipFrame.pivot = new Vector2(0.5f, 1f);
+			m_memoryTooltipFrame.anchoredPosition = new Vector2(0f, -8f);
+			m_memoryTooltipFrame.sizeDelta = new Vector2(160f, 91f);
+			Image frameImage = frameGo.GetComponent<Image>();
+			frameImage.raycastTarget = false;
+			ApplyHudSprite(frameImage, "dialogue_memory_imageframe", false, token);
+
+			var imageGo = new GameObject("Image", typeof(RectTransform), typeof(Image));
+			imageGo.transform.SetParent(frameGo.transform, false);
+			RectTransform imageRect = imageGo.GetComponent<RectTransform>();
+			imageRect.anchorMin = Vector2.zero;
+			imageRect.anchorMax = Vector2.one;
+			imageRect.offsetMin = new Vector2(7f, 7f);
+			imageRect.offsetMax = new Vector2(-7f, -7f);
+			m_memoryTooltipImage = imageGo.GetComponent<Image>();
+			m_memoryTooltipImage.raycastTarget = false;
+			m_memoryTooltipImage.preserveAspect = true;
+			frameGo.SetActive(false);
+
 			var description = new GameObject("Description", typeof(RectTransform), typeof(TextMeshProUGUI));
 			description.transform.SetParent(tooltip.transform, false);
 			RectTransform descriptionRect = description.GetComponent<RectTransform>();
 			descriptionRect.anchorMin = descriptionRect.anchorMax = new Vector2(0.5f, 1f);
 			descriptionRect.pivot = new Vector2(0.5f, 1f);
-			descriptionRect.anchoredPosition = new Vector2(0f, -35f);
-			descriptionRect.sizeDelta = new Vector2(215f, 147f);
+			descriptionRect.anchoredPosition = new Vector2(0f, -104f);
+			descriptionRect.sizeDelta = new Vector2(215f, 120f);
 			m_memoryTooltipDescription = description.GetComponent<TextMeshProUGUI>();
 			m_memoryTooltipDescription.fontSize = 17f;
 			m_memoryTooltipDescription.enableAutoSizing = true;
@@ -1173,8 +1242,8 @@ namespace GameLogic
 			RectTransform nameRect = name.GetComponent<RectTransform>();
 			nameRect.anchorMin = nameRect.anchorMax = new Vector2(0.5f, 0f);
 			nameRect.pivot = new Vector2(0.5f, 0f);
-			nameRect.anchoredPosition = new Vector2(0f, 31f);
-			nameRect.sizeDelta = new Vector2(190f, 49f);
+			nameRect.anchoredPosition = new Vector2(0f, 10f);
+			nameRect.sizeDelta = new Vector2(190f, 34f);
 			m_memoryTooltipName = name.GetComponent<TextMeshProUGUI>();
 			m_memoryTooltipName.fontSize = 20f;
 			m_memoryTooltipName.enableAutoSizing = true;
@@ -1207,8 +1276,31 @@ namespace GameLogic
 			m_hoveredMemorySlot = slotIndex;
 			m_memoryTooltipName.text = memory == null ? ids[slotIndex] : memory.MemoryName;
 			m_memoryTooltipDescription.text = memory == null ? string.Empty : memory.Description;
+			ApplyMemoryTooltipImage(memory == null ? null : memory.ImageId);
 			m_memoryTooltip.gameObject.SetActive(true);
 			m_memoryTooltip.SetAsLastSibling();
+		}
+
+		// tooltip 里的记忆图：无图时把整个 imageframe 收起来，退回纯文字 tooltip。
+		private void ApplyMemoryTooltipImage(string imageId)
+		{
+			m_memoryTooltipImageVersion++;
+			int version = m_memoryTooltipImageVersion;
+			bool hasImage = !string.IsNullOrWhiteSpace(imageId)
+				&& GameModule.ResourceModule.CheckLocationValid(imageId);
+			if (m_memoryTooltipFrame != null) m_memoryTooltipFrame.gameObject.SetActive(hasImage);
+			if (m_memoryTooltipImage == null) return;
+			m_memoryTooltipImage.sprite = null;
+			m_memoryTooltipImage.enabled = false;
+			if (!hasImage) return;
+			m_memoryTooltipImage.SetSprite(imageId, false, loaded =>
+			{
+				if (IsDestroyed || loaded == null || loaded.sprite == null) return;
+				if (version != m_memoryTooltipImageVersion) return;
+				loaded.enabled = true;
+				loaded.preserveAspect = true;
+				loaded.raycastTarget = false;
+			}, gameObject.GetCancellationTokenOnDestroy());
 		}
 
 		private void HideMemoryTooltip(int slotIndex = -1)
@@ -1239,6 +1331,7 @@ namespace GameLogic
 
 			IReadOnlyList<string> ids = NarrativeSaveData.Get.GetMemoryIdsInAcquisitionOrder();
 			EnsureMemorySlotCount(Mathf.Max(NarrativeRules.MemoryCapacity, ids.Count));
+			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
 			for (int i = 0; i < m_memorySlotLabels.Count; i++)
 			{
 				TextMeshProUGUI label = m_memorySlotLabels[i];
@@ -1259,6 +1352,7 @@ namespace GameLogic
 					label.overflowMode = TextOverflowModes.Ellipsis;
 					label.enableWordWrapping = true;
 					label.color = HudPaperText;
+					ApplyMemorySlotArt(i, memory == null ? null : memory.ImageId, token);
 				}
 				else
 				{
@@ -1267,9 +1361,65 @@ namespace GameLogic
 					label.fontSizeMin = 16f;
 					label.fontSizeMax = 28f;
 					label.color = new Color(0.45f, 0.4f, 0.35f, 0.7f);
+					ApplyMemorySlotArt(i, null, token);
 				}
 			}
 			if (m_hoveredMemorySlot >= 0) ShowMemoryTooltip(m_hoveredMemorySlot);
+		}
+
+		// 记忆槽位：有图走「缩略图 + 底部名字条」，无图回到原来的「纯色底 + 居中名字」。
+		private void ApplyMemorySlotArt(int slotIndex, string imageId, CancellationToken token)
+		{
+			if (slotIndex < 0 || slotIndex >= m_memorySlotThumbs.Count) return;
+			Image thumb = m_memorySlotThumbs[slotIndex];
+			Image labelBack = m_memorySlotLabelBacks[slotIndex];
+			TextMeshProUGUI label = m_memorySlotLabels[slotIndex];
+			m_memorySlotVersions[slotIndex]++;
+			int version = m_memorySlotVersions[slotIndex];
+
+			bool hasImage = !string.IsNullOrWhiteSpace(imageId)
+				&& GameModule.ResourceModule.CheckLocationValid(imageId);
+			if (thumb != null)
+			{
+				thumb.enabled = false;
+				thumb.sprite = null;
+			}
+			if (labelBack != null) labelBack.enabled = hasImage;
+
+			if (label != null)
+			{
+				RectTransform labelRect = label.rectTransform;
+				if (hasImage)
+				{
+					labelRect.anchorMin = new Vector2(0f, 0f);
+					labelRect.anchorMax = new Vector2(1f, 0f);
+					labelRect.pivot = new Vector2(0.5f, 0f);
+					labelRect.anchoredPosition = new Vector2(0f, 3f);
+					labelRect.sizeDelta = new Vector2(0f, 18f);
+					label.fontSizeMin = 8f;
+					label.fontSizeMax = 11f;
+				}
+				else
+				{
+					labelRect.anchorMin = Vector2.zero;
+					labelRect.anchorMax = Vector2.one;
+					labelRect.pivot = new Vector2(0.5f, 0.5f);
+					labelRect.anchoredPosition = Vector2.zero;
+					labelRect.offsetMin = Vector2.zero;
+					labelRect.offsetMax = Vector2.zero;
+				}
+			}
+
+			if (!hasImage || thumb == null) return;
+			thumb.SetSprite(imageId, false, loaded =>
+			{
+				if (IsDestroyed || loaded == null || loaded.sprite == null) return;
+				if (slotIndex >= m_memorySlotThumbs.Count || m_memorySlotThumbs[slotIndex] != loaded) return;
+				if (m_memorySlotVersions[slotIndex] != version) return;
+				loaded.enabled = true;
+				loaded.preserveAspect = true;
+				loaded.raycastTarget = false;
+			}, token);
 		}
 
 		private void EnsureItemSlot()
@@ -1849,7 +1999,6 @@ namespace GameLogic
 
 		private void ShowCollectionPage(bool emotions)
 		{
-			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			ShowOverlay("图鉴", emotions ? "圆越大，这份情绪被表达得越多。" : "已获得的记忆", new[]
 			{
 				("记忆", (Action)(() => ShowCollectionPage(false))),
@@ -1863,35 +2012,179 @@ namespace GameLogic
 			}
 			else
 			{
-				IReadOnlyList<MemoryConfig> entries = NarrativeConfigMgr.Instance.AllMemories;
-				AddCollectionCards(entries.Count, index =>
-				{
-					MemoryConfig entry = entries[index];
-					bool owned = saveData.HasMemory(entry.Id);
-					return (owned ? entry.MemoryName : "未解锁", (Action)(() =>
-					{
-						ShowOverlay(owned ? entry.MemoryName : "未解锁",
-							owned ? entry.Description : "检查物品上的线索可发现这段记忆。",
-							new[] { ("返回图鉴", (Action)(() => ShowCollectionPage(false))) });
-					}));
-				});
+				AddMemoryCollectionCards(NarrativeConfigMgr.Instance.AllMemories);
 			}
 		}
 
-		private void AddCollectionCards(int count, Func<int, (string Label, Action Action)> getCard)
+		// 图鉴记忆页卡片尺寸：图片位 175×169（美术切图原尺寸）+ 底部 36px 名字条。
+		private const float MemoryCardWidth = 175f;
+		private const float MemoryCardHeight = 205f;
+		private const float MemoryCardGapX = 11f;
+		private const float MemoryCardGapY = 11f;
+		// body 可用宽度 652（panel 780 - 左右各 64），3 列刚好放下。
+		private const int MemoryCardColumns = 3;
+
+		private void AddMemoryCollectionCards(IReadOnlyList<MemoryConfig> entries)
 		{
-			if (m_overlayBodyContent == null) return;
-			int rows = (count + 3) / 4;
-			m_overlayBodyContent.sizeDelta = new Vector2(0f, Mathf.Max(120f, 74f + rows * 120f));
-			for (int i = 0; i < count; i++)
+			if (m_overlayBodyContent == null || entries == null) return;
+			NarrativeSaveData saveData = NarrativeSaveData.Get;
+			int rows = (entries.Count + MemoryCardColumns - 1) / MemoryCardColumns;
+			m_overlayBodyContent.sizeDelta = new Vector2(0f,
+				Mathf.Max(120f, 8f + rows * (MemoryCardHeight + MemoryCardGapY)));
+			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
+			for (int i = 0; i < entries.Count; i++)
 			{
-				(string label, Action action) = getCard(i);
-				int column = i % 4;
-				int row = i / 4;
-				CreateOverlayButton(m_overlayBodyContent, label,
-					new Vector2(-216f + column * 144f, -76f - row * 120f),
-					new Vector2(132f, 108f), action, true);
+				MemoryConfig entry = entries[i];
+				if (entry == null) continue;
+				int column = i % MemoryCardColumns;
+				int row = i / MemoryCardColumns;
+				Vector2 position = new Vector2(
+					-186f + column * (MemoryCardWidth + MemoryCardGapX),
+					-8f - row * (MemoryCardHeight + MemoryCardGapY));
+				CreateMemoryCard(entry, saveData.HasMemory(entry.Id), position, token);
 			}
+		}
+
+		private void CreateMemoryCard(MemoryConfig entry, bool owned, Vector2 position, CancellationToken token)
+		{
+			var go = new GameObject("MemoryCard_" + entry.Id, typeof(RectTransform), typeof(Image), typeof(Button));
+			go.transform.SetParent(m_overlayBodyContent, false);
+			RectTransform rect = go.GetComponent<RectTransform>();
+			rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
+			rect.pivot = new Vector2(0.5f, 1f);
+			rect.anchoredPosition = position;
+			rect.sizeDelta = new Vector2(MemoryCardWidth, MemoryCardHeight);
+
+			Image hit = go.GetComponent<Image>();
+			hit.color = Color.clear;
+			hit.raycastTarget = true;
+			Button button = go.GetComponent<Button>();
+			button.transition = Selectable.Transition.ColorTint;
+			button.targetGraphic = hit;
+			ColorBlock colors = button.colors;
+			colors.normalColor = Color.white;
+			colors.highlightedColor = new Color(1f, 0.96f, 0.84f, 1f);
+			colors.pressedColor = new Color(0.94f, 0.85f, 0.66f, 1f);
+			colors.selectedColor = colors.highlightedColor;
+			button.colors = colors;
+			button.onClick.AddListener(() =>
+			{
+				if (!button.interactable) return;
+				button.interactable = false;
+				DOTween.Sequence().Append(rect.DOScale(0.94f, 0.08f))
+					.Append(rect.DOScale(1f, 0.12f)).SetUpdate(true).SetLink(go)
+					.OnComplete(() => ShowMemoryCollectionDetail(entry));
+			});
+
+			// 图片位：已解锁用 collection_card_image_slot，未解锁用 collection_card_unable。
+			var frameGo = new GameObject("Frame", typeof(RectTransform), typeof(Image));
+			frameGo.transform.SetParent(go.transform, false);
+			RectTransform frameRect = frameGo.GetComponent<RectTransform>();
+			frameRect.anchorMin = frameRect.anchorMax = new Vector2(0.5f, 1f);
+			frameRect.pivot = new Vector2(0.5f, 1f);
+			frameRect.anchoredPosition = Vector2.zero;
+			frameRect.sizeDelta = new Vector2(175f, 169f);
+			Image frameImage = frameGo.GetComponent<Image>();
+			frameImage.raycastTarget = false;
+			ApplyHudSprite(frameImage, owned ? "collection_card_image_slot" : "collection_card_unable",
+				false, token);
+			// 用图片位当按钮的高亮目标，hover 时有可见反馈（根节点的透明图只负责吃点击）。
+			button.targetGraphic = frameImage;
+
+			string imageId = owned ? entry.ImageId : null;
+			if (!string.IsNullOrWhiteSpace(imageId) && GameModule.ResourceModule.CheckLocationValid(imageId))
+			{
+				var imageGo = new GameObject("Image", typeof(RectTransform), typeof(Image));
+				imageGo.transform.SetParent(frameGo.transform, false);
+				RectTransform imageRect = imageGo.GetComponent<RectTransform>();
+				imageRect.anchorMin = Vector2.zero;
+				imageRect.anchorMax = Vector2.one;
+				imageRect.offsetMin = new Vector2(8f, 8f);
+				imageRect.offsetMax = new Vector2(-8f, -8f);
+				Image image = imageGo.GetComponent<Image>();
+				image.raycastTarget = false;
+				image.preserveAspect = true;
+				image.enabled = false;
+				image.SetSprite(imageId, false, loaded =>
+				{
+					if (IsDestroyed || loaded == null || loaded.sprite == null) return;
+					loaded.enabled = true;
+					loaded.preserveAspect = true;
+					loaded.raycastTarget = false;
+				}, token);
+			}
+
+			TextMeshProUGUI text = CreateOverlayText(go.transform,
+				owned ? entry.MemoryName : "未解锁", 15f,
+				new Vector2(0f, -172f), new Vector2(165f, 30f), TextAlignmentOptions.Center);
+			text.rectTransform.anchorMin = text.rectTransform.anchorMax = new Vector2(0.5f, 1f);
+			text.rectTransform.pivot = new Vector2(0.5f, 1f);
+			text.overflowMode = TextOverflowModes.Ellipsis;
+			text.enableWordWrapping = true;
+			text.enableAutoSizing = true;
+			text.fontSizeMin = 10f;
+			text.fontSizeMax = 15f;
+			text.color = owned ? HudPaperText : new Color(0.55f, 0.5f, 0.44f, 0.9f);
+		}
+
+		private void ShowMemoryCollectionDetail(MemoryConfig entry)
+		{
+			bool owned = entry != null && NarrativeSaveData.Get.HasMemory(entry.Id);
+			ShowOverlay(owned ? entry.MemoryName : "未解锁",
+				owned ? entry.Description : "检查物品上的线索可发现这段记忆。",
+				new[] { ("返回图鉴", (Action)(() => ShowCollectionPage(false))) });
+			if (!owned || entry == null) return;
+			ShowMemoryDetailImage(entry.ImageId);
+		}
+
+		// 图鉴详情大图：collection_image_slot(583×352) 内嵌，512 方图居中留边。
+		private void ShowMemoryDetailImage(string imageId)
+		{
+			if (string.IsNullOrWhiteSpace(imageId) || m_overlayBodyContent == null) return;
+			if (!GameModule.ResourceModule.CheckLocationValid(imageId)) return;
+			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
+
+			var frameGo = new GameObject("MemoryDetailImage", typeof(RectTransform), typeof(Image));
+			frameGo.transform.SetParent(m_overlayBodyContent, false);
+			RectTransform frameRect = frameGo.GetComponent<RectTransform>();
+			frameRect.anchorMin = frameRect.anchorMax = new Vector2(0.5f, 1f);
+			frameRect.pivot = new Vector2(0.5f, 1f);
+			frameRect.anchoredPosition = new Vector2(0f, -8f);
+			frameRect.sizeDelta = new Vector2(583f, 352f);
+			Image frameImage = frameGo.GetComponent<Image>();
+			frameImage.raycastTarget = false;
+			ApplyHudSprite(frameImage, "collection_image_slot", false, token);
+
+			var imageGo = new GameObject("Image", typeof(RectTransform), typeof(Image));
+			imageGo.transform.SetParent(frameGo.transform, false);
+			RectTransform imageRect = imageGo.GetComponent<RectTransform>();
+			imageRect.anchorMin = Vector2.zero;
+			imageRect.anchorMax = Vector2.one;
+			imageRect.offsetMin = new Vector2(26f, 26f);
+			imageRect.offsetMax = new Vector2(-26f, -26f);
+			Image image = imageGo.GetComponent<Image>();
+			image.raycastTarget = false;
+			image.preserveAspect = true;
+			image.enabled = false;
+			image.SetSprite(imageId, false, loaded =>
+			{
+				if (IsDestroyed || loaded == null || loaded.sprite == null) return;
+				loaded.enabled = true;
+				loaded.preserveAspect = true;
+				loaded.raycastTarget = false;
+			}, token);
+
+			// 图片占位，把正文推到图片下方（与 ShowNarrativeItemImage 同款做法）。
+			TextMeshProUGUI bodyText = m_overlayBodyContent.GetComponentInChildren<TextMeshProUGUI>(true);
+			if (bodyText == null) return;
+			bodyText.rectTransform.anchoredPosition = new Vector2(0f, -372f);
+			bodyText.rectTransform.offsetMin = new Vector2(24f, bodyText.rectTransform.offsetMin.y);
+			bodyText.rectTransform.offsetMax = new Vector2(-24f, bodyText.rectTransform.offsetMax.y);
+			Canvas.ForceUpdateCanvases();
+			bodyText.ForceMeshUpdate();
+			float textHeight = Mathf.Max(bodyText.preferredHeight + 24f, 80f);
+			bodyText.rectTransform.sizeDelta = new Vector2(bodyText.rectTransform.sizeDelta.x, textHeight);
+			m_overlayBodyContent.sizeDelta = new Vector2(0f, textHeight + 400f);
 		}
 
 		// 图鉴情绪页：一行固定展示全部情绪，圆直径随「被表达次数」增长。

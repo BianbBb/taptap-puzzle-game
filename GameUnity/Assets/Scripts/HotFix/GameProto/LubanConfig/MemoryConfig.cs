@@ -21,6 +21,7 @@ public sealed partial class MemoryConfig : Luban.BeanBase
         Id = _buf.ReadString();
         MemoryName = _buf.ReadString();
         Description = _buf.ReadString();
+        ImageId = _buf.ReadString();
         {int n0 = _buf.ReadSize(); EmotionCardSet = new System.Collections.Generic.List<string>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { string _e0;  _e0 = _buf.ReadString(); EmotionCardSet.Add(_e0);}}
     }
 
@@ -41,6 +42,10 @@ public sealed partial class MemoryConfig : Luban.BeanBase
     /// 描述
     /// </summary>
     public string Description;
+    /// <summary>
+    /// 图片资源(空=无图)
+    /// </summary>
+    public string ImageId;
     /// <summary>
     /// 关联情绪ID(逗号分隔)
     /// </summary>
@@ -63,6 +68,7 @@ public sealed partial class MemoryConfig : Luban.BeanBase
         other.Id = Id;
         other.MemoryName = MemoryName;
         other.Description = Description;
+        other.ImageId = ImageId;
         other.EmotionCardSet = EmotionCardSet == null ? null : new System.Collections.Generic.List<string>(EmotionCardSet);
     }
 
@@ -79,6 +85,7 @@ public sealed partial class MemoryConfig : Luban.BeanBase
         + "id:" + Id + ","
         + "memoryName:" + MemoryName + ","
         + "description:" + Description + ","
+        + "imageId:" + ImageId + ","
         + "emotionCardSet:" + Luban.StringUtil.CollectionToString(EmotionCardSet) + ","
         + "}";
     }
