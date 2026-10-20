@@ -180,7 +180,8 @@ namespace GameLogic
 			ApplyChatListLayout();
 			EnsureNpcSubtitle();
 			EnsureRestartButton();
-			EnsureLayoutEditButton();
+			// 布局编辑入口按钮已下线；需要临时调人物大小/位置时按 F2 进入布局编辑
+			// EnsureLayoutEditButton();
 			EnsureDialogueAdvanceCatcher();
 			InitializeLayoutEditing();
 
@@ -1663,13 +1664,22 @@ namespace GameLogic
 			}
 
 			CollectSpeakerLabels(root);
-			m_tmpNpcSubtitle = FindSubtitleText(root, "Frame/BodyText");
-			if (m_tmpNpcSubtitle != null)
+			if (m_npcSpeakerLabels.Count == 0)
 			{
-				m_subtitleBodyTopInset = -m_tmpNpcSubtitle.rectTransform.offsetMax.y;
-				m_subtitleBodyBottomInset = m_tmpNpcSubtitle.rectTransform.offsetMin.y;
-				m_subtitleBodySideInset = m_tmpNpcSubtitle.rectTransform.offsetMin.x;
+				DLogger.Warning($"{NpcSubtitleRootName} 下没有名字以 {NpcSpeakerLabelPrefix} 开头的文本节点，说话人不会显示");
 			}
+
+			m_tmpNpcSubtitle = FindSubtitleText(root, "Frame/BodyText");
+			if (m_tmpNpcSubtitle == null)
+			{
+				DLogger.Error($"{NpcSubtitleRootName} 缺少 Frame/BodyText，字幕无法显示");
+				root.gameObject.SetActive(false);
+				return;
+			}
+
+			m_subtitleBodyTopInset = -m_tmpNpcSubtitle.rectTransform.offsetMax.y;
+			m_subtitleBodyBottomInset = m_tmpNpcSubtitle.rectTransform.offsetMin.y;
+			m_subtitleBodySideInset = m_tmpNpcSubtitle.rectTransform.offsetMin.x;
 
 			Transform hint = root.Find("Frame/ContinueHint");
 			if (hint != null)
@@ -3979,8 +3989,21 @@ namespace GameLogic
 
 			string npcId = NarrativeSaveData.Get.CurrentSessionId == "S01" ? "陈先生" :
 				story == null ? string.Empty : story.NpcId;
-			string[] backgrounds = ResolveSceneBackgroundLocations(npcId);
-			string[] foregrounds = ResolveSceneForegroundLocations(npcId);
+			// 优先按 Session.backgroundId 取场景；未配置或映射不到时回退到旧的 npcId 规则。
+			string backgroundId = ResolveCurrentSessionBackgroundId();
+			string[] backgrounds;
+			string[] foregrounds;
+			if (string.IsNullOrWhiteSpace(backgroundId) ||
+				!TryResolveBackgroundLocations(backgroundId, out backgrounds, out foregrounds))
+			{
+				if (!string.IsNullOrWhiteSpace(backgroundId))
+				{
+					DLogger.Warning("Unknown session backgroundId: {0}; falling back to npcId layout.", backgroundId);
+				}
+
+				backgrounds = ResolveSceneBackgroundLocations(npcId);
+				foregrounds = ResolveSceneForegroundLocations(npcId);
+			}
 			string[] layers = new string[backgrounds.Length + foregrounds.Length];
 			Array.Copy(backgrounds, 0, layers, 0, backgrounds.Length);
 			Array.Copy(foregrounds, 0, layers, backgrounds.Length, foregrounds.Length);
@@ -4135,6 +4158,63 @@ namespace GameLogic
 				image.raycastTarget = false;
 				image.preserveAspect = false;
 				m_sceneLayerImages.Add(image);
+			}
+		}
+
+		private static string ResolveCurrentSessionBackgroundId()
+		{
+			string sessionId = NarrativeSaveData.Get.CurrentSessionId;
+			if (string.IsNullOrWhiteSpace(sessionId))
+			{
+				return string.Empty;
+			}
+
+			NarrativeSessionConfig session = NarrativeConfigMgr.Instance.GetSession(sessionId);
+			return session == null ? string.Empty : session.BackgroundId;
+		}
+
+		/// <summary>
+		/// 背景 ID 到图层资源的映射。美术按场景补齐图片后，
+		/// 只需在配置表 backgroundId 填对应键，无需再改代码。
+		/// </summary>
+		private static bool TryResolveBackgroundLocations(string backgroundId,
+			out string[] backgrounds, out string[] foregrounds)
+		{
+			switch (backgroundId)
+			{
+				case "scene_shop_old":
+					backgrounds = new[] { "scene_shop_old_window", "scene_shop_old_bg" };
+					foregrounds = new[]
+					{
+						"scene_shop_old_plant", "scene_shop_old_radio", "scene_shop_old_desk", "scene_shop_old_items"
+					};
+					return true;
+				case "scene_shop_new":
+					backgrounds = new[] { "scene_shop_new_outside", "scene_shop_new_bg" };
+					foregrounds = new[]
+					{
+						"scene_shop_new_plant", "scene_shop_new_radio", "scene_shop_new_desk", "scene_shop_new_items"
+					};
+					return true;
+				case "scene_zhou":
+					backgrounds = new[] { "scene_zhou_window", "scene_zhou_bg" };
+					foregrounds = new[]
+					{
+						"scene_zhou_plant", "scene_zhou_radio", "scene_zhou_desk", "scene_zhou_items", "scene_zhou_light"
+					};
+					return true;
+				case "scene_chenguo":
+					backgrounds = new[] { "scene_chenguo_bg" };
+					foregrounds = new[] { "scene_chenguo_chair", "scene_chenguo_desk", "scene_chenguo_cat" };
+					return true;
+				case "scene_father":
+					backgrounds = new[] { "scene_father_bg" };
+					foregrounds = new[] { "scene_father_fg" };
+					return true;
+				default:
+					backgrounds = Array.Empty<string>();
+					foregrounds = Array.Empty<string>();
+					return false;
 			}
 		}
 

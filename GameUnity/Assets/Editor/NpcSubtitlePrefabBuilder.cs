@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using TMPro;
 using UnityEditor;
@@ -20,13 +21,17 @@ namespace GameEditor
 		private const float PanelWidth = 1180f;
 		private const float PanelHeight = 220f;
 		private const float PanelBottom = 100f;
-		private const float NameInsetLeft = 36f;
-		private const float NameOverlap = 12f;
+		private const float NameInsetLeft = 0f;
+		private const float NameOverlap = 30f;
+		private const float NameFontSize = 60f;
+		private static readonly Vector2 NameShadowOffset = new Vector2(1.8f, -3.34f);
+		private static readonly Vector2 NameSize = new Vector2(700f, 120f);
 		private const float BodyTopInset = 58f;
 		private const float BodyBottomInset = 46f;
 		private const float BodySideInset = 140f;
 
 		private static readonly Color NameColor = new Color(0.243f, 0.161f, 0.086f, 1f);
+		private static readonly Color NameShadowColor = new Color(1f, 1f, 1f, 1f);
 		private static readonly Color BodyColor = new Color(0.290f, 0.239f, 0.188f, 1f);
 		private static readonly Color PanelColor = new Color(0.992f, 0.984f, 0.961f, 0.80f);
 		private static readonly Color BorderColor = new Color(0.557f, 0.478f, 0.361f, 0.95f);
@@ -34,8 +39,41 @@ namespace GameEditor
 		private static readonly Color HintLabelColor = new Color(0.353f, 0.263f, 0.153f, 0.38f);
 		private const float BorderThickness = 1.5f;
 
-		[MenuItem("DGame Tools/剧情/重建 NPC 字幕 Prefab")]
-		public static void RebuildAll()
+		/// <summary>
+		/// 只在 prefab 不存在时生成。字幕的外观以 prefab 为唯一真源，
+		/// 已经存在的 prefab 上手工调过的字号、颜色、额外节点不会被这个入口碰。
+		/// </summary>
+		[MenuItem("DGame Tools/剧情/NPC 字幕/创建 Prefab（仅当不存在）", false, 10)]
+		public static void CreateIfMissing()
+		{
+			if (File.Exists(PrefabPath))
+			{
+				EditorUtility.DisplayDialog("NPC 字幕 Prefab",
+					$"已存在，未做任何修改。\n\n字幕外观以 prefab 为准，直接打开\n{PrefabPath}\n调整即可。\n确需重建请用「强制重建」。",
+					"好");
+				return;
+			}
+
+			RunBuild();
+		}
+
+		/// <summary>危险入口：用脚本默认值重写 prefab，会丢掉手调内容，所以先备份再重建。</summary>
+		[MenuItem("DGame Tools/剧情/NPC 字幕/强制重建（覆盖手调，先备份）", false, 11)]
+		public static void ForceRebuild()
+		{
+			bool confirmed = EditorUtility.DisplayDialog("强制重建 NPC 字幕 Prefab",
+				"会用脚本里的默认值重写 prefab：\nprefab 上手调过的字号、颜色、额外节点都会丢失。\n\n会先备份到 Temp/NpcSubtitleBackup/。继续吗？",
+				"备份并重建", "取消");
+			if (!confirmed)
+			{
+				return;
+			}
+
+			BackupExisting();
+			RunBuild();
+		}
+
+		private static void RunBuild()
 		{
 			EnsureIcon();
 			BuildPrefab();
@@ -43,6 +81,19 @@ namespace GameEditor
 			AssetDatabase.SaveAssets();
 			AssetDatabase.Refresh();
 			Debug.Log($"[NpcSubtitle] 已生成 {PrefabPath} 并挂到 {HostPrefabPath}");
+		}
+
+		private static void BackupExisting()
+		{
+			if (!File.Exists(PrefabPath))
+			{
+				return;
+			}
+
+			string dir = Path.Combine("Temp/NpcSubtitleBackup", DateTime.Now.ToString("yyyyMMdd_HHmmss"));
+			Directory.CreateDirectory(dir);
+			File.Copy(PrefabPath, Path.Combine(dir, Path.GetFileName(PrefabPath)), true);
+			Debug.Log($"[NpcSubtitle] 旧 prefab 已备份到 {dir}");
 		}
 
 		private static void EnsureIcon()
@@ -76,7 +127,7 @@ namespace GameEditor
 			tex.SetPixels32(pixels);
 			tex.Apply();
 			File.WriteAllBytes(IconPath, tex.EncodeToPNG());
-			Object.DestroyImmediate(tex);
+			UnityEngine.Object.DestroyImmediate(tex);
 			AssetDatabase.ImportAsset(IconPath, ImportAssetOptions.ForceUpdate);
 
 			TextureImporter importer = AssetImporter.GetAtPath(IconPath) as TextureImporter;
@@ -189,9 +240,23 @@ namespace GameEditor
 			labelRect.anchoredPosition = new Vector2(30f, 0f);
 			labelRect.sizeDelta = new Vector2(80f, 32f);
 
+			// 阴影层必须比名字先创建，UGUI 按层级顺序绘制，后建的覆盖在先建的上面。
+			TextMeshProUGUI speakerShadow = CreateText(root.transform, "SpeakerLabelShadow");
+			speakerShadow.fontSize = NameFontSize;
+			speakerShadow.fontStyle = FontStyles.Bold;
+			speakerShadow.color = NameShadowColor;
+			speakerShadow.characterSpacing = 4f;
+			speakerShadow.alignment = TextAlignmentOptions.BottomLeft;
+			RectTransform shadowRect = speakerShadow.rectTransform;
+			shadowRect.anchorMin = new Vector2(0f, 1f);
+			shadowRect.anchorMax = new Vector2(0f, 1f);
+			shadowRect.pivot = new Vector2(0f, 0f);
+			shadowRect.anchoredPosition = new Vector2(NameInsetLeft, -NameOverlap) + NameShadowOffset;
+			shadowRect.sizeDelta = NameSize;
+
 			TextMeshProUGUI speaker = CreateText(root.transform, "SpeakerLabel");
-			speaker.fontSize = 40f;
-			speaker.fontStyle = FontStyles.Bold | FontStyles.Italic;
+			speaker.fontSize = NameFontSize;
+			speaker.fontStyle = FontStyles.Bold;
 			speaker.color = NameColor;
 			speaker.characterSpacing = 4f;
 			speaker.alignment = TextAlignmentOptions.BottomLeft;
@@ -200,10 +265,10 @@ namespace GameEditor
 			speakerRect.anchorMax = new Vector2(0f, 1f);
 			speakerRect.pivot = new Vector2(0f, 0f);
 			speakerRect.anchoredPosition = new Vector2(NameInsetLeft, -NameOverlap);
-			speakerRect.sizeDelta = new Vector2(700f, 56f);
+			speakerRect.sizeDelta = NameSize;
 
 			PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
-			Object.DestroyImmediate(root);
+			UnityEngine.Object.DestroyImmediate(root);
 		}
 
 		private static void CreateBorder(Transform parent, string name, bool horizontal, bool isTopOrLeft)
@@ -261,7 +326,7 @@ namespace GameEditor
 				Transform existing = contents.transform.Find(RootName);
 				if (existing != null)
 				{
-					Object.DestroyImmediate(existing.gameObject);
+					UnityEngine.Object.DestroyImmediate(existing.gameObject);
 				}
 
 				GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, contents.transform);
