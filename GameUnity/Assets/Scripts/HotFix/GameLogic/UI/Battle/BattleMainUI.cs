@@ -155,7 +155,11 @@ namespace GameLogic
 #if SPINE_UNITY && SPINE_CSHARP
 		private UISpineWidget m_npcSpine;
 		private string m_loadedNpcSpineLocation;
+		// 当前正在播的姿势（骨骼动画名），用于「同一表情不重播」和「空表情沿用上一句」
+		private string m_npcSpinePose;
 		private readonly HashSet<string> m_unavailableNpcSpines = new HashSet<string>();
+		// 缺表情的动作只在控制台提示一次，MapNpcSpinePose 是静态方法，所以这里也用静态集合
+		private static readonly HashSet<string> s_warnedSpinePoseGaps = new HashSet<string>();
 #endif
 		private Image m_imgSceneRoot;
 		private readonly List<Image> m_sceneLayerImages = new List<Image>();
@@ -3758,7 +3762,7 @@ namespace GameLogic
 			if (!string.IsNullOrEmpty(spineLocation) && IsPortraitLocationReady(spineLocation) &&
 				!m_unavailableNpcSpines.Contains(spineLocation))
 			{
-				if (await ShowNpcSpineAsync(spineLocation, story.AnimationAsset, version))
+				if (await ShowNpcSpineAsync(spineLocation, story.NpcId, story.AnimationAsset, version))
 				{
 					return;
 				}
@@ -3893,7 +3897,7 @@ namespace GameLogic
 		}
 
 #if SPINE_UNITY && SPINE_CSHARP
-		private async UniTask<bool> ShowNpcSpineAsync(string location, string animationAsset, int version)
+		private async UniTask<bool> ShowNpcSpineAsync(string location, string npcId, string animationAsset, int version)
 		{
 			EnsureSceneCharacterView();
 			if (m_rtSceneCharacter == null || m_imgSceneCharacter == null)
@@ -3909,8 +3913,9 @@ namespace GameLogic
 					return false;
 				}
 
-				ApplyNpcSpinePose(m_npcSpine, animationAsset);
+				ApplyNpcSpinePose(m_npcSpine, npcId, animationAsset, false);
 				m_npcSpine.FitToSlot(m_rtSceneCharacter.sizeDelta);
+				m_npcSpine.SetRaycastTarget(m_layoutEditMode);
 				HideNpcPortraitSprite();
 				return true;
 			}
@@ -3944,49 +3949,192 @@ namespace GameLogic
 			m_npcSpine = widget;
 			m_loadedNpcSpineLocation = location;
 			m_loadedNpcPortraitLocation = null;
-			ApplyNpcSpinePose(widget, animationAsset);
+			m_npcSpinePose = null;
+			ApplyNpcSpinePose(widget, npcId, animationAsset, true);
 			widget.FitToSlot(m_rtSceneCharacter.sizeDelta);
+			widget.SetRaycastTarget(m_layoutEditMode);
 			HideNpcPortraitSprite();
 			return true;
 		}
 
-		private void ApplyNpcSpinePose(UISpineWidget widget, string animationAsset)
+		private void ApplyNpcSpinePose(UISpineWidget widget, string npcId, string animationAsset, bool forceReplay)
 		{
 			if (widget == null)
 			{
 				return;
 			}
 
-			string pose = MapNpcSpinePose(animationAsset);
-			widget.SwitchSkin(pose);
+			string pose = MapNpcSpinePose(npcId, animationAsset);
+			if (string.IsNullOrEmpty(pose))
+			{
+				// 本句没标表情：沿用上一句的姿势，别把正在播的动作打断
+				pose = string.IsNullOrEmpty(m_npcSpinePose) ? DefaultNpcSpinePose : m_npcSpinePose;
+			}
+
+			if (!forceReplay && pose == m_npcSpinePose)
+			{
+				return;
+			}
+
+			m_npcSpinePose = pose;
+			// 美术把每个表情的贴图做成同名皮肤（zhengchang/sikao/jingya…），陈先生和陈果没有 default 皮肤，
+			// 不切皮肤就一个格子都挂不上。没有同名皮肤的（如悲伤/气愤只做了动作）退回基准皮肤，
+			// 靠同名动作里的换图关键帧表达。
+			if (widget.HasSkin(pose))
+			{
+				widget.SwitchSkin(pose);
+			}
+			else if (widget.HasSkin(BaseNpcSpineSkin))
+			{
+				widget.SwitchSkin(BaseNpcSpineSkin);
+			}
 			widget.SetAnimation(pose, true, true);
 		}
 
-		private static string MapNpcSpinePose(string animationAsset)
+		private const string DefaultNpcSpinePose = "zhengchang";
+		private const string BaseNpcSpineSkin = "zhengchang";
+
+		private static bool IsChenXiansheng(string npcId)
+		{
+			return npcId == "陈先生";
+		}
+
+		private static bool IsChenGuo(string npcId)
+		{
+			return npcId == "陈果" || npcId == "女孩";
+		}
+
+		/// <summary>
+		/// 剧情表的 animationAsset 存的是**语义表情键**（think/sad/angry/happy/moved/surprised），
+		/// 不是骨骼动画名——三个角色这版各只给了 4 个动作，能表达的表情并不一样：
+		/// 老周 = 平静/悲伤/气愤/思考，陈果 = 平静/悲伤/喜悦·感动/思考，陈先生 = 平静/伤心·失落/惊讶/思考。
+		/// 缺的表情在这里退到该角色最接近的一个，并在首次遇到时打一条警告给美术补动作。
+		/// 返回空串表示「本句没有表情，沿用上一句」。
+		/// </summary>
+		private static string MapNpcSpinePose(string npcId, string animationAsset)
+		{
+			string emotion = NormalizeEmotionKey(animationAsset);
+			if (emotion == "inherit")
+			{
+				return string.Empty;
+			}
+
+			string pose;
+			switch (emotion)
+			{
+				case "think":
+					pose = "sikao";
+					break;
+				case "sad":
+					pose = IsChenXiansheng(npcId) ? "shangxin" : "beishang";
+					break;
+				case "angry":
+					// 陈先生、陈果没有「气愤」动作，先用情绪强度最接近的顶上
+					pose = npcId == "老周" ? "shengqi" : (IsChenXiansheng(npcId) ? "jingya" : "beishang");
+					break;
+				case "happy":
+					pose = IsChenGuo(npcId) ? "kaixin" : DefaultNpcSpinePose;
+					break;
+				case "moved":
+					pose = IsChenGuo(npcId) ? "kaixin" : (IsChenXiansheng(npcId) ? "shangxin" : DefaultNpcSpinePose);
+					break;
+				case "surprised":
+					pose = IsChenXiansheng(npcId) ? "jingya" : DefaultNpcSpinePose;
+					break;
+				default:
+					pose = DefaultNpcSpinePose;
+					break;
+			}
+
+			WarnNpcSpinePoseGap(npcId, emotion, pose);
+			return pose;
+		}
+
+		/// <summary>本版动作里没有对应表情的角色，首次遇到时提示一次，方便美术补齐 clip。</summary>
+		private static void WarnNpcSpinePoseGap(string npcId, string emotion, string pose)
+		{
+			bool missing;
+			switch (emotion)
+			{
+				case "angry":
+					missing = npcId != "老周";
+					break;
+				case "happy":
+					missing = !IsChenGuo(npcId);
+					break;
+				case "moved":
+					missing = npcId == "老周";
+					break;
+				case "surprised":
+					missing = !IsChenXiansheng(npcId);
+					break;
+				default:
+					missing = false;
+					break;
+			}
+
+			if (!missing || !s_warnedSpinePoseGaps.Add(npcId + "." + emotion))
+			{
+				return;
+			}
+
+			DLogger.Warning("角色 {0} 没有「{1}」动作，暂用 {2} 代替，需要美术补一个 clip", npcId, emotion, pose);
+		}
+
+		/// <summary>把表里的演出资源（兼容中英文与旧值）归一成语义表情键；inherit = 沿用上一句。</summary>
+		private static string NormalizeEmotionKey(string animationAsset)
 		{
 			if (string.IsNullOrWhiteSpace(animationAsset))
 			{
-				return "zhengchang";
+				return "inherit";
 			}
 
-			string key = animationAsset.Trim().ToLowerInvariant();
-			if (key == "thoughtful" || key == "think" || key == "sikao")
+			switch (animationAsset.Trim().ToLowerInvariant())
 			{
-				return "sikao";
+				case "think":
+				case "thoughtful":
+				case "sikao":
+					return "think";
+				case "sad":
+				case "beishang":
+				case "shangxin":
+					return "sad";
+				case "angry":
+				case "shengqi":
+					return "angry";
+				case "happy":
+				case "joyful":
+				case "kaixin":
+				case "xiyue":
+					return "happy";
+				case "moved":
+				case "gandong":
+					return "moved";
+				case "surprised":
+				case "shock":
+				case "jingya":
+					return "surprised";
+				default:
+					return "normal";
 			}
-
-			if (key == "jingya" || key == "surprised" || key == "shock")
-			{
-				return "jingya";
-			}
-
-			return "zhengchang";
 		}
 
 		private static string ResolveNpcSpineLocation(string npcId)
 		{
-			// These three characters use the approved PSD cutouts in this dialogue UI.
-			return string.Empty;
+			// 三个主要角色的骨骼动画（各 4 句待机动作）放在 BundleAssets/Prefabs/UISpineModel 下，
+			// 打包地址按文件名走（AddressByFileName），所以这里直接给预制体名。
+			switch (npcId)
+			{
+				case "老周":
+					return "uispine_laozhou";
+				case "陈先生":
+					return "uispine_chenxiansheng";
+				case "陈果":
+				case "女孩":
+					return "uispine_chenguo";
+				default:
+					return string.Empty;
+			}
 		}
 
 		private void HideNpcPortraitSprite()
@@ -4020,6 +4168,7 @@ namespace GameLogic
 
 			m_npcSpine = null;
 			m_loadedNpcSpineLocation = null;
+			m_npcSpinePose = null;
 			if (m_imgSceneCharacter != null)
 			{
 				m_imgSceneCharacter.enabled = true;
@@ -4076,6 +4225,7 @@ namespace GameLogic
 			{
 				case "angry":
 					return "shengqi";
+				case "happy":
 				case "joyful":
 					return "xiyue";
 				case "moved":

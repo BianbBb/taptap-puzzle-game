@@ -401,6 +401,9 @@ namespace GameLogic
 			if (enabled) m_layoutEditingOtherCharacter = false;
 			if (m_imgSceneCharacter != null) m_imgSceneCharacter.raycastTarget = enabled;
 			if (m_imgOtherCharacter != null) m_imgOtherCharacter.raycastTarget = enabled;
+#if SPINE_UNITY && SPINE_CSHARP
+			if (m_npcSpine != null && !m_npcSpine.IsDestroyed) m_npcSpine.SetRaycastTarget(enabled);
+#endif
 			if (m_dialoguePanel != null && m_dialoguePanel.TryGetComponent(out Image panelImage))
 				panelImage.raycastTarget = enabled;
 			if (m_tfReplayMessageNode != null && m_tfReplayMessageNode.TryGetComponent(out Image replyImage))

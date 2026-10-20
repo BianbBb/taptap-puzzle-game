@@ -245,6 +245,34 @@ namespace GameLogic
         }
 
         /// <summary>
+        /// 骨架整体的点击/拖拽响应（Spine 接管角色后原来的立绘 Image 会被关掉，
+        /// F2 布局编辑要靠这里继续能拖动人物）
+        /// </summary>
+        public void SetRaycastTarget(bool raycast)
+        {
+            if (m_skeletonGraphic != null)
+            {
+                m_skeletonGraphic.raycastTarget = raycast;
+            }
+        }
+
+        /// <summary>
+        /// 骨架里是否有这个皮肤。这三个角色的表情做在动作里、没有同名皮肤，
+        /// 换皮前先判断一下，免得刷 "未找到皮肤" 的错误日志。
+        /// </summary>
+        public bool HasSkin(string skinName)
+        {
+            if (string.IsNullOrEmpty(skinName) || m_skeletonGraphic == null ||
+                m_skeletonGraphic.SkeletonDataAsset == null)
+            {
+                return false;
+            }
+
+            var data = m_skeletonGraphic.SkeletonDataAsset.GetSkeletonData(true);
+            return data != null && data.FindSkin(skinName) != null;
+        }
+
+        /// <summary>
         /// 直接换皮
         /// </summary>
         /// <param name="skinName"></param>
