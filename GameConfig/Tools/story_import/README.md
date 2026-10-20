@@ -169,6 +169,71 @@ sed -n '/记忆 ID 语义冲突/,/结论/p' GameConfig/Datas/_import_v1_preview/
 
 解析函数是 `parse_affection_condition()`，支持 `需要好感 5点` / `好感≥5` / `好感 5-10` / `affection >= 5`。
 
+## 情绪与分支的关系
+
+### 情绪怎么来：记忆涌现
+
+运行时口径在 `NarrativeDomainService.FindEmergentEmotions()`：
+
+> **≥2 段已拥有记忆**的 `emotionCardSet` 含同一情绪 → 该情绪涌现（解锁）。
+> 一段记忆对同一情绪只算一次。
+
+所以「记忆 → 情绪」不需要配规则，只要给记忆打情绪标签即可：
+`源表 Memory.EmotionTagIDs` → `记忆配置表.emotionCardSet`。
+某项情绪若全库只有 0 或 1 条记忆标注，**永远不可能涌现**，校验器会逐条列出来。
+
+### 情绪怎么影响分支：目前**不直接**影响
+
+这是最容易误解的一点。当前 schema：
+
+| 字段 | 作用 | 是不是门禁 |
+|---|---|---|
+| `Option.requiredMemory` | 缺这些记忆就锁死 | ✅ 唯一的选项门禁 |
+| `Option.allowedEmotion` | 这条回复**允许**表达哪些情绪 | ❌ 只是情绪白名单，不是门禁 |
+| `Option.affectionRules` | 某情绪 → 好感增量 | ❌ 只改数值 |
+| `Turn.minAffection` / `BranchRule.min/maxAffection` | 好感区间决定分支 | ✅ 分支门禁 |
+
+也就是说情绪**间接**影响分支：
+
+```
+记忆涌现 -> 拥有该情绪 -> 在允许它的选项上表达 -> 该情绪的好感增量 -> 好感门槛分支
+```
+
+`GetEmotionChoicesForReply()` 只把**已拥有**的情绪列进候选，所以
+`allowedEmotion` 里写了一个永不涌现的情绪，那条「表达该情绪」的路就是死的
+（但选项本身还能选，只是表达不了）。校验器会把这种「允许但永远拿不到」单独报出来。
+
+若设计上需要「没有这个情绪就走不到这条分支」，现有 schema 做不到，
+得给 `ConditionGroupID` 或 BranchRule 加情绪维度。
+
+### 好感分支的算法
+
+`max_affection_before(node, npc)`：把能走到该节点之前的所有选项按 `optionSetId` 分组，
+每组取最大好感增量再求和作为上界。上界都够不到门槛 → 分支必死。
+
+运行时有两套好感门槛形态，校验器都查：
+
+| 形态 | 代码位置 | 语义 |
+|---|---|---|
+| 候选筛选 | `NarrativeDomainService.ResolveNextNode` | `ExtraNextNodeIds` 里只有 `affection >= 候选.MinAffection` 的才可能被选中 |
+| 节点级跳过 | `BattleMainUI.PresentStoryNodeAsync` | 节点自身 `MinAffection` 不够就不播它，改走它的 `DefaultNextNodeId` |
+| 分支规则 | `ResolveNextNode` 的 `Branches` | `[min, max)` 区间，`max` 是开区间 |
+
+> 节点级门槛**必须配 `DefaultNextNodeId`**，否则运行时好感不够会直接 `return` 中断。
+
+### V1.0 现状快照（2026-10-20）
+
+| 项 | 结果 |
+|---|---|
+| 物品 → 部件 → 记忆 | 6 件物品 / 19 个部件，M01–M19 全部可得 |
+| Turn 可达性 | 262 / 262 在记忆门槛下可达 |
+| 记忆来源缺口 | 0 |
+| 时序倒置 | 0 |
+| 好感门槛分支 | 1 处（`T0201 → T0203`，需老周好感 5，最多可攒 7）✅ |
+| 情绪涌现 | E02 喜悦(3) / E03 失落(5) / E04 好奇(5) / E06 怀念(6) 可涌现 |
+| **情绪缺口** | **E01 理解 标注记忆 0 条 → 永不涌现**，但 `O013302` 允许表达它 → 该表达分支死；E05 / E07 同样 0 条且无引用（图鉴里会永久灰） |
+| 情绪记忆规则 | 表为空。机制已实现，V1.0 还没配任何规则 |
+
 ## 记忆获得机制：物品部件检查（主）+ 选项奖励 + 情绪记忆规则
 
 **主路径是"检查物品部件"**，不是选项奖励。完整链路：

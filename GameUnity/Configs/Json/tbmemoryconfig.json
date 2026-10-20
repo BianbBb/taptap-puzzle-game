@@ -55,20 +55,6 @@
     ]
   },
   {
-    "id": "M99",
-    "memoryName": "初始记忆1",
-    "description": "你是一个物品评估专家，曾参与博物馆迁移项目，进行文物评估统计工作",
-    "imageId": "",
-    "emotionCardSet": []
-  },
-  {
-    "id": "M98",
-    "memoryName": "初始记忆2",
-    "description": "博物馆馆藏已经入库，但是新馆建设遥遥无期",
-    "imageId": "",
-    "emotionCardSet": []
-  },
-  {
     "id": "M07",
     "memoryName": "布偶的补缀",
     "description": "腹部填充物结块，侧缝有重新缝过的痕迹。陈果说，小满离开后，她也试着把它修好。",

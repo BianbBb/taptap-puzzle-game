@@ -48,13 +48,91 @@ class StoryGraph:
     def __init__(self):
         self.sessions = {}       # sid -> {name, start, nexts[], day}
         self.nodes = {}          # nid -> {npc, text, replies[], next, extras[], branches[], end, minAff}
-        self.options = {}        # oid -> {req[], reward[], next, end, text, set, emo[]}
+        self.options = {}        # oid -> {req[], reward[], next, end, text, set, emo[], aff}
         self.rules = {}          # rid -> {emotion, threshold, required[], reward[], priority}
         self.items = {}          # itemId -> {name, parts[]}
         self.parts = {}          # partId -> {name, memory, item}
         self.node_items = {}     # nid -> [itemId]  进入/离开该节点时发放的物品
+        self.mem_emotions = {}   # mid -> [emotionId]   记忆标注的情绪（涌现的来源）
+        self.emotions = {}       # eid -> name
         self.all_memories = set()
         self.source_label = ""
+
+    # ---- 记忆 -> 情绪涌现 ----
+
+    def emergent_emotions(self, owned):
+        """
+        复刻运行时 NarrativeDomainService.FindEmergentEmotions 的口径：
+        **两段及以上**已拥有记忆的 EmotionCardSet 含同一情绪 -> 该情绪涌现。
+        （一段记忆对同一情绪只算一次。）
+
+        返回 (emotions, detail)：emotions 是能涌现的情绪集合，detail 是 eid -> [记忆...]
+        """
+        sources = defaultdict(list)
+        for mid in owned:
+            for eid in dict.fromkeys(self.mem_emotions.get(mid, [])):
+                if eid:
+                    sources[eid].append(mid)
+        emergent = {eid: mems for eid, mems in sources.items() if len(mems) >= 2}
+        return set(emergent), emergent
+
+    def emotion_refs(self):
+        """哪些选项限制了可表达的情绪：eid -> [(oid, oidset)]"""
+        out = defaultdict(list)
+        for oid, o in self.options.items():
+            for eid in o.get("emo") or []:
+                out[eid].append(oid)
+        return out
+
+    # ---- 好感 ----
+
+    def max_affection_before(self, target_nid, npc):
+        """
+        走到 target_nid 之前，对某个 NPC 最多能攒到多少好感（乐观上界）。
+        同一个 OptionSet 只能选一个选项，所以按 Set 取最大增量再求和。
+        只统计"能从 session 起点走到 target 之前"的选项。
+        """
+        idx = self._collect_option_preconditions(target_nid)
+        total = 0.0
+        for set_id, oids in idx.items():
+            best = 0.0
+            for oid in oids:
+                o = self.options.get(oid)
+                if not o:
+                    continue
+                aff = o.get("aff") or {}
+                d = float(aff.get(npc, 0) or 0)
+                if d > best:
+                    best = d
+            total += best
+        return total
+
+    def _collect_option_preconditions(self, target_nid):
+        """找出所有"在 target 之前就可能被选中"的选项，按 OptionSet 归类"""
+        # 反向：从 target 出发用"能到达 target 的节点集合"近似"target 之前"
+        preds = self._predecessors(target_nid)
+        idx = defaultdict(list)
+        for nid in preds:
+            for oid in self.nodes[nid]["replies"]:
+                o = self.options.get(oid)
+                if o and o["set"]:
+                    idx[o["set"]].append(oid)
+        return idx
+
+    def _predecessors(self, target_nid):
+        """能走到 target 的节点集合（跨 Session），用于"之前"的近似"""
+        if getattr(self, "_pred_cache", None) is None:
+            self._pred_cache = {}
+        if target_nid in self._pred_cache:
+            return self._pred_cache[target_nid]
+        preds = set()
+        for sid, s in self.sessions.items():
+            if s["start"]:
+                for nid in self.forward_reach(s["start"]):
+                    if target_nid in self.forward_reach(nid):
+                        preds.add(nid)
+        self._pred_cache[target_nid] = preds
+        return preds
 
     # ---- 物品 -> 记忆 ----
 
@@ -121,6 +199,10 @@ class StoryGraph:
         必须能**跨 Session**：一个 Session 结束时会跳到 nextSessionId 的起点，
         否则「上一章的物品记忆能不能撑到下一章」这类问题全都会被误判成时序倒置。
         """
+        if getattr(self, "_fwd_cache", None) is None:
+            self._fwd_cache = {}
+        if start in self._fwd_cache:
+            return self._fwd_cache[start]
         self._ensure_session_index()
         seen, dq = {start}, deque([start])
         while dq:
@@ -138,6 +220,7 @@ class StoryGraph:
                 if nxt not in seen:
                     seen.add(nxt)
                     dq.append(nxt)
+        self._fwd_cache[start] = seen
         return seen
 
     def option_edges(self, nid):
@@ -333,6 +416,36 @@ def _g(vals, h, n, d=None):
     return vals[i] if _cs(vals[i]) else d
 
 
+def _parse_aff_map(v):
+    """`{NPC_001:2}` / `{NPC_001:2,NPC_002:1}` -> {老周: 2.0, ...}"""
+    s = _cs(v).strip("{}")
+    out = {}
+    for part in s.split(","):
+        part = part.strip()
+        if not part or ":" not in part:
+            continue
+        k, _, val = part.partition(":")
+        try:
+            out[NPC_ID_MAP.get(k.strip(), k.strip())] = float(val.strip() or 0)
+        except ValueError:
+            continue
+    return out
+
+
+# 源表的 NPC 占位 ID -> 项目中实际使用的 NPC 名（与 convert_story_v1.py 的 NPC_ID_MAP 保持一致）
+NPC_ID_MAP = {"NPC_001": "老周", "NPC_002": "陈先生", "NPC_003": "陈果"}
+
+
+def _aff_from_flat(npc, delta):
+    """Luban 表是扁平的 affectionNpcId + affectionDelta"""
+    if not npc or delta is None:
+        return {}
+    try:
+        return {_cs(npc): float(delta)}
+    except (TypeError, ValueError):
+        return {}
+
+
 def _load_items_source(wb, g):
     """
     读策划源表的「Item」sheet。它是一张表里叠了两个子表：
@@ -454,6 +567,7 @@ def load_source(path):
             "text": _cs(_g(r, oh, "ReplyText")),
             "set": _cs(_g(r, oh, "OptionSetID")),
             "emo": _list(_g(r, oh, "EmotionID")),
+            "aff": _parse_aff_map(_g(r, oh, "AddAffection")),
         }
 
     for r in tr:
@@ -486,6 +600,14 @@ def load_source(path):
         mid = _cs(r[_idx(mh, "MemoryID")])
         if mid:
             g.all_memories.add(mid)
+            g.mem_emotions[mid] = _list(_g(r, mh, "EmotionTagIDs"))
+
+    eh, er = _rows(wb, "Emotion")
+    for r in er:
+        eid = _cs(r[_idx(eh, "EmotionID")])
+        if eid:
+            # 源表 Name 列是英文 key，中文在 Description 列
+            g.emotions[eid] = _cs(_g(r, eh, "Description")) or _cs(_g(r, eh, "Name")) or eid
 
     # ---- 物品 / 部件 / 动作（记忆的主要来源路径）----
     _load_items_source(wb, g)
@@ -574,6 +696,7 @@ def load_luban(datas_dir):
             "text": _cs(_g(r, oh, "replyText")),
             "set": _cs(_g(r, oh, "optionSetId")),
             "emo": _list(_g(r, oh, "allowedEmotion")),
+            "aff": _aff_from_flat(_g(r, oh, "affectionNpcId"), _g(r, oh, "affectionDelta")),
         }
 
     for r in tr:
@@ -602,6 +725,13 @@ def load_luban(datas_dir):
         mid = _cs(r[_idx(mh, "id")])
         if mid:
             g.all_memories.add(mid)
+            g.mem_emotions[mid] = _list(_g(r, mh, "emotionCardSet"))
+
+    eh, er = sheet_rows("情绪配置表.xlsx")
+    for r in er:
+        eid = _cs(r[_idx(eh, "id")]) if _idx(eh, "id") >= 0 else ""
+        if eid:
+            g.emotions[eid] = _cs(_g(r, eh, "emotionName")) or eid
 
     _load_items_luban(datas_dir, g, sheet_rows)
 
@@ -803,7 +933,8 @@ def analyze(g):
         else:
             r.ok("所有规则的情绪阈值都能在本局内达到（上限为乐观估计）")
     else:
-        r.note("没有配置任何情绪记忆规则，记忆只能靠选项 rewardMemory 获得")
+        r.note("没有配置情绪记忆规则（情绪值达阈值 -> 激活记忆）。"
+               "V1.0 目前只靠「物品部件检查」产出记忆；如果设计上有「用够次数才解锁」的记忆，需要补规则")
 
     # 记忆来源盘点：每条被 require 的记忆，是否真的有地方产出
     required_by = defaultdict(list)     # mid -> [option id]
@@ -1039,6 +1170,98 @@ def analyze(g):
             r.note(f"Option `{oid}` 没有被任何 Turn 引用（孤儿选项）")
     else:
         r.ok("所有 Option 都被至少一个 Turn 引用")
+
+    # ---------------- 情绪涌现 ----------------
+    # 运行时口径（NarrativeDomainService.FindEmergentEmotions）：
+    #   ≥2 段已拥有记忆的 EmotionCardSet 含同一情绪 -> 该情绪涌现（解锁）
+    ownable = satisfiable | item_mems
+    emergent, emergent_detail = g.emergent_emotions(sorted(ownable))
+    emo_refs = g.emotion_refs()
+    if g.mem_emotions and g.emotions:
+        r.title("情绪涌现（≥2 段记忆标注同一情绪即解锁）")
+        r.text("\n| 情绪 | 名称 | 标注它的可得记忆 | 能否涌现 | 允许表达它的选项 |")
+        r.text("|---|---|---|---|---|")
+        dead_emo_ref = []
+        for eid in sorted(g.emotions):
+            if eid == "E00":
+                continue
+            mems = [m for m in g.all_memories
+                    if eid in (g.mem_emotions.get(m) or []) and m in ownable]
+            can = len(mems) >= 2
+            refs = emo_refs.get(eid, [])
+            r.text(f"| {eid} | {g.emotions.get(eid, '')} | {len(mems)} 条"
+                   f"{'（' + ','.join(sorted(mems)) + '）' if mems else ''} | "
+                   f"{'✅ 可涌现' if can else '❌ 永不涌现'} | {','.join(refs) or '—'} |")
+            if refs and not can:
+                dead_emo_ref.append((eid, refs, len(mems)))
+        if dead_emo_ref:
+            for eid, refs, cnt in dead_emo_ref:
+                r.bad(f"情绪 {eid}({g.emotions.get(eid, '')}) 被 {','.join(refs)} 允许表达，"
+                      f"但只有 {cnt} 段记忆标注它，永远达不到 ≥2 的涌现条件 —— "
+                      f"这些选项的「{g.emotions.get(eid, '')}」表达分支永远走不到")
+        else:
+            r.ok("所有被选项引用为可表达情绪的情绪都能涌现")
+
+        # 允许表达的情绪里，实际能拿到几个
+        if emo_refs:
+            r.text("\n**选项 × 可表达情绪**（allowedEmotion 只是「允许」，"
+                   "实际能选到的只有已涌现的那几个）\n")
+            r.text("| Option | 允许表达 | 实际可表达 | 备注 |")
+            r.text("|---|---|---|---|")
+            for oid, o in sorted(g.options.items()):
+                allowed = o.get("emo") or []
+                if not allowed:
+                    continue
+                usable = [e for e in allowed if e in emergent]
+                missing = [e for e in allowed if e not in emergent]
+                note = f"缺 {','.join(missing)}（不涌现）" if missing else "全部可用"
+                r.text(f"| {oid} | {','.join(allowed)} | "
+                       f"{','.join(usable) or '—'} | {note} |")
+
+    # ---------------- 好感门槛 ----------------
+    # 运行时有两套形态，都要看：
+    #   ① extras 候选级（NarrativeDomainService.ResolveNextNode）：affection >= 候选节点 MinAffection 才会被选中
+    #   ② 节点级跳过（BattleMainUI.PresentStoryNodeAsync）：MinAffection 不够就不播该节点，改走它的 DefaultNextNodeId
+    aff_branches = []
+    for nid, n in g.nodes.items():
+        for cand in n.get("extras") or []:
+            cn = g.nodes.get(cand)
+            if cn and cn.get("minAff", 0) > 0:
+                aff_branches.append(("extras", nid, cand, cn["minAff"], n.get("npc", "")))
+        if n.get("branches"):
+            for b in n["branches"]:
+                try:
+                    need = float(b.get("min") or 0)
+                except (TypeError, ValueError):
+                    need = 0
+                if need > 0:
+                    aff_branches.append(("branch", nid, b.get("next"), need, n.get("npc", "")))
+        if n.get("minAff", 0) > 0:
+            aff_branches.append(("node", nid, n.get("next"), n["minAff"], n.get("npc", "")))
+
+    if aff_branches:
+        r.title("好感门槛的分支")
+        r.text("\n| 形态 | 分支点 | 目标节点 | 需要好感 | NPC | 最多能攒到 | 判定 |")
+        r.text("|---|---|---|---|---|---|---|")
+        kind_cn = {"extras": "候选筛选", "branch": "分支规则", "node": "节点级跳过"}
+        fail = 0
+        for kind, nid, tgt, need, npc in aff_branches:
+            got = g.max_affection_before(nid, npc)
+            ok = got >= need
+            if not ok:
+                fail += 1
+            r.text(f"| {kind_cn.get(kind, kind)} | {nid} | {tgt or '—'} | {need:g} | {npc or '—'} | "
+                   f"{got:g} | {'✅ 可达' if ok else '❌ 攒不够'} |")
+            if not ok:
+                r.bad(f"{nid} -> {tgt} 需要 {npc} 好感 {need:g}，"
+                      f"但走到这里最多只能攒到 {got:g}，这条分支永远进不去")
+        # 节点级门槛必须有兜底，否则运行时直接 return
+        no_fallback = [nid for nid, n in g.nodes.items()
+                       if n.get("minAff", 0) > 0 and not n.get("next")]
+        if no_fallback:
+            r.bad(f"节点级好感门槛没有默认后继，运行时好感不够会直接中断：{no_fallback}")
+        if fail == 0:
+            r.ok("所有好感门槛分支都能达到")
 
     # ---------------- 结论 ----------------
     r.title("结论")
