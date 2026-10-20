@@ -124,8 +124,13 @@ def pick(cands, prefer_longest):
     return min(top, key=lambda r: r.get("duration") or 0)
 
 
-def download(opener, url, out_path, retries=5):
-    """带长度校验 + 断点续传的下载。CDN 偶尔会截断大文件，直接写会产出坏音频。"""
+def download(opener, url, out_path, retries=8):
+    """带长度校验 + 断点续传的分块下载。
+
+    Freesound CDN 实测只有 ~20KB/s，单次 read() 读满 3.4MB 会撞上 180s 超时，
+    而超时前一字节都没落盘 → 每次重试都从头开始，永远下不完。
+    所以必须**流式落盘**：每读完一块就写，超时也能靠 Range 续传。
+    """
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     if os.path.exists(out_path):
         os.remove(out_path)
@@ -137,21 +142,31 @@ def download(opener, url, out_path, retries=5):
         if have:
             headers["Range"] = "bytes=%d-" % have
         req = urllib.request.Request(url, headers=headers)
-        with opener.open(req, timeout=180) as r:
-            if expect is None:
-                cl = r.headers.get("Content-Length")
-                if cl and r.status == 200:
-                    expect = int(cl)
-                elif cl and r.status == 206:
-                    expect = have + int(cl)
-            chunk = r.read()
-        with open(out_path, "ab" if have else "wb") as f:
-            f.write(chunk)
+        try:
+            with opener.open(req, timeout=120) as r:
+                if expect is None:
+                    cl = r.headers.get("Content-Length")
+                    if cl and r.status == 200:
+                        expect = int(cl)
+                    elif cl and r.status == 206:
+                        expect = have + int(cl)
+                with open(out_path, "ab" if have else "wb") as f:
+                    while True:
+                        chunk = r.read(64 * 1024)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        f.flush()
+        except Exception as e:
+            size = os.path.getsize(out_path) if os.path.exists(out_path) else 0
+            print("# 下载中断 %d/%s (%s)，续传（第 %d 次）"
+                  % (size, expect or "?", type(e).__name__, attempt + 1), file=sys.stderr)
 
-        size = os.path.getsize(out_path)
+        size = os.path.getsize(out_path) if os.path.exists(out_path) else 0
         if expect is None or size >= expect:
             return size
-        print("# 下载不完整 %d/%d，续传（第 %d 次）" % (size, expect, attempt + 1), file=sys.stderr)
+        if size == have:
+            print("# 本轮零进展，重试（第 %d 次）" % (attempt + 1), file=sys.stderr)
 
     raise IOError("下载始终不完整：%s" % url)
 
@@ -167,19 +182,35 @@ def probe_peak(ffmpeg, path):
     return float(m.group(1)) if m else None
 
 
-def convert(ffmpeg, src, dst, fmt, rate=44100, peak_db=-1.5, crop=None):
-    """统一转 mono / rate，峰值归一到 peak_db，再编码。"""
+def convert(ffmpeg, src, dst, fmt, rate=44100, peak_db=-1.5, crop=None,
+            channels=1, extra_af=None, fade_out=0.0):
+    """统一声道 / 采样率，峰值归一到 peak_db，再编码。
+
+    channels:   1=单声道（sfx 默认），2=保留立体声（BGM 需要）
+    extra_af:   额外的 -af 片段，如 "lowpass=f=6000"，用于削掉硬质毛刺
+    fade_out:   裁剪后的淡出秒数，避免硬切爆音
+    """
     gain = 0.0
     cur = probe_peak(ffmpeg, src)
     if cur is not None:
         gain = peak_db - cur
         gain = max(-24.0, min(18.0, gain))
-    filters = "volume=%.2fdB" % gain if abs(gain) > 0.05 else None
+
+    chain = []
+    if extra_af:
+        chain.append(extra_af)
+    if abs(gain) > 0.05:
+        chain.append("volume=%.2fdB" % gain)
+    if fade_out and fade_out > 0:
+        total = crop or duration_of(ffmpeg, src) or 0
+        if total > 0:
+            chain.append("afade=t=out:st=%.3f:d=%.3f" % (max(0.0, total - fade_out), fade_out))
+    filters = ",".join(chain) if chain else None
 
     cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-i", src]
     if crop:
         cmd += ["-t", "%.3f" % crop]
-    cmd += ["-ac", "1", "-ar", str(rate)]
+    cmd += ["-ac", str(channels), "-ar", str(rate)]
     if filters:
         cmd += ["-af", filters]
     if fmt == "ogg":
@@ -191,6 +222,54 @@ def convert(ffmpeg, src, dst, fmt, rate=44100, peak_db=-1.5, crop=None):
         cmd += ["-c:a", "pcm_s16le"]
     cmd.append(dst)
     subprocess.run(cmd, check=True)
+
+
+def loop_crossfade(ffmpeg, path, seconds, channels=2, rate=44100, bitrate="128k", peak_db=None):
+    """把结尾的淡出尾巴与开头交叉淡化，做成真正能无缝循环的版本。
+
+    原理：out = x[0 : n-D]；把 out 的开头 D 秒替换为
+    「x[0:D] 淡入 + x[n-D:n] 淡出」的等功率混合。
+    这样播完 out 的最后一个样本（≈ x[n-D]）接回 out[0]（同样从 x[n-D] 起）
+    是同一点，接缝连续；代价是开头 D 秒由原 intro 变成「尾巴→intro」过渡。
+    成品长度缩短 D 秒。
+    """
+    try:
+        import numpy as np
+    except ImportError:
+        print("# 缺 numpy，跳过 loop_crossfade", file=sys.stderr)
+        return None
+
+    raw = subprocess.run(
+        [ffmpeg, "-v", "error", "-i", path, "-f", "f32le",
+         "-ac", str(channels), "-ar", str(rate), "-"],
+        capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, dtype="<f4")
+    if x.size % channels:
+        x = x[: x.size - x.size % channels]
+    x = x.reshape(-1, channels).astype("float32")
+
+    n = len(x)
+    D = int(seconds * rate)
+    if n <= 3 * D:
+        print("# 音频太短，跳过 loop_crossfade", file=sys.stderr)
+        return None
+    L = n - D
+
+    ramp = np.sin(np.linspace(0.0, np.pi / 2, D, dtype="float32"))[:, None] ** 2  # 0→1
+    out = x[:L].copy()
+    out[:D] = x[:D] * ramp + x[L:L + D] * (1.0 - ramp)
+
+    # 交叉淡化会让两个不同相位的信号叠加，峰值可能抬升几个 dB，这里重新归一
+    if peak_db is not None:
+        cur = float(np.max(np.abs(out)) + 1e-12)
+        out *= (10.0 ** (peak_db / 20.0)) / cur
+
+    subprocess.run(
+        [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+         "-f", "f32le", "-ar", str(rate), "-ac", str(channels), "-i", "-",
+         "-c:a", "libmp3lame", "-b:a", bitrate, path],
+        input=out.tobytes(), check=True)
+    return round(L / rate, 3)
 
 
 def duration_of(ffmpeg, path):
@@ -245,8 +324,18 @@ def fetch_one(opener, token, ffmpeg, spec, force=False, no_proxy=False, dry_run=
     tmp = os.path.join("/tmp/sfx_cc0", "%s.mp3" % name)
     os.makedirs(os.path.dirname(tmp), exist_ok=True)
     download(opener, chosen["_preview"], tmp)
-    convert(ffmpeg, tmp, dst, fmt, peak_db=spec.get("peak_db", -1.5), crop=spec.get("crop"))
+    convert(ffmpeg, tmp, dst, fmt,
+            peak_db=spec.get("peak_db", -1.5),
+            crop=spec.get("crop"),
+            channels=spec.get("channels", 1),
+            extra_af=spec.get("af"),
+            fade_out=spec.get("fade_out", 0.0))
     os.remove(tmp)
+
+    if spec.get("loop_crossfade") and fmt == "mp3":
+        loop_crossfade(ffmpeg, dst, spec["loop_crossfade"],
+                       channels=spec.get("channels", 1),
+                       peak_db=spec.get("peak_db", -1.5))
 
     return {
         "name": name,
@@ -280,6 +369,124 @@ def list_one(opener, token, spec, limit=8):
             c["id"], c.get("duration") or 0, round(c.get("avg_rating") or 0, 1), c["name"][:62]))
 
 
+def scan_disk():
+    """遍历音频根目录，返回 [(subdir, filename)]。以磁盘为真源，避免清单与文件漂移。"""
+    out = []
+    for sub in ("sfx", "bgm", "amb"):
+        d = os.path.join(AUDIO_ROOT, sub)
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            if fn.endswith(".meta") or fn.startswith("."):
+                continue
+            if not fn.lower().endswith((".wav", ".mp3", ".ogg")):
+                continue
+            out.append((sub, fn))
+    return out
+
+
+def _mod_desc(spec, fmt, channels, peak_db):
+    if not spec:
+        return "项目原有素材，未改造"
+    if fmt == "wav":
+        parts = ["Freesound 预览 mp3 转 wav 44.1kHz/16bit"]
+    else:
+        parts = ["Freesound 预览 mp3 重编码 128kbps"]
+    parts.append("保留立体声" if channels == 2 else "下混单声道")
+    parts.append("峰值归一 %+.1fdB" % peak_db)
+    if spec.get("crop"):
+        parts.append("裁剪至 %.2fs" % spec["crop"])
+    if spec.get("af"):
+        parts.append("滤波 %s" % spec["af"])
+    if spec.get("fade_out"):
+        parts.append("结尾淡出 %.2fs" % spec["fade_out"])
+    if spec.get("loop_crossfade"):
+        parts.append("首尾交叉淡化 %.1fs 做无缝循环（总长缩短同等秒数）" % spec["loop_crossfade"])
+    return "；".join(parts)
+
+
+def write_credits(opener, token, ffmpeg, specs, out_dir):
+    """生成 CC0 授权登记表（CSV + Markdown），覆盖磁盘上全部音频文件。"""
+    import csv
+
+    by_name = {s["name"]: s for s in specs}
+    type_label = {"sfx": "音效 SFX", "bgm": "音乐 BGM", "amb": "环境音 AMB"}
+    rows = []
+
+    for sub, fn in scan_disk():
+        stem, ext = os.path.splitext(fn)
+        path = os.path.join(AUDIO_ROOT, sub, fn)
+        spec = by_name.get(stem)
+        fid = (spec or {}).get("freesound_id")
+        fmt = ext.lstrip(".").lower()
+        channels = (spec or {}).get("channels", 1)
+        peak_db = (spec or {}).get("peak_db", -1.5)
+
+        meta = sound_by_id(opener, token, fid) if fid else None
+        out_dur = duration_of(ffmpeg, path)
+        rows.append({
+            "文件名": fn,
+            "类型": type_label.get(sub, sub),
+            "项目内用途": (spec or {}).get("note") or "全局 UI 按钮点击音",
+            "Freesound ID": fid or "",
+            "原始标题": (meta or {}).get("name", ""),
+            "作者": (meta or {}).get("username", ""),
+            "作品页": (meta or {}).get("url", ""),
+            "授权": "CC0 1.0 Universal (Public Domain)" if fid else "项目自有素材（非外部来源）",
+            "原始时长(s)": ("%.2f" % meta["duration"]) if meta else "",
+            "使用时长(s)": ("%.2f" % out_dur) if out_dur else "",
+            "最终格式": ("wav 44.1kHz/16bit 单声道" if fmt == "wav" and channels == 1
+                          else "mp3 128kbps 立体声" if fmt == "mp3" and channels == 2
+                          else "mp3 128kbps 单声道" if fmt == "mp3"
+                          else "%s %d声道" % (fmt, channels)),
+            "是否修改": "否" if not spec else "是",
+            "修改说明": _mod_desc(spec, fmt, channels, peak_db),
+        })
+
+    os.makedirs(out_dir, exist_ok=True)
+    csv_path = os.path.join(out_dir, "CC0_Audio_Credits.csv")
+    md_path = os.path.join(out_dir, "CC0_Audio_Credits.md")
+
+    fields = ["文件名", "类型", "项目内用途", "Freesound ID", "原始标题", "作者", "作品页",
+              "授权", "原始时长(s)", "使用时长(s)", "最终格式", "是否修改", "修改说明"]
+    with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        w.writerows(rows)
+
+    total = len(rows)
+    cc0 = sum(1 for r in rows if r["Freesound ID"])
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write("# 《记忆终会消散》音频素材授权登记表\n\n")
+        f.write("> 本项目全部音频素材均为 **CC0 1.0 Universal（公有领域贡献）**，"
+                "可商用、无署名义务。本表仅为溯源与合规审核留档。\n>\n")
+        f.write("> 共 %d 条：CC0 外部素材 %d 条，项目自有素材 %d 条。\n>\n"
+                % (total, cc0, total - cc0))
+        f.write("> 授权文本：https://creativecommons.org/publicdomain/zero/1.0/deed.zh\n\n")
+        f.write("生成方式：`python3 Tools/audio/fetch_cc0_sfx.py "
+                "--manifest Tools/audio/sfx_manifest.json --credits ThirdParty`\n"
+                "（数据来自 Freesound API + 磁盘实际文件，可复现）\n\n")
+
+        for sub, label in (("sfx", "一、音效 SFX"), ("bgm", "二、音乐 BGM"), ("amb", "三、环境音 AMB")):
+            group = [r for r in rows if r["类型"] == type_label[sub]]
+            if not group:
+                continue
+            f.write("## %s（%d 条）\n\n" % (label, len(group)))
+            f.write("| 文件名 | 用途 | Freesound ID | 原始标题 | 作者 | 原始时长 | 使用时长 | 修改说明 |\n")
+            f.write("|---|---|---|---|---|---|---|---|\n")
+            for r in group:
+                fid = ("[%s](%s)" % (r["Freesound ID"], r["作品页"])) if r["Freesound ID"] else "—"
+                f.write("| `%s` | %s | %s | %s | %s | %s | %s | %s |\n" % (
+                    r["文件名"], r["项目内用途"], fid,
+                    r["原始标题"] or "—", r["作者"] or "—",
+                    r["原始时长(s)"] or "—", r["使用时长(s)"], r["修改说明"]))
+            f.write("\n")
+
+    print(json.dumps({"status": "credits", "csv": csv_path, "md": md_path,
+                      "rows": total, "cc0": cc0}, ensure_ascii=False))
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--manifest")
@@ -297,6 +504,8 @@ def main():
     ap.add_argument("--ffmpeg", default=None)
     ap.add_argument("--token-file", default=DEFAULT_TOKEN_FILE)
     ap.add_argument("--report", default=None, help="把结果写成 JSON 报告")
+    ap.add_argument("--credits", default=None, metavar="OUT_DIR",
+                    help="生成 CC0 授权登记表（CSV + Markdown）到指定目录，不下载任何文件")
     args = ap.parse_args()
 
     if not args.manifest and not (args.query and args.name):
@@ -328,6 +537,10 @@ def main():
     if args.list is not None:
         for spec in specs:
             list_one(opener, token, spec, limit=args.list)
+        return
+
+    if args.credits:
+        write_credits(opener, token, ffmpeg, specs, args.credits)
         return
 
     for spec in specs:
