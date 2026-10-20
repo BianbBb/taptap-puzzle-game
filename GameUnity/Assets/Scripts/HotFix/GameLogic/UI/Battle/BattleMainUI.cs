@@ -52,6 +52,18 @@ namespace GameLogic
 		private const float ReflectionContinueBottom = 96f;
 		private const float ReflectionFadeInSeconds = 0.55f;
 		private const float ReflectionContinueFadeSeconds = 0.2f;
+
+		// 反思页专用打字节奏：对话系统是 100ms/字，这里贴近「LLM 流式输出」的观感 ——
+		// 基线略快 + 每字小抖动 + 每几个字卡一下 + 句读处停得久一点。
+		private const int ReflectionTypewriterMsPerChar = 30;
+		private const int ReflectionTypewriterJitterMs = 8;
+		private const int ReflectionTypewriterBurstMin = 4;
+		private const int ReflectionTypewriterBurstMax = 11;
+		private const int ReflectionTypewriterPauseMinMs = 90;
+		private const int ReflectionTypewriterPauseMaxMs = 220;
+		private const int ReflectionTypewriterPunctuationPauseMs = 240;
+		private const int ReflectionTypewriterMinStepMs = 12;
+		private const int ReflectionTypewriterSoundEvery = 6;
 		private static readonly Color ReflectionIconColor = new Color(0.28f, 0.22f, 0.16f, 0.8f);
 
 		// 反思页的输入/打字机状态：整屏点击或回车 = 跳过打字 → 再按一次继续。
@@ -1861,9 +1873,10 @@ namespace GameLogic
 		}
 
 		/// <summary>打字机音效节流：每 N 个字一次，跳过空白与标点，音调轻微随机避免机械重复。</summary>
-		private void PlayTypewriterTick(int charIndex, string text)
+		private void PlayTypewriterTick(int charIndex, string text, int everyChars = TYPEWRITER_SOUND_EVERY_CHARS)
 		{
-			if (charIndex % TYPEWRITER_SOUND_EVERY_CHARS != 0) return;
+			if (everyChars <= 0) return;
+			if (charIndex % everyChars != 0) return;
 			if (text == null || charIndex <= 0 || charIndex > text.Length) return;
 
 			char current = text[charIndex - 1];
@@ -2860,19 +2873,31 @@ namespace GameLogic
 			Canvas.ForceUpdateCanvases();
 			body.ForceMeshUpdate();
 			int total = body.textInfo.characterCount;
+			int burstLeft = NextReflectionBurstLength();
 			for (int i = 1; i <= total; i++)
 			{
 				if (IsDestroyed || version != m_reflectionPresentVersion) return;
 				if (!m_reflectionTyping) break;
 
 				body.maxVisibleCharacters = i;
-				PlayTypewriterTick(i, text);
-				int delayMs = TYPEWRITER_MS_PER_CHAR;
+				PlayTypewriterTick(i, text, ReflectionTypewriterSoundEvery);
+
+				// LLM 流式出来的字不是一个恒速：每字有小抖动，每几个字卡一下，句读处停得更久。
+				int delayMs = ReflectionTypewriterMsPerChar +
+					UnityEngine.Random.Range(-ReflectionTypewriterJitterMs, ReflectionTypewriterJitterMs + 1);
 				if (i - 1 < text.Length && IsTypewriterPunctuation(text[i - 1]))
 				{
-					delayMs += TYPEWRITER_PUNCTUATION_EXTRA_MS;
+					delayMs += ReflectionTypewriterPunctuationPauseMs;
+					burstLeft = NextReflectionBurstLength();
+				}
+				else if (--burstLeft <= 0)
+				{
+					delayMs += UnityEngine.Random.Range(ReflectionTypewriterPauseMinMs,
+						ReflectionTypewriterPauseMaxMs + 1);
+					burstLeft = NextReflectionBurstLength();
 				}
 
+				delayMs = Mathf.Max(ReflectionTypewriterMinStepMs, delayMs);
 				float remain = delayMs / 1000f;
 				while (remain > 0f)
 				{
@@ -2889,9 +2914,11 @@ namespace GameLogic
 			ShowReflectionContinueHint();
 		}
 
+		private static int NextReflectionBurstLength()
+			=> UnityEngine.Random.Range(ReflectionTypewriterBurstMin, ReflectionTypewriterBurstMax + 1);
+
 		/// <summary>跳过打字机：立刻出全文（若还在黑屏渐隐，也一并撤掉黑屏）。</summary>
-		private void SkipReflectionTyping()
-		{
+		private void SkipReflectionTyping()		{
 			m_reflectionTyping = false;
 			ClearReflectionCover();
 			if (m_reflectionBody != null)

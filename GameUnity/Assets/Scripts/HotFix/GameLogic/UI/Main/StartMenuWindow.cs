@@ -44,8 +44,8 @@ namespace GameLogic
 
 			SetItemState(m_btnContinue, m_tmpContinue, hasProgress);
 
-			// 图鉴入口依赖玩法内的数据上下文，本阶段先置灰。
-			SetItemState(m_btnGallery, m_tmpGallery, false);
+			// 图鉴读的是本机存档，不依赖当前对局，主菜单也能直接翻。
+			SetItemState(m_btnGallery, m_tmpGallery, true);
 
 			SetItemState(m_btnStart, m_tmpStart, true);
 			SetItemState(m_btnQuit, m_tmpQuit, true);
@@ -190,7 +190,7 @@ namespace GameLogic
 
 		private partial void OnClickGalleryBtn()
 		{
-			// 图鉴本阶段置灰，保留回调以便后续接独立界面。
+			GameModule.UIModule.ShowWindowAsync<CollectionWindow>();
 		}
 
 		private partial void OnClickQuitBtn()
