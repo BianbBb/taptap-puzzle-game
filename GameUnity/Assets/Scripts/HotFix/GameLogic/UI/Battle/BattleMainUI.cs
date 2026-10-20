@@ -40,6 +40,17 @@ namespace GameLogic
 		private static readonly Color HudPaperPanel = new Color(0.96f, 0.93f, 0.86f, 1f);
 		private static readonly Color HudPaperButton = new Color(0.93f, 0.82f, 0.62f, 1f);
 
+		// 物品栏（背包按钮）：空背包半透明，有物品时换成打开的包，并让 slot 与物品一起做呼吸缩放。
+		private const string ItemSlotBagClosedLocation = "dialogue_item_btn";
+		private const string ItemSlotBagOpenLocation = "dialogue_item_btn_open";
+		/// <summary>空背包的透明度，比有物品时淡一档，暗示「这里还没东西」。</summary>
+		private const float ItemSlotEmptyAlpha = 0.45f;
+		private const float ItemSlotItemSize = 62f;
+		/// <summary>物品图标相对 slot 中心的 Y 偏移（正值向上）。对齐到开口处。</summary>
+		private const float ItemSlotItemOffsetY = 34f;
+		private const float ItemSlotBreathAmplitude = 0.055f;
+		private const float ItemSlotBreathPeriod = 2.4f;
+
 		// 日终 AI 反思：整屏底图 + 纸面排版。底图与纸面区域是绑定的，换图时要同步 ReflectionPaperArea。
 		private const string ReflectionBackgroundLocation = "reflection_bg";
 		private static readonly Rect ReflectionPaperArea = new Rect(0.296f, 0f, 0.444f, 0.815f);
@@ -105,6 +116,10 @@ namespace GameLogic
 		private Image m_imgItemSlot;
 		private string m_itemSlotImageId;
 		private int m_itemSlotVersion;
+		private string m_itemSlotBagLocation;
+		private int m_itemSlotBagVersion;
+		private bool m_itemSlotHasItem;
+		private bool m_itemSlotBreathing;
 		private readonly NarrativeDomainService m_narrativeService = new NarrativeDomainService();
 		private readonly NarrativeActionService m_actionService = new NarrativeActionService();
 		private readonly NarrativeStoryScheduler m_storyScheduler = new NarrativeStoryScheduler();
@@ -260,6 +275,10 @@ namespace GameLogic
 			m_imgItemSlot = null;
 			m_itemSlotImageId = null;
 			m_itemSlotVersion++;
+			m_itemSlotBagLocation = null;
+			m_itemSlotBagVersion++;
+			m_itemSlotHasItem = false;
+			m_itemSlotBreathing = false;
 			DestroyEmergenceCutscene();
 			m_pendingEmergeEmotionIds.Clear();
 			if (m_overlay != null) UnityEngine.Object.Destroy(m_overlay);
@@ -469,10 +488,12 @@ namespace GameLogic
 			int presentVersion = m_dialoguePresentVersion;
 			RefreshNpcPortrait(story);
 			RefreshSceneBackground(story);
+			var enteredGrantedEmotions = new List<string>();
 			try
 			{
 				m_actionService.Execute(story.OnEnterActionIds,
-					NarrativeSaveData.Get.BuildTurnKey(story.Id) + "|node-enter");
+					NarrativeSaveData.Get.BuildTurnKey(story.Id) + "|node-enter",
+					null, true, enteredGrantedEmotions);
 				RefreshMemorySlots();
 				RefreshItemSlot();
 			}
@@ -482,6 +503,7 @@ namespace GameLogic
 				ShowOverlay("剧情动作错误", exception.Message, new[] { ("关闭", (Action)(() => DestroyOverlay())) });
 				return;
 			}
+
 			m_selectedReply = null;
 			m_selectedEmotionId = null;
 			m_hasReplied = false;
@@ -493,6 +515,19 @@ namespace GameLogic
 			SetDialoguePresentationMode(npcDialogue);
 			m_advanceClickPending = false;
 			SetDialogueAdvanceCatcherActive(true);
+
+			// 进节点就授予的情绪：先把过场播完再显示这句对白，否则会和打字机抢画面。
+			// 放在状态重置之后，中途被打断也不会留下上一次的选中态。
+			if (enteredGrantedEmotions.Count > 0)
+			{
+				for (int i = 0; i < enteredGrantedEmotions.Count; i++)
+					EnqueueEmergeCutscene(enteredGrantedEmotions[i]);
+
+				await PlayPendingEmergeCutscenesAsync();
+				if (IsDestroyed || presentVersion != m_dialoguePresentVersion)
+					return;
+			}
+
 			if (npcDialogue)
 				await PresentNpcSubtitleAsync(story, presentVersion);
 			else
@@ -689,6 +724,7 @@ namespace GameLogic
 						endWait == TypewriterWaitResult.Cancelled) return;
 				}
 				ExecuteNodeExitActions(saveData, story);
+				await PlayPendingEmergeCutscenesAsync();
 				saveData.AdvanceStoryNode(string.Empty, true);
 				m_currentStoryNode = null;
 				await ContinueAfterSessionAsync();
@@ -710,6 +746,7 @@ namespace GameLogic
 
 			string nextNodeId = story.DefaultNextNodeId;
 			ExecuteNodeExitActions(saveData, story);
+			await PlayPendingEmergeCutscenesAsync();
 			saveData.AdvanceStoryNode(nextNodeId, false);
 			StoryNodeConfig nextStory = NarrativeConfigMgr.Instance.GetStoryNode(nextNodeId);
 			if (nextStory == null)
@@ -1061,7 +1098,8 @@ namespace GameLogic
 			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
 			ApplyHudSprite(m_btnSettings != null ? m_btnSettings.image : null, "dialogue_menu_button", true, token);
 			ApplyHudSprite(m_btnEmoCollection != null ? m_btnEmoCollection.image : null, "dialogue_collection_btn", true, token);
-			ApplyHudSprite(m_btnItemCollection != null ? m_btnItemCollection.image : null, "dialogue_item_btn", true, token);
+			// 物品栏底图不写死：有物品用打开的包，没物品用关闭的包（半透明），统一走 RefreshItemSlot。
+			RefreshItemSlot();
 
 			if (m_scrollMessage != null)
 			{
@@ -1534,8 +1572,8 @@ namespace GameLogic
 			go.transform.SetParent(m_btnItemCollection.transform, false);
 			RectTransform rect = go.GetComponent<RectTransform>();
 			rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-			rect.sizeDelta = new Vector2(62f, 62f);
-			rect.anchoredPosition = new Vector2(0f, 15f);
+			rect.sizeDelta = new Vector2(ItemSlotItemSize, ItemSlotItemSize);
+			rect.anchoredPosition = new Vector2(0f, ItemSlotItemOffsetY);
 			m_imgItemSlot = go.GetComponent<Image>();
 			m_imgItemSlot.preserveAspect = true;
 			m_imgItemSlot.raycastTarget = false;
@@ -1549,7 +1587,9 @@ namespace GameLogic
 			IReadOnlyList<string> ids = NarrativeSaveData.Get.GetNarrativeItemIdsInStableOrder();
 			NarrativeItemConfig item = ids.Count == 0 ? null : NarrativeConfigMgr.Instance.GetNarrativeItem(ids[ids.Count - 1]);
 			string imageId = item == null ? null : item.ImageId;
-			if (string.IsNullOrWhiteSpace(imageId) || !GameModule.ResourceModule.CheckLocationValid(imageId))
+			bool hasItem = !string.IsNullOrWhiteSpace(imageId) && GameModule.ResourceModule.CheckLocationValid(imageId);
+			ApplyItemSlotBagVisual(hasItem);
+			if (!hasItem)
 			{
 				m_itemSlotImageId = null;
 				m_itemSlotVersion++;
@@ -1566,6 +1606,85 @@ namespace GameLogic
 				loaded.preserveAspect = true;
 				loaded.raycastTarget = false;
 			}, gameObject.GetCancellationTokenOnDestroy());
+		}
+
+		/// <summary>
+		/// 背包底图：有物品用「打开的包」+ 呼吸缩放，没物品用「关闭的包」+ 半透明。
+		/// 底图挂在按钮自身的 Image 上，因此缩放按钮就等于缩放整个 slot（含物品图标）。
+		/// </summary>
+		private void ApplyItemSlotBagVisual(bool hasItem)
+		{
+			m_itemSlotHasItem = hasItem;
+			Image bag = m_btnItemCollection != null ? m_btnItemCollection.image : null;
+			if (bag != null)
+			{
+				string location = hasItem ? ItemSlotBagOpenLocation : ItemSlotBagClosedLocation;
+				if (location == m_itemSlotBagLocation && bag.sprite != null)
+				{
+					bag.preserveAspect = true;
+					bag.raycastTarget = true;
+					bag.color = new Color(1f, 1f, 1f, hasItem ? 1f : ItemSlotEmptyAlpha);
+				}
+				else
+				{
+					m_itemSlotBagLocation = location;
+					int version = ++m_itemSlotBagVersion;
+					// 不能用 nativeSize：打开的包是 269x337，会顶大按钮，交给 preserveAspect 缩放进 slot。
+					bag.SetSprite(location, false, loaded =>
+					{
+						if (IsDestroyed || version != m_itemSlotBagVersion || loaded == null || loaded.sprite == null) return;
+						loaded.preserveAspect = true;
+						loaded.raycastTarget = true;
+						loaded.color = new Color(1f, 1f, 1f, m_itemSlotHasItem ? 1f : ItemSlotEmptyAlpha);
+					}, gameObject.GetCancellationTokenOnDestroy());
+				}
+			}
+
+			if (hasItem)
+			{
+				if (!m_itemSlotBreathing)
+				{
+					m_itemSlotBreathing = true;
+					RunItemSlotBreathingAsync(gameObject.GetCancellationTokenOnDestroy()).Forget();
+				}
+			}
+			else
+			{
+				StopItemSlotBreathing();
+			}
+		}
+
+		private void StopItemSlotBreathing()
+		{
+			m_itemSlotBreathing = false;
+			if (m_btnItemCollection != null)
+			{
+				m_btnItemCollection.transform.localScale = Vector3.one;
+			}
+		}
+
+		/// <summary>物品栏呼吸：1 → 1+amplitude 的正弦缩放，摆布局时不抖。</summary>
+		private async UniTaskVoid RunItemSlotBreathingAsync(CancellationToken token)
+		{
+			Transform target = m_btnItemCollection != null ? m_btnItemCollection.transform : null;
+			float time = 0f;
+			while (m_itemSlotBreathing && target != null && !token.IsCancellationRequested)
+			{
+				time += Time.unscaledDeltaTime;
+				float scale = 1f;
+				if (!m_layoutEditMode)
+				{
+					float phase = 0.5f - 0.5f * Mathf.Cos(time * Mathf.PI * 2f / ItemSlotBreathPeriod);
+					scale = 1f + ItemSlotBreathAmplitude * phase;
+				}
+				target.localScale = new Vector3(scale, scale, 1f);
+				await UniTask.Yield(PlayerLoopTiming.Update);
+			}
+
+			if (target != null)
+			{
+				target.localScale = Vector3.one;
+			}
 		}
 
 		private void ShowItems()
@@ -2193,8 +2312,13 @@ namespace GameLogic
 		private void ExecuteNodeExitActions(NarrativeSaveData saveData, StoryNodeConfig story)
 		{
 			if (story == null) return;
+			var grantedEmotions = new List<string>();
 			m_actionService.Execute(story.OnExitActionIds,
-				saveData.BuildTurnKey(story.Id) + "|node-exit", saveData);
+				saveData.BuildTurnKey(story.Id) + "|node-exit", saveData, true, grantedEmotions);
+			// 自动推进的节点（没有回复选项）不经过 CommitTurn，不会派发 EmotionEmerged，这里补入队；
+			// 真正的播放由调用方在推进/转场之前 await，避免被下一句或日终盖掉。
+			for (int i = 0; i < grantedEmotions.Count; i++)
+				EnqueueEmergeCutscene(grantedEmotions[i]);
 		}
 
 		private void EnterDayEnd()

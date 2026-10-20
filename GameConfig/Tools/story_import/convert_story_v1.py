@@ -480,11 +480,11 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
     # ---------- 1. 情绪表 ----------
     rep.h("情绪配置表")
     # 项目表只有 id/emotionName/displayColor；源表的 Name 列放的是英文 key，中文在 Description 列。
-    # 情绪表以「已上线的生产表」为准（名称/颜色都是策划调过的），源表只用来追加新情绪，
-    # 否则会把 E01 显示成 "understanding"、把已有颜色冲成默认灰。
+    # **成员以源表为准**（源表删掉的情绪就是真删，不再被生产表兜回来）；名称/颜色仍优先沿用
+    # 生产表里策划调过的值，否则会把 E02 显示成 "joyful"、把已有颜色冲成默认灰。
     fallback_colors = {
-        "E00": "#E6E6E6", "E01": "#F5C6CB", "E02": "#CDE7F0", "E03": "#D7D3E8",
-        "E04": "#D5E8D4", "E05": "#FCE5CD",
+        "E00": "#E6E6E6", "E02": "#CDE7F0", "E03": "#D7D3E8",
+        "E04": "#D5E8D4", "E06": "#FCE5CD", "E07": "#EDE0D4",
     }
     prod_emo = {}   # id -> (name, color)
     prod_emo_path = DATAS_DIR / "情绪配置表.xlsx"
@@ -519,8 +519,10 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
         rep.note("EMOTION_NEW", f"新增情绪 {extra}（源表有、生产表无），需补颜色与 UI 图标")
     dropped = [i for i in prod_emo if i not in {e[0] for e in emo_out}]
     if dropped:
-        rep.warn("EMOTION_ORPHAN",
-                 f"生产表有但源表没有的情绪 {dropped} —— 保留在表里，避免旧存档/旧节点引用断链")
+        rep.warn("EMOTION_DROPPED",
+                 f"生产表有、源表已删除的情绪 {dropped}（如 {[prod_emo[i][0] for i in dropped]}）——"
+                 f"按源表为准**已从导出结果移除**；旧存档里已拥有的这些情绪不会报错，"
+                 f"只是不再出现在图鉴里（图鉴按配置表遍历）")
 
     # ---------- 2. 记忆表 ----------
     rep.h("记忆配置表")
@@ -642,6 +644,11 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
             cell_str(r[col(act_h, "TargetID")]),
             cell_str(r[col(act_h, "InputValue")]),
         ])
+    grant_emo = [(a[0], a[2]) for a in act_out if a[1].strip().lower() == "grantemotion"]
+    if grant_emo:
+        rep.note("ACTION_GRANT_EMOTION",
+                 f"GrantEmotion 动作 {grant_emo}：TargetID 填的是**情绪 ID**（不是物品），"
+                 f"运行时由 NarrativeActionService 白名单放行，并走 EmotionEmerged 演出链路")
 
     # ---------- 5. 回复选项表 ----------
     rep.h("回复选项配置表")

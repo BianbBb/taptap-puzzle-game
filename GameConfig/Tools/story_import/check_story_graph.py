@@ -55,6 +55,7 @@ class StoryGraph:
         self.node_items = {}     # nid -> [itemId]  进入/离开该节点时发放的物品
         self.mem_emotions = {}   # mid -> [emotionId]   记忆标注的情绪（涌现的来源）
         self.emotions = {}       # eid -> name
+        self.granted_emotions = {}   # eid -> [nid]   剧情动作直接授予的情绪（不靠记忆涌现）
         self.all_memories = set()
         self.source_label = ""
 
@@ -521,17 +522,24 @@ def _load_items_luban(datas_dir, g, sheet_rows):
 
     ah, ar = sheet_rows("叙事动作配置表.xlsx")
     action_item = {}
+    action_emotion = {}
     for r in ar:
         aid = _cs(r[_idx(ah, "id")]) if _idx(ah, "id") >= 0 else ""
         if not aid:
             continue
-        if _cs(_g(r, ah, "actionType")).lower() == "grantitem":
+        atype = _cs(_g(r, ah, "actionType")).lower()
+        if atype == "grantitem":
             action_item[aid] = _cs(_g(r, ah, "targetId"))
+        elif atype == "grantemotion":
+            action_emotion[aid] = _cs(_g(r, ah, "targetId"))
     for nid, n in g.nodes.items():
         ids = _list(n.get("_enterActions")) + _list(n.get("_exitActions"))
         items = [action_item[a] for a in ids if a in action_item]
         if items:
             g.node_items[nid] = items
+        for a in ids:
+            if a in action_emotion:
+                g.granted_emotions.setdefault(action_emotion[a], []).append(nid)
 
 
 def load_source(path):
@@ -612,19 +620,26 @@ def load_source(path):
     # ---- 物品 / 部件 / 动作（记忆的主要来源路径）----
     _load_items_source(wb, g)
     action_item = {}
+    action_emotion = {}
     if "Action" in wb.sheetnames:
         ah, ar = _rows(wb, "Action")
         for r in ar:
             aid = _cs(r[_idx(ah, "ActionID")])
             if not aid:
                 continue
-            if _cs(_g(r, ah, "ActionType")).lower() == "grantitem":
+            atype = _cs(_g(r, ah, "ActionType")).lower()
+            if atype == "grantitem":
                 action_item[aid] = _cs(_g(r, ah, "TargetID"))
+            elif atype == "grantemotion":
+                action_emotion[aid] = _cs(_g(r, ah, "TargetID"))
     for nid, n in g.nodes.items():
         ids = _list(n.get("_enterActions")) + _list(n.get("_exitActions"))
         items = [action_item[a] for a in ids if a in action_item]
         if items:
             g.node_items[nid] = items
+        for a in ids:
+            if a in action_emotion:
+                g.granted_emotions.setdefault(action_emotion[a], []).append(nid)
 
     rh, rr = _rows(wb, "EmotionMemoryRule")
     for r in rr:
@@ -1176,10 +1191,13 @@ def analyze(g):
     #   ≥2 段已拥有记忆的 EmotionCardSet 含同一情绪 -> 该情绪涌现（解锁）
     ownable = satisfiable | item_mems
     emergent, emergent_detail = g.emergent_emotions(sorted(ownable))
+    # 剧情动作（GrantEmotion）直接授予的情绪不依赖记忆涌现，也算能解锁。
+    scripted = dict(g.granted_emotions)
+    unlocked = set(emergent) | set(scripted)
     emo_refs = g.emotion_refs()
-    if g.mem_emotions and g.emotions:
-        r.title("情绪涌现（≥2 段记忆标注同一情绪即解锁）")
-        r.text("\n| 情绪 | 名称 | 标注它的可得记忆 | 能否涌现 | 允许表达它的选项 |")
+    if (g.mem_emotions or scripted) and g.emotions:
+        r.title("情绪解锁（≥2 段记忆标同一情绪即涌现 / 或剧情动作直接授予）")
+        r.text("\n| 情绪 | 名称 | 标注它的可得记忆 | 解锁方式 | 允许表达它的选项 |")
         r.text("|---|---|---|---|---|")
         dead_emo_ref = []
         for eid in sorted(g.emotions):
@@ -1188,33 +1206,40 @@ def analyze(g):
             mems = [m for m in g.all_memories
                     if eid in (g.mem_emotions.get(m) or []) and m in ownable]
             can = len(mems) >= 2
+            if can:
+                how = "✅ 记忆涌现"
+            elif eid in scripted:
+                how = f"✅ 剧情授予（{','.join(scripted[eid])}）"
+            else:
+                how = "❌ 永不涌现"
             refs = emo_refs.get(eid, [])
             r.text(f"| {eid} | {g.emotions.get(eid, '')} | {len(mems)} 条"
                    f"{'（' + ','.join(sorted(mems)) + '）' if mems else ''} | "
-                   f"{'✅ 可涌现' if can else '❌ 永不涌现'} | {','.join(refs) or '—'} |")
-            if refs and not can:
+                   f"{how} | {','.join(refs) or '—'} |")
+            if refs and eid not in unlocked:
                 dead_emo_ref.append((eid, refs, len(mems)))
         if dead_emo_ref:
             for eid, refs, cnt in dead_emo_ref:
                 r.bad(f"情绪 {eid}({g.emotions.get(eid, '')}) 被 {','.join(refs)} 允许表达，"
-                      f"但只有 {cnt} 段记忆标注它，永远达不到 ≥2 的涌现条件 —— "
+                      f"但只有 {cnt} 段记忆标注它、也没有剧情动作授予，"
+                      f"永远达不到 ≥2 的涌现条件 —— "
                       f"这些选项的「{g.emotions.get(eid, '')}」表达分支永远走不到")
         else:
-            r.ok("所有被选项引用为可表达情绪的情绪都能涌现")
+            r.ok("所有被选项引用为可表达情绪的情绪都能解锁")
 
         # 允许表达的情绪里，实际能拿到几个
         if emo_refs:
             r.text("\n**选项 × 可表达情绪**（allowedEmotion 只是「允许」，"
-                   "实际能选到的只有已涌现的那几个）\n")
+                   "实际能选到的只有已解锁的那几个）\n")
             r.text("| Option | 允许表达 | 实际可表达 | 备注 |")
             r.text("|---|---|---|---|")
             for oid, o in sorted(g.options.items()):
                 allowed = o.get("emo") or []
                 if not allowed:
                     continue
-                usable = [e for e in allowed if e in emergent]
-                missing = [e for e in allowed if e not in emergent]
-                note = f"缺 {','.join(missing)}（不涌现）" if missing else "全部可用"
+                usable = [e for e in allowed if e in unlocked]
+                missing = [e for e in allowed if e not in unlocked]
+                note = f"缺 {','.join(missing)}（不解锁）" if missing else "全部可用"
                 r.text(f"| {oid} | {','.join(allowed)} | "
                        f"{','.join(usable) or '—'} | {note} |")
 

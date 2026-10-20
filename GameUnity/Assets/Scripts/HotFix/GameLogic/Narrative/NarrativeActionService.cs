@@ -4,11 +4,23 @@ using GameProto;
 
 namespace GameLogic
 {
-    /// <summary>执行配置白名单内的叙事物品动作，并用存档键保证重载幂等。</summary>
+    /// <summary>
+    /// 执行配置白名单内的叙事动作（物品增删 / 情绪授予），并用存档键保证重载幂等。
+    /// </summary>
     public sealed class NarrativeActionService
     {
+        private const string GrantItemAction = "GrantItem";
+        private const string RemoveItemAction = "RemoveItem";
+        private const string GrantEmotionAction = "GrantEmotion";
+
+        /// <summary>
+        /// <paramref name="grantedEmotions"/> 不为 null 时，把本次**新授予**的情绪 ID 追加进去。
+        /// 情绪只写内存态（不落盘），落盘与演出时机由调用方决定：
+        /// CommitTurn 会把它并进涌现列表走 <c>EmotionEmerged</c>；UI 路径则自己触发过场。
+        /// </summary>
         public bool Execute(IReadOnlyList<string> actionIds, string executionKey,
-            NarrativeSaveData saveData = null, bool saveImmediately = true)
+            NarrativeSaveData saveData = null, bool saveImmediately = true,
+            List<string> grantedEmotions = null)
         {
             if (actionIds == null || actionIds.Count == 0)
                 return false;
@@ -26,22 +38,41 @@ namespace GameLogic
                 if (action == null)
                     throw new InvalidOperationException($"Narrative action does not exist: {id}");
 
-                bool supported = string.Equals(action.ActionType, "GrantItem", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(action.ActionType, "RemoveItem", StringComparison.OrdinalIgnoreCase);
-                if (!supported)
+                bool isItemAction = IsType(action.ActionType, GrantItemAction) ||
+                    IsType(action.ActionType, RemoveItemAction);
+                bool isEmotionAction = IsType(action.ActionType, GrantEmotionAction);
+                if (!isItemAction && !isEmotionAction)
                     throw new InvalidOperationException($"Unsupported narrative action type: {action.ActionType}");
-                if (!config.HasNarrativeItem(action.TargetId))
+
+                // GrantEmotion 的 TargetId 是情绪 ID，不是物品 ID，校验要分开走。
+                if (isItemAction && !config.HasNarrativeItem(action.TargetId))
                     throw new InvalidOperationException($"Narrative action {id} references unknown item {action.TargetId}.");
+                if (isEmotionAction && !config.HasEmotion(action.TargetId))
+                    throw new InvalidOperationException($"Narrative action {id} references unknown emotion {action.TargetId}.");
+
                 actions.Add(action);
             }
 
             foreach (NarrativeActionConfig action in actions)
+            {
+                if (IsType(action.ActionType, GrantEmotionAction))
+                {
+                    List<string> added = saveData.AddEmotionsWithoutSaving(new[] { action.TargetId });
+                    if (added.Count > 0)
+                        grantedEmotions?.Add(added[0]);
+                    continue;
+                }
+
                 saveData.ApplyNarrativeItemActionWithoutSaving(action.ActionType, action.TargetId);
+            }
 
             saveData.MarkActionKeyWithoutSaving(executionKey);
             if (saveImmediately)
                 saveData.Save();
             return true;
         }
+
+        private static bool IsType(string actionType, string expected)
+            => string.Equals(actionType, expected, StringComparison.OrdinalIgnoreCase);
     }
 }

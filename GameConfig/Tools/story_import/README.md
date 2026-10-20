@@ -75,7 +75,7 @@ Session 之间只能靠 `nextSessionId` 单链推进（`NarrativeStoryScheduler`
 |---|---|---|
 | `ItemPart` 无 hotspot 坐标 | 部件热点统一填 0.5/0.5（画面正中） | **本版不处理**，后续在 prefab 里重标 |
 | `Emotion.Description` / `Memory.ImageID` | 项目表无对应字段，丢弃 | 当前无影响（配图均为 placeholder） |
-| 情绪 `E06 怀念` / `E07 自我` 源表无颜色 | 已填默认 `#E6E6E6` | 需美术补 `displayColor` 与 UI 图标 |
+| 情绪 `E06 怀念` / `E07 自我` 源表无颜色 | 已填占位色 `#FCE5CD` / `#EDE0D4` | 需美术确认真实 `displayColor` 与 UI 图标 |
 | `M98` / `M99` 初始记忆没有产出途径 | 规则 `R01` 前置 `M99`，永远不触发 | 开局自带记忆要在代码里显式发放，或给它们一个部件/规则来源 |
 
 已解决的问题，转换器会自动处理，不再列为缺口：
@@ -84,10 +84,43 @@ Session 之间只能靠 `nextSessionId` 单链推进（`NarrativeStoryScheduler`
 - **Session 背景**：源表 `BackGroundID` 映射到现有 5 套场景（`scene_shop_old` / `scene_shop_new` / `scene_zhou` / `scene_chenguo` / `scene_father`），
   映射表在 `BACKGROUND_MAP`。新图补齐后，在 `BACKGROUND_MAP` 和 `BattleMainUI.TryResolveBackgroundLocations` 同步加键即可，不用改逻辑。
 - **好感门槛自然语言**：`需要好感 5点` 这类写法自动转成项目支持的数值表达式，见下节。
-- **情绪表不整体覆盖**：源表 `Emotion` 的 `Name` 列放的是英文 key（`understanding` / `nostalgic`），
+- **情绪表成员以源表为准、名称/颜色沿生产表**：源表 `Emotion` 的 `Name` 列放的是英文 key（`understanding` / `nostalgic`），
   中文在 `Description` 列。直接按 `Name` 写入会让 UI 显示英文、并冲掉策划调好的颜色。
-  转换器改为**以生产表为基准**：已有 ID 保留原名与原色，只追加源表新增的 ID。
+  所以：**成员（有哪些情绪）按源表出**——源表删掉的情绪就是真删，不会再被生产表兜回来；
+  已有 ID 保留生产表的名称与颜色，只给源表新增的 ID 填默认色。
 - **对应表编号翻译**：见下节 `CORR_TO_SRC_MEMORY`。
+
+## 当前情绪口径（V1.0 定稿）
+
+只保留 5 个可玩情绪 + `E00 无情绪`：
+
+| ID | 名称 | 颜色 | 解锁方式 |
+|---|---|---|---|
+| E02 | 喜悦 | `#CDE7F0` | 记忆涌现（M02/M12/M18） |
+| E03 | 失落 | `#D7D3E8` | 记忆涌现（M05/M11/M13/M14/M15） |
+| E04 | 好奇 | `#D5E8D4` | 记忆涌现（M01/M03/M07/M08/M16） |
+| E06 | 怀念 | `#FCE5CD` | 记忆涌现（M04/M06/M09/M10/M17/M19） |
+| E07 | 自我 | `#EDE0D4` | **剧情动作授予**：`T0806` 离开时 `GRANT_EMOTION_SELF` |
+| E00 | 无情绪 | `#E6E6E6` | 不是可玩情绪，代表「这一句不表达情绪」 |
+
+`E01 理解`、`E05 珍惜` 已从源表删除（2026-10-20），转换器不再输出。
+
+### 情绪可以不走记忆涌现：`GrantEmotion` 动作
+
+`自我` 这种「剧情推进到某句台词才出现」的情绪，靠 `≥2 段记忆标同一情绪` 永远到不了。
+用动作表新增的 `GrantEmotion` 直接授予：
+
+| ActionID | ActionType | TargetID | 说明 |
+|---|---|---|---|
+| `GRANT_EMOTION_SELF` | `GrantEmotion` | `E07` | 第八幕「【我】是谁？」之后涌现「自我」 |
+
+- **`TargetID` 填的是情绪 ID，不是物品 ID**（`GrantItem`/`RemoveItem` 才填物品）。
+- 挂 `Turn.OnExitActionSetID` 最稳：`CommitTurn` 会把动作授予的情绪并进涌现列表，
+  走已有的 `EmotionEmerged` 事件 + 黑底过场，和记忆涌现完全同一条演出链路。
+- 自动推进节点（没有回复选项、不经过 `CommitTurn`）由 `BattleMainUI.AutoAdvanceStoryNodeAsync`
+  在推进前 `await PlayPendingEmergeCutscenesAsync()` 补播。
+- 挂 `OnEnter` 也支持：`PresentStoryNodeAsync` 会先播完过场再显示这句对白。
+- `E07` 没有记忆来源，过场只有情绪圆、没有左右两张记忆图（`GetMemorySourcesForEmotion` 返回空）。
 
 ## ⚠️ 导入前必查：记忆 ID 语义冲突
 

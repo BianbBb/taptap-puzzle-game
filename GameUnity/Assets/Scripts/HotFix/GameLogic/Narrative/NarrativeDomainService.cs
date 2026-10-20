@@ -165,8 +165,10 @@ namespace GameLogic
                 saveData.SetAffectionWithoutSaving(change.Key, change.Value.After);
 
             ValidateRewardMemories(reply.RewardMemory);
-            m_actionService.Execute(node.OnExitActionIds, turnKey + "|node-exit", saveData, false);
-            m_actionService.Execute(reply.ActionIds, turnKey + "|reply", saveData, false);
+            // 动作里可能带 GrantEmotion：先收集，等涌现扫描后一起派发，演出顺序才和记忆涌现一致。
+            var actionGrantedEmotions = new List<string>();
+            m_actionService.Execute(node.OnExitActionIds, turnKey + "|node-exit", saveData, false, actionGrantedEmotions);
+            m_actionService.Execute(reply.ActionIds, turnKey + "|reply", saveData, false, actionGrantedEmotions);
             List<string> addedMemories = saveData.AddMemoriesWithoutSaving(reply.RewardMemory);
 
             // 图鉴情绪圆的直径取这个计数，必须在 ApplyTurnState（唯一落盘点）之前累加。
@@ -183,6 +185,13 @@ namespace GameLogic
             }
 
             List<string> emergedEmotions = FindEmergentEmotions(saveData);
+            // 动作直接授予的情绪（如第八幕「自我」）没有记忆来源，靠这里并进涌现列表统一派发。
+            foreach (string grantedEmotionId in actionGrantedEmotions)
+            {
+                if (!emergedEmotions.Contains(grantedEmotionId))
+                    emergedEmotions.Add(grantedEmotionId);
+            }
+
             saveData.AddEmotionsWithoutSaving(emergedEmotions);
 
             saveData.ApplyTurnState(node.NpcId, affectionAfter, nextNodeId, turnKey,
