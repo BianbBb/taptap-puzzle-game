@@ -95,7 +95,7 @@ public partial class GameStart
 
     private static void StartGame()
     {
-        GameModule.UIModule.ShowWindow<MainWindow>();
+        GameModule.UIModule.ShowWindow<TitleWindow>();
     }
 
     private static void OnDestroy()

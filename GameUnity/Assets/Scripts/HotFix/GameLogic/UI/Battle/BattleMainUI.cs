@@ -3623,8 +3623,9 @@ namespace GameLogic
 
 		private void ReturnToMainMenu()
 		{
+			// 对局内“返回标题”回到抽屉式开始界面（StartMenuWindow），不再回旧的 MainWindow。
 			GameModule.UIModule.CloseWindow<BattleMainUI>();
-			GameModule.UIModule.ShowWindowAsync<MainWindow>();
+			GameModule.UIModule.ShowWindowAsync<StartMenuWindow>();
 		}
 
 		#region 事件
