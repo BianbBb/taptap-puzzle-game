@@ -16,12 +16,6 @@ namespace GameLogic
 		private static readonly Color ItemHoverColor = new Color(0.29f, 0.20f, 0.15f, 1f);
 		private static readonly Color ItemDisabledColor = new Color(0.96f, 0.89f, 0.74f, 0.35f);
 
-		/// <summary>
-		/// 高亮条贴图的 pivot 比条形本身的视觉中心低 8px（原图 1672 基准），
-		/// 换算到 1920 画布是 9.19。不做补偿的话条会整体偏上约 9px。
-		/// </summary>
-		private const float HighlightPivotBiasY = -9.19f;
-
 		private bool m_hoverBound;
 		private TextMeshProUGUI m_hoverLabel;
 
@@ -131,15 +125,16 @@ namespace GameLogic
 
 			m_imgHighlight.gameObject.SetActive(true);
 
-			// 高亮条与四个按钮是同一个父节点下的兄弟，锚点统一为「屏幕中心 + pivot 中心」，
-			// 所以直接复用按钮的 anchoredPosition 即可对齐。两边锚点若改成不一致，
-			// 这里会错位 —— 保持同一套锚点是这套做法成立的前提。
-			// 注意：高亮图的倾斜已经烘进贴图里，Image 自身的 Z 旋转必须保持 0，
-			// 倾斜角度只由四个按钮 / 文字自己的 Z 旋转（5.7°）决定。
+			// 高亮条与四个按钮同属 MenuGroup 容器，容器的 Z 旋转（5.7°）统一承担整体倾斜，
+			// 容器内部是一套「正的」坐标系：行与行之间只有纵向间距，没有任何旋转与投影换算。
+			// 所以这里只要把高亮条搬到目标行的位置即可；两者宽度不同时按右边缘对齐
+			// （参考图里条的右端略长于文字，左端出画）。高亮贴图本身是平的长方形，
+			// 它的倾斜完全来自父级容器，千万不要再给这个 Image 单独设 Z 旋转。
 			RectTransform highlightRect = m_imgHighlight.rectTransform;
-			Vector2 target = itemRect.anchoredPosition;
-			target.y += HighlightPivotBiasY;
-			highlightRect.anchoredPosition = target;
+			float rightAlignOffset = (itemRect.rect.width - highlightRect.rect.width) * 0.5f;
+			highlightRect.anchoredPosition = new Vector2(
+				itemRect.anchoredPosition.x + rightAlignOffset,
+				itemRect.anchoredPosition.y);
 
 			m_hoverLabel = button.GetComponentInChildren<TextMeshProUGUI>(true);
 			if (m_hoverLabel != null)
