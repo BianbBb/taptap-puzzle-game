@@ -406,7 +406,9 @@ namespace GameLogic
 
 			texture.SetPixels32(pixels);
 			texture.Apply(false, true);
-			s_emergeCircleSprite = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f);
+			// 纹理已设为不可读，必须显式 FullRect，否则 Tight 网格会退化成整块并打警告。
+			s_emergeCircleSprite = Sprite.Create(texture, new Rect(0f, 0f, size, size),
+				new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
 			s_emergeCircleSprite.name = "MemoryEmergeCircle";
 			return s_emergeCircleSprite;
 		}
