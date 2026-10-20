@@ -24,6 +24,7 @@
     { "name": "sfx_memory_get",      "query": "crystal",          "freesound_id": 846190, "min_duration": 0.20, "max_duration": 1.0, "note": "记忆飞入起飞" },
     { "name": "sfx_memory_land",     "query": "pillow flump",     "freesound_id": 728541, "min_duration": 0.10, "max_duration": 0.70, "note": "记忆落槽（枕头闷落，不是石头）" },
     { "name": "sfx_memory_delete",   "query": "puff of smoke",    "freesound_id": 714257, "min_duration": 0.15, "max_duration": 0.80, "note": "删除记忆（噗一声消散，不是撕裂）" },
+    { "name": "sfx_memory_break",    "query": "bubble pop",        "freesound_id": 744140, "min_duration": 0.05, "max_duration": 0.50, "via": "workshop", "note": "记忆破碎（长按满 1 秒那一下）｜由 sfx_story_option_appear 同源 bubble pop 升 3 半音（asetrate 1.1892）+ 40ms 尾淡出派生，0.19s；不重新下载，授权沿用 744140" },
     { "name": "sfx_memory_overflow", "query": "soft piano chord", "freesound_id": 536549, "min_duration": 0.20, "max_duration": 3.0, "via": "workshop", "note": "记忆溢出｜工坊指定：Kalimba C3" },
     { "name": "sfx_memory_locked",   "query": "wood knock",       "freesound_id": 478212, "min_duration": 0.05, "max_duration": 0.50, "note": "记忆锁定的回复" },
 

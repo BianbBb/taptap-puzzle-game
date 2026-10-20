@@ -48,7 +48,7 @@
     "id": "M06",
     "memoryName": "钟表记忆3",
     "description": "上弦孔口有些锈了，大概很久没用过了",
-    "imageId": "",
+    "imageId": "mem_clock_stopped",
     "emotionCardSet": [
       "E06"
     ]
@@ -57,7 +57,7 @@
     "id": "M07",
     "memoryName": "相机记忆3",
     "description": "也不知道那些映着街坊笑颜的胶片现在在哪，保存可还完好。",
-    "imageId": "",
+    "imageId": "mem_camera_film",
     "emotionCardSet": [
       "E04"
     ]
@@ -75,7 +75,7 @@
     "id": "M09",
     "memoryName": "钟表记忆2",
     "description": "指针停着，但老周说，这钟要是走起来，嘀嗒声在夜里会特别清晰",
-    "imageId": "",
+    "imageId": "mem_clock_bells",
     "emotionCardSet": [
       "E06"
     ]
@@ -84,7 +84,7 @@
     "id": "M10",
     "memoryName": "娃娃记忆1",
     "description": "一个脏兮兮的小猫玩偶，头顶有些开线，漏出了一些棉花，看起来也已经跟了她不少年头",
-    "imageId": "",
+    "imageId": "mem_doll_token",
     "emotionCardSet": [
       "E06"
     ]
@@ -93,7 +93,7 @@
     "id": "M11",
     "memoryName": "娃娃记忆2",
     "description": "右脚底的布料已经有些松脱，露出了里面用以填充的棉花，有针脚修补过的痕迹，陈果说她试着修过，但结果不尽人意。",
-    "imageId": "",
+    "imageId": "mem_doll_repair",
     "emotionCardSet": [
       "E03"
     ]
@@ -102,7 +102,7 @@
     "id": "M12",
     "memoryName": "娃娃记忆3",
     "description": "玩偶腹部的布料有被拆开又缝合的痕迹，在玩偶内部检测出纸质物件。",
-    "imageId": "",
+    "imageId": "mem_doll_words",
     "emotionCardSet": [
       "E02"
     ]
@@ -111,7 +111,7 @@
     "id": "M13",
     "memoryName": "收录机记忆1",
     "description": "一个旧收音机，磁带仓盖卡死，无法打开",
-    "imageId": "",
+    "imageId": "mem_radio_tape",
     "emotionCardSet": [
       "E03"
     ]
@@ -120,7 +120,7 @@
     "id": "M14",
     "memoryName": "收录机记忆2",
     "description": "电源线断了，无法启动",
-    "imageId": "",
+    "imageId": "mem_radio_cord",
     "emotionCardSet": [
       "E03"
     ]
@@ -129,7 +129,7 @@
     "id": "M15",
     "memoryName": "收录机记忆3",
     "description": "电池轻度漏液，电池框有腐蚀迹象",
-    "imageId": "",
+    "imageId": "mem_radio_battery",
     "emotionCardSet": [
       "E03"
     ]
@@ -138,7 +138,7 @@
     "id": "M16",
     "memoryName": "收录机记忆4",
     "description": "磁带放置处有磁带内置，具体内容无法检测",
-    "imageId": "",
+    "imageId": "mem_radio_dusty",
     "emotionCardSet": [
       "E04"
     ]
@@ -147,7 +147,7 @@
     "id": "M17",
     "memoryName": "娃娃记忆4",
     "description": "我以前也修过这样的娃娃，只是……那都是很久以前的事了。",
-    "imageId": "",
+    "imageId": "mem_doll_words",
     "emotionCardSet": [
       "E06"
     ]
@@ -156,7 +156,7 @@
     "id": "M18",
     "memoryName": "磁带记忆1",
     "description": "你知道吗？我们等了你好久啊，你在你妈妈肚子里待了十个月，今天早上六点零七分出生的。六斤八两。护士抱过来的时候我不敢接，还是你妈妈接过去的。你哭了，哭得好大声啊，肺活量特别厉害，以后肯定健健康康的。",
-    "imageId": "",
+    "imageId": "mem_tape_first",
     "emotionCardSet": [
       "E02"
     ]
@@ -165,7 +165,7 @@
     "id": "M19",
     "memoryName": "磁带记忆2",
     "description": "磁带上贴着2017年3月25日的时间条，大概是磁带被录下时的时间。",
-    "imageId": "",
+    "imageId": "mem_tape_replay",
     "emotionCardSet": [
       "E06"
     ]

@@ -100,7 +100,8 @@ namespace GameLogic
 		private readonly List<Image> m_memorySlotLabelBacks = new List<Image>();
 		private readonly List<int> m_memorySlotVersions = new List<int>();
 		private readonly List<TextMeshProUGUI> m_memorySlotLabels = new List<TextMeshProUGUI>();
-		private readonly List<Button> m_memoryDeleteButtons = new List<Button>();
+		/// <summary>槽位右上角的删除热区。不是 Button：删除要靠「按住 1 秒」，交给 EventTrigger 收按下/抬起。</summary>
+		private readonly List<Image> m_memoryDeleteHitAreas = new List<Image>();
 		private RectTransform m_memoryTooltip;
 		private TextMeshProUGUI m_memoryTooltipName;
 		private TextMeshProUGUI m_memoryTooltipDescription;
@@ -264,7 +265,12 @@ namespace GameLogic
 			m_memorySlotThumbs.Clear();
 			m_memorySlotVersions.Clear();
 			m_memorySlotLabels.Clear();
-			m_memoryDeleteButtons.Clear();
+			m_memoryDeleteHitAreas.Clear();
+			m_memoryCleanupHint = null;
+			m_memoryCleanupHintGroup = null;
+			m_memoryCleanupHintVersion++;
+			m_memoryDeleteHoldVersion++;
+			m_memoryDeleteHolding = false;
 			m_memoryTooltip = null;
 			m_memoryTooltipName = null;
 			m_memoryTooltipDescription = null;
@@ -1162,7 +1168,7 @@ namespace GameLogic
 			m_memorySlotThumbs.Clear();
 			m_memorySlotVersions.Clear();
 			m_memorySlotLabels.Clear();
-			m_memoryDeleteButtons.Clear();
+			m_memoryDeleteHitAreas.Clear();
 			if (m_scrollMemoryList == null || m_scrollMemoryList.content == null)
 			{
 				return;
@@ -1212,7 +1218,7 @@ namespace GameLogic
 				m_memorySlotLabelBacks.RemoveAt(last);
 				m_memorySlotVersions.RemoveAt(last);
 				m_memorySlotLabels.RemoveAt(last);
-				m_memoryDeleteButtons.RemoveAt(last);
+				m_memoryDeleteHitAreas.RemoveAt(last);
 				slot.SetActive(false);
 				UnityEngine.Object.Destroy(slot);
 			}
@@ -1220,9 +1226,14 @@ namespace GameLogic
 			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
 			for (int i = m_memorySlotLabels.Count; i < count; i++)
 			{
-				var slot = new GameObject("MemorySlot" + i, typeof(RectTransform), typeof(Image));
+				var slot = new GameObject("MemorySlot" + i, typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
 				slot.transform.SetParent(content, false);
 				slot.transform.SetAsFirstSibling();
+				// CanvasGroup 给破碎动画用：整卡（底图 + 缩略图 + 名字 + 删除叉）一起淡出。
+				CanvasGroup slotGroup = slot.GetComponent<CanvasGroup>();
+				slotGroup.alpha = 1f;
+				slotGroup.blocksRaycasts = true;
+				slotGroup.interactable = true;
 				RectTransform slotRect = slot.GetComponent<RectTransform>();
 				slotRect.sizeDelta = new Vector2(78f, 78f);
 				Image slotImage = slot.GetComponent<Image>();
@@ -1281,7 +1292,8 @@ namespace GameLogic
 				var exit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
 				exit.callback.AddListener(_ => HideMemoryTooltip(slotIndex));
 				hover.triggers.Add(exit);
-				var delete = new GameObject("Delete", typeof(RectTransform), typeof(Image), typeof(Button));
+				// 删除热区：不是 Button —— 删除要「按住 1 秒」才生效，按下即开始抖，抬起/移出即取消。
+				var delete = new GameObject("Delete", typeof(RectTransform), typeof(Image));
 				delete.transform.SetParent(slot.transform, false);
 				RectTransform deleteRect = delete.GetComponent<RectTransform>();
 				deleteRect.anchorMin = deleteRect.anchorMax = Vector2.one;
@@ -1290,10 +1302,15 @@ namespace GameLogic
 				deleteRect.sizeDelta = new Vector2(30f, 30f);
 				Image deleteHitArea = delete.GetComponent<Image>();
 				deleteHitArea.color = new Color(1f, 1f, 1f, 0.001f);
-				Button deleteButton = delete.GetComponent<Button>();
-				deleteButton.transition = Selectable.Transition.None;
-				deleteButton.targetGraphic = deleteHitArea;
-				deleteButton.onClick.AddListener(() => DeleteMemoryFromSlot(slotIndex));
+				EventTrigger holdTrigger = delete.AddComponent<EventTrigger>();
+				var deleteDown = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
+				deleteDown.callback.AddListener(_ => BeginMemoryDeleteHold(slotIndex));
+				holdTrigger.triggers.Add(deleteDown);
+				var deleteUp = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
+				deleteUp.callback.AddListener(_ => CancelMemoryDeleteHold(slotIndex));
+				holdTrigger.triggers.Add(deleteUp);
+				// 不监听 PointerExit：卡片抖动会让热区自己跟着摆，移出就取消的话长按可能永远走不完。
+				// 松手才是明确的「不删了」。
 				CreateMemoryDeleteStroke(delete.transform, "CrossA", 45f);
 				CreateMemoryDeleteStroke(delete.transform, "CrossB", -45f);
 				m_memorySlotImages.Add(slotImage);
@@ -1301,7 +1318,7 @@ namespace GameLogic
 				m_memorySlotLabelBacks.Add(labelBack);
 				m_memorySlotVersions.Add(0);
 				m_memorySlotLabels.Add(label);
-				m_memoryDeleteButtons.Add(deleteButton);
+				m_memoryDeleteHitAreas.Add(deleteHitArea);
 			}
 
 			float viewportWidth = m_scrollMemoryList.viewport != null
@@ -1461,19 +1478,6 @@ namespace GameLogic
 			if (m_memoryTooltip != null) m_memoryTooltip.gameObject.SetActive(false);
 		}
 
-		private void DeleteMemoryFromSlot(int slotIndex)
-		{
-			if (m_layoutEditMode || m_overlay != null) return;
-			NarrativeSaveData saveData = NarrativeSaveData.Get;
-			IReadOnlyList<string> ids = saveData.GetMemoryIdsInAcquisitionOrder();
-			// 只有记忆清理阶段允许删除；其它阶段按钮已隐藏，这里再兜一层防误触。
-			if (slotIndex < 0 || slotIndex >= ids.Count || !saveData.RemoveMemoryDuringCleanup(ids[slotIndex])) return;
-			SoundConfigMgr.Instance.PlaySfx(SfxNames.MemoryDelete);
-			HideMemoryTooltip();
-			RefreshUI();
-			ShowMemoryCleanup();
-		}
-
 		private void RefreshMemorySlots()
 		{
 			if (m_memorySlotLabels.Count == 0)
@@ -1494,8 +1498,8 @@ namespace GameLogic
 				{
 					continue;
 				}
-				if (i < m_memoryDeleteButtons.Count && m_memoryDeleteButtons[i] != null)
-					m_memoryDeleteButtons[i].gameObject.SetActive(canDeleteMemory && i < ids.Count);
+				if (i < m_memoryDeleteHitAreas.Count && m_memoryDeleteHitAreas[i] != null)
+					m_memoryDeleteHitAreas[i].gameObject.SetActive(canDeleteMemory && i < ids.Count);
 
 				if (i < ids.Count)
 				{
@@ -2414,6 +2418,9 @@ namespace GameLogic
 				return;
 			}
 
+			// 任何离开清理阶段的路径都先把中央提示收掉，避免它挂在新一天的对白上面。
+			HideMemoryCleanupHint();
+
 			if (saveData.DayPhase == NarrativeDayPhase.GameComplete)
 			{
 				ShowGameComplete();
@@ -2443,21 +2450,16 @@ namespace GameLogic
 
 			DestroyOverlay();
 			HideMemoryTooltip();
-			SoundConfigMgr.Instance.PlaySfx(SfxNames.MemoryOverflow);
 			SetMonologuePresentation(false);
 			SetDialogueAdvanceCatcherActive(false);
 			if (m_dialoguePanel != null) m_dialoguePanel.SetActive(false);
 			if (m_scrollMemoryList != null) m_scrollMemoryList.gameObject.SetActive(true);
-			if (m_rtNpcSubtitle != null && m_tmpNpcSubtitle != null)
-			{
-				SetNpcSpeaker(string.Empty);
-				m_tmpNpcSubtitle.text = $"记忆已满，请点击记忆卡片右上角的删除按钮，保留 {NarrativeRules.MemoryCapacity} 段记忆。";
-				m_tmpNpcSubtitle.maxVisibleCharacters = int.MaxValue;
-				m_tmpNpcSubtitle.ForceMeshUpdate();
-				LayoutNpcSubtitle(m_tmpNpcSubtitle.preferredHeight);
-				m_rtNpcSubtitle.gameObject.SetActive(true);
-				SetContinueHintVisible(false, true);
-			}
+			// 清理提示不再借用 NPC 对话框：改成屏幕正中的白字呼吸，数字随删除实时变化。
+			if (m_rtNpcSubtitle != null) m_rtNpcSubtitle.gameObject.SetActive(false);
+			SetContinueHintVisible(false, true);
+			// 「记忆溢出」只在刚进入清理阶段时响一次；删完一段后 ShowMemoryCleanup 还会被调，
+			// 那时正在播破碎音，再叠一条卡林巴会把破碎那一下盖掉。
+			if (ShowMemoryCleanupHint()) SoundConfigMgr.Instance.PlaySfx(SfxNames.MemoryOverflow);
 			RefreshMemorySlots();
 		}
 
