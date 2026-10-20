@@ -101,6 +101,9 @@ namespace GameLogic
 			public CanvasGroup CircleGroup;
 			public RectTransform NameRect;
 			public CanvasGroup NameGroup;
+			/// <summary>直接由 GrantEmotion 授予的情绪没有来源记忆，这时对应那一侧不出卡片也不出光点。</summary>
+			public bool HasLeft;
+			public bool HasRight;
 		}
 
 		/// <summary>情绪涌现事件只入队；真正播放由 CommitTurn / 物品调查的调用方 await，避免和下一句对白并发。</summary>
@@ -155,10 +158,13 @@ namespace GameLogic
 			string newerMemoryId = sources.Count > 1 ? sources[sources.Count - 1] : null;
 
 			EmergeCutsceneView view = BuildEmergenceCutscene(emotion, earlierMemoryId, newerMemoryId);
+			// 没有来源记忆（GrantEmotion 直接授予）时，跳过「记忆浮现 / 汇聚」两段，直接进成形。
+			bool hasAnySource = view.HasLeft || view.HasRight;
+			float beatShift = hasAnySource ? 0f : (EmergeCircleStart - 0.20f);
 			float musicVolumeBefore = GameModule.AudioModule.MusicVolume;
 			bool duckBgm = musicVolumeBefore > 0.01f;
-			float fadeStart = EmergeFadeOutStart;
-			float total = fadeStart + EmergeFadeOutSeconds + EmergeTailSeconds;
+			float fadeStartFrame = EmergeFadeOutStart;
+			float total = fadeStartFrame - beatShift + EmergeFadeOutSeconds + EmergeTailSeconds;
 			bool mergeCuePlayed = false;
 			bool landCuePlayed = false;
 			bool chimeCuePlayed = false;
@@ -172,31 +178,34 @@ namespace GameLogic
 						return;
 					}
 
+					float frameTime = elapsed + beatShift;
+
 					// 跳过 = 直接落到「情绪名已出现」的那一帧，再短暂停留收尾。
 					if (m_cutsceneSkipRequested)
 					{
 						m_cutsceneSkipRequested = false;
-						if (elapsed < EmergeHoldStart)
+						if (frameTime < EmergeHoldStart)
 						{
-							elapsed = EmergeHoldStart;
-							fadeStart = elapsed + EmergeSkipHoldSeconds;
-							total = fadeStart + EmergeFadeOutSeconds + EmergeTailSeconds;
+							frameTime = EmergeHoldStart;
+							elapsed = frameTime - beatShift;
+							fadeStartFrame = frameTime + EmergeSkipHoldSeconds;
+							total = fadeStartFrame - beatShift + EmergeFadeOutSeconds + EmergeTailSeconds;
 						}
 					}
 
-					if (!mergeCuePlayed && elapsed >= EmergeMergeCueAt)
+					if (hasAnySource && !mergeCuePlayed && frameTime >= EmergeMergeCueAt)
 					{
 						mergeCuePlayed = true;
 						SoundConfigMgr.Instance.PlaySfx(SfxNames.MemoryGet);
 					}
 
-					if (!landCuePlayed && elapsed >= EmergeLandCueAt)
+					if (hasAnySource && !landCuePlayed && frameTime >= EmergeLandCueAt)
 					{
 						landCuePlayed = true;
 						SoundConfigMgr.Instance.PlaySfx(SfxNames.MemoryLand);
 					}
 
-					if (!chimeCuePlayed && elapsed >= EmergeChimeCueAt)
+					if (!chimeCuePlayed && frameTime >= EmergeChimeCueAt)
 					{
 						chimeCuePlayed = true;
 						SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryEmotionEmerge);
@@ -204,11 +213,11 @@ namespace GameLogic
 
 					if (duckBgm)
 					{
-						GameModule.AudioModule.MusicVolume =
-							musicVolumeBefore * GetBgmDuckFactor(elapsed, fadeStart);
+						GameModule.AudioModule.MusicVolume = musicVolumeBefore *
+							GetBgmDuckFactor(elapsed, fadeStartFrame - beatShift);
 					}
 
-					ApplyEmergeCutsceneFrame(view, elapsed, fadeStart);
+					ApplyEmergeCutsceneFrame(view, frameTime, fadeStartFrame);
 					await UniTask.Yield(PlayerLoopTiming.Update);
 					elapsed += Time.unscaledDeltaTime;
 				}
@@ -259,8 +268,8 @@ namespace GameLogic
 					new Vector2(EmergeDotControlX, EmergeDotArcHeight), Vector2.zero, merge)
 				: new Vector2(EmergeDotStartX, 0f);
 			float dotAlpha = merging ? 1f - merge : appear;
-			SetGroup(view.DotLeftGroup, dotAlpha);
-			SetGroup(view.DotRightGroup, dotAlpha);
+			SetGroup(view.DotLeftGroup, view.HasLeft ? dotAlpha : 0f);
+			SetGroup(view.DotRightGroup, view.HasRight ? dotAlpha : 0f);
 			float dotScale = Mathf.Lerp(0.7f, 1f, appear) * (merging ? Mathf.Lerp(1f, 0.7f, merge) : 1f);
 			view.DotLeft.localScale = Vector3.one * dotScale;
 			view.DotRight.localScale = Vector3.one * dotScale;
@@ -376,6 +385,8 @@ namespace GameLogic
 				Root = root,
 				RootGroup = rootGroup,
 				HaloGroup = CreateCutsceneHalo(root.transform, emotionColor),
+				HasLeft = !string.IsNullOrWhiteSpace(earlierMemoryId),
+				HasRight = !string.IsNullOrWhiteSpace(newerMemoryId),
 			};
 
 			view.CardLeftGroup = CreateCutsceneMemoryCard(root.transform, -EmergeCardOffsetX,
