@@ -388,7 +388,11 @@ def scan_disk():
 def _mod_desc(spec, fmt, channels, peak_db):
     if not spec:
         return "项目原有素材，未改造"
-    if fmt == "wav":
+    if spec.get("via") == "workshop":
+        # 工坊直选的素材是 Freesound 原始下载档（wav/flac/ogg），不是预览 mp3
+        parts = (["Freesound 原档转 wav 44.1kHz/16bit"] if fmt == "wav"
+                 else ["Freesound 原档重编码 mp3 128kbps"])
+    elif fmt == "wav":
         parts = ["Freesound 预览 mp3 转 wav 44.1kHz/16bit"]
     else:
         parts = ["Freesound 预览 mp3 重编码 128kbps"]
