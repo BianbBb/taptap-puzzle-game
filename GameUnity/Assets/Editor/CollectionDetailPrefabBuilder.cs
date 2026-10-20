@@ -58,6 +58,9 @@ namespace GameEditor
 		private const float StampV = 245.5f;
 		private const float StampPanelWidth = 555f;
 		private const float StampPanelHeight = 309f;
+		// 虚线框比配图大一圈（原生 589x356 按同比例缩小），虚线才落在照片外沿
+		private const float StampBorderWidth = 583f;
+		private const float StampBorderHeight = 352f;
 
 		// ---- 圆章 / 关闭钮 ----
 		private const float SealWidth = 168f;
@@ -93,8 +96,9 @@ namespace GameEditor
 		private const float BodyTextTopV = 640f;
 		private const float BodyTextWidth = 730f;
 		private const float BodyTextHeight = 440f;
-		private const float BodyFontSize = 35f;
-		private const float BodyLineSpacing = 15f;
+		// 正文：TMP 行高 = 字号 x1.2，再 + lineSpacing 得到行距 58（对齐设计稿实测 58px）
+		private const float BodyFontSize = 40f;
+		private const float BodyLineSpacing = 10f;
 		private const float BodyEdgeU = 976f;
 		private const float BodyEdgeV = 765f;
 		private const float BodyEdgeWidth = 16f;
@@ -437,7 +441,7 @@ namespace GameEditor
 				0f, 0f, null, false);
 			photo.color = new Color(1f, 1f, 1f, 0f);
 			photo.preserveAspect = true;
-			NewImage("m_imgDetailBorder", stamp.transform, StampPanelWidth, StampPanelHeight,
+			NewImage("m_imgDetailBorder", stamp.transform, StampBorderWidth, StampBorderHeight,
 				0f, 0f, s_stampBorder, false);
 
 			// 9. 金色圆章（骑在邮票右上角）
