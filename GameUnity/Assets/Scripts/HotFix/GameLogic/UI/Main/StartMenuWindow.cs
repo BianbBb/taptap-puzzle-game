@@ -16,6 +16,12 @@ namespace GameLogic
 		private static readonly Color ItemHoverColor = new Color(0.29f, 0.20f, 0.15f, 1f);
 		private static readonly Color ItemDisabledColor = new Color(0.96f, 0.89f, 0.74f, 0.35f);
 
+		/// <summary>
+		/// 高亮条贴图的 pivot 比条形本身的视觉中心低 8px（原图 1672 基准），
+		/// 换算到 1920 画布是 9.19。不做补偿的话条会整体偏上约 9px。
+		/// </summary>
+		private const float HighlightPivotBiasY = -9.19f;
+
 		private bool m_hoverBound;
 		private TextMeshProUGUI m_hoverLabel;
 
@@ -124,7 +130,16 @@ namespace GameLogic
 			RestoreHoverLabel();
 
 			m_imgHighlight.gameObject.SetActive(true);
-			m_imgHighlight.rectTransform.anchoredPosition = itemRect.anchoredPosition;
+
+			// 高亮条与四个按钮是同一个父节点下的兄弟，锚点统一为「屏幕中心 + pivot 中心」，
+			// 所以直接复用按钮的 anchoredPosition 即可对齐。两边锚点若改成不一致，
+			// 这里会错位 —— 保持同一套锚点是这套做法成立的前提。
+			// 注意：高亮图的倾斜已经烘进贴图里，Image 自身的 Z 旋转必须保持 0，
+			// 倾斜角度只由四个按钮 / 文字自己的 Z 旋转（5.7°）决定。
+			RectTransform highlightRect = m_imgHighlight.rectTransform;
+			Vector2 target = itemRect.anchoredPosition;
+			target.y += HighlightPivotBiasY;
+			highlightRect.anchoredPosition = target;
 
 			m_hoverLabel = button.GetComponentInChildren<TextMeshProUGUI>(true);
 			if (m_hoverLabel != null)
