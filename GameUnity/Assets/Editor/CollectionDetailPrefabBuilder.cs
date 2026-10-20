@@ -21,7 +21,14 @@ namespace GameEditor
 
 		private const string RawDir = "Assets/BundleAssets/UIRaw/Raw";
 		private const string CardPngPath = RawDir + "/collection_detail_card.png";
+		private const string PlatePngPath = RawDir + "/collection_detail_plate.png";
+		private const string StripPngPath = RawDir + "/collection_detail_strip.png";
 		private const string DotPngPath = RawDir + "/collection_detail_dot.png";
+
+		// 九宫格圆角半径（= spriteBorder）。卡片与正文框同为 26，白纸条 6，均取自效果图实测。
+		private const float CardRadius = 26f;
+		private const float PlateRadius = 26f;
+		private const float EdgeRadius = 6f;
 
 		private const string ArtDir = "Assets/BundleAssets/美术素材/UI/图鉴界面导出";
 		private const string StampBasePng = ArtDir + "/collection_image_bg.png";
@@ -102,6 +109,8 @@ namespace GameEditor
 		private static readonly Color DotColor = new Color32(232, 199, 122, 255);
 
 		private static Sprite s_card;
+		private static Sprite s_plate;
+		private static Sprite s_strip;
 		private static Sprite s_dot;
 		private static Sprite s_stampBase;
 		private static Sprite s_stampSlot;
@@ -218,11 +227,16 @@ namespace GameEditor
 		private static void EnsureSprites()
 		{
 			Directory.CreateDirectory(RawDir);
-			WriteRoundedCard(CardPngPath, 256, 48f, new Color32(253, 252, 250, 255), new Color32(232, 226, 214, 255));
+			// 只画「白色/纸白 + 圆角」，实际颜色交给 Image.color 染，避免贴图与颜色各染一次
+			WriteRoundedCard(CardPngPath, 256, CardRadius, new Color32(253, 252, 250, 255));
+			WriteRoundedCard(PlatePngPath, 96, PlateRadius, new Color32(255, 255, 255, 255));
+			WriteRoundedCard(StripPngPath, 64, EdgeRadius, new Color32(255, 255, 255, 255));
 			WriteDot(DotPngPath, 24);
 			AssetDatabase.Refresh();
 
-			SetSpriteImporter(CardPngPath, 48f);
+			SetSpriteImporter(CardPngPath, CardRadius);
+			SetSpriteImporter(PlatePngPath, PlateRadius);
+			SetSpriteImporter(StripPngPath, EdgeRadius);
 			SetSpriteImporter(DotPngPath, 0f);
 			AssetDatabase.Refresh();
 		}
@@ -230,6 +244,8 @@ namespace GameEditor
 		private static void LoadSprites()
 		{
 			s_card = AssetDatabase.LoadAssetAtPath<Sprite>(CardPngPath);
+			s_plate = AssetDatabase.LoadAssetAtPath<Sprite>(PlatePngPath);
+			s_strip = AssetDatabase.LoadAssetAtPath<Sprite>(StripPngPath);
 			s_dot = AssetDatabase.LoadAssetAtPath<Sprite>(DotPngPath);
 			s_stampBase = AssetDatabase.LoadAssetAtPath<Sprite>(StampBasePng);
 			s_stampSlot = AssetDatabase.LoadAssetAtPath<Sprite>(StampSlotPng);
@@ -239,6 +255,8 @@ namespace GameEditor
 			s_font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontPath);
 
 			if (s_card == null) Debug.LogError($"[CollectionDetail] 缺 sprite {CardPngPath}");
+			if (s_plate == null) Debug.LogError($"[CollectionDetail] 缺 sprite {PlatePngPath}");
+			if (s_strip == null) Debug.LogError($"[CollectionDetail] 缺 sprite {StripPngPath}");
 			if (s_stampBase == null) Debug.LogError($"[CollectionDetail] 缺 sprite {StampBasePng}");
 			if (s_stampSlot == null) Debug.LogError($"[CollectionDetail] 缺 sprite {StampSlotPng}");
 			if (s_stampBorder == null) Debug.LogError($"[CollectionDetail] 缺 sprite {StampBorderPng}");
@@ -266,17 +284,20 @@ namespace GameEditor
 			importer.SaveAndReimport();
 		}
 
-		private static void WriteRoundedCard(string path, int size, float radius, Color32 fill, Color32 line)
+		private static void WriteRoundedCard(string path, int size, float radius, Color32 fill)
 		{
 			var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
 			var pixels = new Color32[size * size];
 			Vector2 half = new Vector2(size * 0.5f - 1f, size * 0.5f - 1f);
+			Vector2 center = new Vector2(size * 0.5f, size * 0.5f);
 
 			for (int y = 0; y < size; y++)
 			{
 				for (int x = 0; x < size; x++)
 				{
-					Vector2 p = new Vector2(x + 0.5f, y + 0.5f);
+					// 关键：p 必须是「相对图片中心」的坐标，否则 SDF 的矩形会落在图片角上，
+					// 结果只画出四分之一个圆角（曾经就是这样把卡片底图写坏的）。
+					Vector2 p = new Vector2(x + 0.5f, y + 0.5f) - center;
 					float sd = RoundRectSdf(p, half, radius);
 					float alpha = Mathf.Clamp01(0.5f - sd);
 					if (alpha <= 0f)
@@ -285,7 +306,7 @@ namespace GameEditor
 						continue;
 					}
 
-					Color32 c = sd > -1.5f ? line : fill;
+					Color32 c = fill;
 					c.a = (byte)Mathf.RoundToInt(alpha * 255f);
 					pixels[y * size + x] = c;
 				}
@@ -380,12 +401,12 @@ namespace GameEditor
 
 			// 2. 米黄正文框（先铺，后面标题/分隔线压在上面）
 			Image plate = NewImage("BodyPlate", card.transform, BodyPlateWidth, BodyPlateHeight,
-				U(BodyPlateU), V(BodyPlateV), s_card, true);
+				U(BodyPlateU), V(BodyPlateV), s_plate, true);
 			plate.color = BodyPlateColor;
 
 			// 3. 右侧白纸条（贴在正文框右内侧）
 			Image edge = NewImage("BodyEdge", card.transform, BodyEdgeWidth, BodyEdgeHeight,
-				U(BodyEdgeU), V(BodyEdgeV), s_card, true);
+				U(BodyEdgeU), V(BodyEdgeV), s_strip, true);
 			edge.color = new Color(1f, 1f, 1f, 0.92f);
 
 			// 4. 正文
