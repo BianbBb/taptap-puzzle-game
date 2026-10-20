@@ -117,6 +117,8 @@ namespace GameLogic
 		private readonly List<TextMeshProUGUI> m_memorySlotLabels = new List<TextMeshProUGUI>();
 		/// <summary>槽位右上角的删除热区。不是 Button：删除要靠「按住 1 秒」，交给 EventTrigger 收按下/抬起。</summary>
 		private readonly List<Image> m_memoryDeleteHitAreas = new List<Image>();
+		/// <summary>热区里的红色进度环，跟着长按从 0 填到 1（与 m_memoryDeleteHitAreas 同索引）。</summary>
+		private readonly List<Image> m_memoryDeleteProgressRings = new List<Image>();
 		private RectTransform m_memoryTooltip;
 		private TextMeshProUGUI m_memoryTooltipName;
 		private TextMeshProUGUI m_memoryTooltipDescription;
@@ -296,6 +298,7 @@ namespace GameLogic
 			m_memorySlotVersions.Clear();
 			m_memorySlotLabels.Clear();
 			m_memoryDeleteHitAreas.Clear();
+			m_memoryDeleteProgressRings.Clear();
 			m_memoryCleanupHint = null;
 			m_memoryCleanupHintGroup = null;
 			m_memoryCleanupHintVersion++;
@@ -1263,6 +1266,7 @@ namespace GameLogic
 			m_memorySlotVersions.Clear();
 			m_memorySlotLabels.Clear();
 			m_memoryDeleteHitAreas.Clear();
+			m_memoryDeleteProgressRings.Clear();
 			if (m_scrollMemoryList == null || m_scrollMemoryList.content == null)
 			{
 				return;
@@ -1313,6 +1317,7 @@ namespace GameLogic
 				m_memorySlotVersions.RemoveAt(last);
 				m_memorySlotLabels.RemoveAt(last);
 				m_memoryDeleteHitAreas.RemoveAt(last);
+				m_memoryDeleteProgressRings.RemoveAt(last);
 				slot.SetActive(false);
 				UnityEngine.Object.Destroy(slot);
 			}
@@ -1405,6 +1410,24 @@ namespace GameLogic
 				holdTrigger.triggers.Add(deleteUp);
 				// 不监听 PointerExit：卡片抖动会让热区自己跟着摆，移出就取消的话长按可能永远走不完。
 				// 松手才是明确的「不删了」。
+				// 长按进度环：围着叉从 0 顺时针填满，红色；满格那一刻才碎。
+				var ringGo = new GameObject("ProgressRing", typeof(RectTransform), typeof(Image));
+				ringGo.transform.SetParent(delete.transform, false);
+				RectTransform ringRect = ringGo.GetComponent<RectTransform>();
+				ringRect.anchorMin = ringRect.anchorMax = new Vector2(0.5f, 0.5f);
+				ringRect.pivot = new Vector2(0.5f, 0.5f);
+				ringRect.anchoredPosition = Vector2.zero;
+				ringRect.sizeDelta = new Vector2(MemoryDeleteRingSize, MemoryDeleteRingSize);
+				Image ringImage = ringGo.GetComponent<Image>();
+				ringImage.sprite = GetMemoryDeleteRingSprite();
+				ringImage.color = MemoryDeleteRingColor;
+				ringImage.type = Image.Type.Filled;
+				ringImage.fillMethod = Image.FillMethod.Radial360;
+				ringImage.fillOrigin = (int)Image.Origin360.Top;
+				ringImage.fillClockwise = true;
+				ringImage.fillAmount = 0f;
+				ringImage.raycastTarget = false;
+				ringGo.SetActive(false);
 				CreateMemoryDeleteStroke(delete.transform, "CrossA", 45f);
 				CreateMemoryDeleteStroke(delete.transform, "CrossB", -45f);
 				m_memorySlotImages.Add(slotImage);
@@ -1413,6 +1436,7 @@ namespace GameLogic
 				m_memorySlotVersions.Add(0);
 				m_memorySlotLabels.Add(label);
 				m_memoryDeleteHitAreas.Add(deleteHitArea);
+				m_memoryDeleteProgressRings.Add(ringImage);
 			}
 
 			float viewportWidth = m_scrollMemoryList.viewport != null

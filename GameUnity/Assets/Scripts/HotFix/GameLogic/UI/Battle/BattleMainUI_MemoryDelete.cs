@@ -30,6 +30,12 @@ namespace GameLogic
 		private const float MemoryDeleteBreakFadeStart = 0.35f;
 		/// <summary>消散尾音的音量。配表里没有这两条 sfx，PlaySfx 的 volume 入参才会生效。</summary>
 		private const float MemoryDeleteTailVolume = 0.55f;
+		/// <summary>进度环直径。删除热区是 30，环大一圈露在叉外面，又不至于顶出 78 的槽位。</summary>
+		private const float MemoryDeleteRingSize = 38f;
+		/// <summary>进度环的红：比纯红稍暗一点，压在纸色卡片上不刺眼，但一眼是「危险」。</summary>
+		private static readonly Color MemoryDeleteRingColor = new Color(0.87f, 0.20f, 0.18f, 1f);
+		/// <summary>运行时生成的空心环，按 256 画、缩到 38 用。</summary>
+		private static Sprite s_memoryDeleteRingSprite;
 
 		// ---- 中央提示 ----
 		private const float CleanupHintBreathPeriod = 2.2f;
@@ -68,11 +74,12 @@ namespace GameLogic
 
 			m_memoryDeleteHolding = true;
 			m_memoryDeleteHoldSlot = slotIndex;
+			ApplyMemoryDeleteProgress(slotIndex, 0f);
 			int version = ++m_memoryDeleteHoldVersion;
 			HoldMemoryDeleteAsync(slotIndex, version).Forget();
 		}
 
-		/// <summary>松手 / 指针移出：取消这次长按，卡片立刻回正。</summary>
+		/// <summary>松手 / 指针移出：取消这次长按，卡片和进度环立刻回零。</summary>
 		private void CancelMemoryDeleteHold(int slotIndex)
 		{
 			if (!m_memoryDeleteHolding || slotIndex != m_memoryDeleteHoldSlot)
@@ -84,6 +91,7 @@ namespace GameLogic
 			m_memoryDeleteHoldSlot = -1;
 			m_memoryDeleteHoldVersion++;
 			ResetMemorySlotShake(slotIndex);
+			ResetMemoryDeleteProgress(slotIndex);
 		}
 
 		private async UniTask HoldMemoryDeleteAsync(int slotIndex, int version)
@@ -103,7 +111,9 @@ namespace GameLogic
 					return;
 				}
 
-				ApplyMemorySlotShake(slotRect, elapsed / MemoryDeleteHoldSeconds, elapsed);
+				float progress = elapsed / MemoryDeleteHoldSeconds;
+				ApplyMemorySlotShake(slotRect, progress, elapsed);
+				ApplyMemoryDeleteProgress(slotIndex, progress);
 				await UniTask.Yield(PlayerLoopTiming.Update);
 				elapsed += Time.unscaledDeltaTime;
 			}
@@ -112,6 +122,9 @@ namespace GameLogic
 			{
 				return;
 			}
+
+			// 循环退出时 elapsed 会略过 1，这里显式补满：圈必须刚好 100% 才碎。
+			ApplyMemoryDeleteProgress(slotIndex, 1f);
 
 			// 满 1 秒：锁已解开，后面这段不再接受「松手取消」——已经碎了。
 			m_memoryDeleteHolding = false;
@@ -167,8 +180,9 @@ namespace GameLogic
 				elapsed += Time.unscaledDeltaTime;
 			}
 
-			// 先复位再刷新：槽位是复用的，残留的 1.5 倍/透明会粘到下一条记忆上。
+			// 先复位再刷新：槽位是复用的，残留的 1.5 倍/透明/满格环会粘到下一条记忆上。
 			ResetMemorySlotShake(slotIndex);
+			ResetMemoryDeleteProgress(slotIndex);
 
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			IReadOnlyList<string> ids = saveData.GetMemoryIdsInAcquisitionOrder();
@@ -197,6 +211,76 @@ namespace GameLogic
 			{
 				group.alpha = 1f;
 			}
+		}
+
+		/// <summary>长按进度环：0 → 1 顺时针填满。第一次调用时才把环显示出来。</summary>
+		private void ApplyMemoryDeleteProgress(int slotIndex, float progress)
+		{
+			Image ring = GetMemoryDeleteProgressRing(slotIndex);
+			if (ring == null)
+			{
+				return;
+			}
+
+			if (!ring.gameObject.activeSelf)
+			{
+				ring.gameObject.SetActive(true);
+			}
+
+			ring.fillAmount = Mathf.Clamp01(progress);
+		}
+
+		/// <summary>取消 / 删除完成后把环清空并收起，别让满格的红环留在槽位上。</summary>
+		private void ResetMemoryDeleteProgress(int slotIndex)
+		{
+			Image ring = GetMemoryDeleteProgressRing(slotIndex);
+			if (ring == null)
+			{
+				return;
+			}
+
+			ring.fillAmount = 0f;
+			ring.gameObject.SetActive(false);
+		}
+
+		private Image GetMemoryDeleteProgressRing(int slotIndex)
+			=> slotIndex >= 0 && slotIndex < m_memoryDeleteProgressRings.Count
+				? m_memoryDeleteProgressRings[slotIndex] : null;
+
+		/// <summary>
+		/// 程序化空心环：白色圆环，靠 Image.color 染红。
+		/// Filled/Radial360 要求 sprite 是 FullRect（CreateSprite 已经是），否则扇区裁剪会退化成整块。
+		/// </summary>
+		private static Sprite GetMemoryDeleteRingSprite()
+		{
+			if (s_memoryDeleteRingSprite != null)
+			{
+				return s_memoryDeleteRingSprite;
+			}
+
+			const int size = 256;
+			// 256 下 34px 环宽，缩到 38 显示约 5px：再细就糊成灰边，再粗会压到叉。
+			const float thickness = 34f;
+			const float feather = 1.6f;
+			var pixels = new Color32[size * size];
+			float center = size * 0.5f;
+			float outer = center - 2f;
+			float inner = outer - thickness;
+			for (int y = 0; y < size; y++)
+			{
+				for (int x = 0; x < size; x++)
+				{
+					float distance = Distance(x, y, center);
+					float outerEdge = Mathf.Clamp01((outer - distance) / feather);
+					float innerEdge = Mathf.Clamp01((distance - inner) / feather);
+					float alpha = Mathf.Min(outerEdge, innerEdge);
+					pixels[y * size + x] = new Color32(255, 255, 255,
+						(byte)Mathf.RoundToInt(alpha * 255f));
+				}
+			}
+
+			s_memoryDeleteRingSprite = CreateSprite("MemoryDeleteRing", size, pixels);
+			return s_memoryDeleteRingSprite;
 		}
 
 		private RectTransform GetMemorySlotRect(int slotIndex)
