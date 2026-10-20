@@ -2,22 +2,24 @@
 
 > 本项目全部音频素材均为 **CC0 1.0 Universal（公有领域贡献）**，可商用、无署名义务。本表仅为溯源与合规审核留档。
 >
-> 共 32 条：CC0 外部素材 31 条，项目自有素材 1 条。
+> 共 34 条：CC0 外部素材 33 条，项目自有素材 1 条。
 >
 > 授权文本：https://creativecommons.org/publicdomain/zero/1.0/deed.zh
 
 生成方式：`python3 Tools/audio/fetch_cc0_sfx.py --manifest Tools/audio/sfx_manifest.json --credits ThirdParty`
 （数据来自 Freesound API + 磁盘实际文件，可复现）
 
-## 一、音效 SFX（27 条）
+## 一、音效 SFX（29 条）
 
 | 文件名 | 用途 | Freesound ID | 原始标题 | 作者 | 原始时长 | 使用时长 | 修改说明 |
 |---|---|---|---|---|---|---|---|
+| `sfx_emerge_bloom.wav` | 涌现过场·情绪圆绽放｜钢片琴 C#5(420487) + G#5(420498) 纯五度叠音，G#5 增益 0.12（原录音比 C#5 响 16.5dB），无三度音所以暖而不甜腻 | [420487](https://freesound.org/people/Macsat-Rd/sounds/420487/) | Medium C#.wav | Macsat-Rd | 1.72 | 2.29 | Freesound 原档转 wav 44.1kHz/16bit；下混单声道；峰值归一 -3.3dB |
+| `sfx_emerge_rise.wav` | 涌现过场·光点汇聚上升｜钢片琴滑音 glissando_celesta 变速 1.44x（atempo 不变调）裁到 0.91s，铺满 0.9s 汇聚段 | [823181](https://freesound.org/people/HappyPizzaBread/sounds/823181/) | glissando_celesta | HappyPizzaBread | 1.66 | 0.91 | Freesound 原档转 wav 44.1kHz/16bit；下混单声道；峰值归一 -8.4dB |
 | `sfx_item_inspect.wav` | 检查物件部件（钢片琴单音，不是筹码）｜工坊指定：Pop 3 | [789792](https://freesound.org/people/quatricise/sounds/789792/) | Pop 3 | quatricise | 1.31 | 1.31 | Freesound 原档转 wav 44.1kHz/16bit；下混单声道；峰值归一 -1.5dB |
 | `sfx_item_panel_in.wav` | 物品面板滑入｜工坊指定：Bubble_Pop | [733264](https://freesound.org/people/arttim/sounds/733264/) | Bubble_Pop | arttim | 0.15 | 0.15 | Freesound 原档转 wav 44.1kHz/16bit；下混单声道；峰值归一 -1.5dB |
 | `sfx_memory_delete.wav` | 删除记忆（噗一声消散，不是撕裂） | [714257](https://freesound.org/people/qubodup/sounds/714257/) | Puff of Smoke | qubodup | 0.50 | 0.50 | Freesound 预览 mp3 转 wav 44.1kHz/16bit；下混单声道；峰值归一 -1.5dB |
 | `sfx_memory_get.wav` | 记忆飞入起飞 | [846190](https://freesound.org/people/TheArbuzikYT/sounds/846190/) | Crystal Hit Sound | TheArbuzikYT | 0.24 | 0.24 | Freesound 预览 mp3 转 wav 44.1kHz/16bit；下混单声道；峰值归一 -1.5dB |
-| `sfx_memory_land.wav` | 记忆落槽（枕头闷落，不是石头） | [728541](https://freesound.org/people/trinitrotoluenedev/sounds/728541/) | Pillow Flump | trinitrotoluenedev | 0.60 | 0.60 | Freesound 预览 mp3 转 wav 44.1kHz/16bit；下混单声道；峰值归一 -1.5dB |
+| `sfx_memory_land.wav` | 记忆落槽（枕头闷落，不是石头）；同时用作涌现过场的「相撞」落点 | [728541](https://freesound.org/people/trinitrotoluenedev/sounds/728541/) | Pillow Flump | trinitrotoluenedev | 0.60 | 0.60 | Freesound 预览 mp3 转 wav 44.1kHz/16bit；下混单声道；峰值归一 -1.5dB |
 | `sfx_memory_locked.wav` | 记忆锁定的回复 | [478212](https://freesound.org/people/0ne_one111yt/sounds/478212/) | woodknock.ogg | 0ne_one111yt | 0.11 | 0.12 | Freesound 预览 mp3 转 wav 44.1kHz/16bit；下混单声道；峰值归一 -1.5dB |
 | `sfx_memory_overflow.wav` | 记忆溢出｜工坊指定：Kalimba C3 | [536549](https://freesound.org/people/dvdfu/sounds/536549/) | Kalimba C3 | dvdfu | 0.78 | 0.78 | Freesound 原档转 wav 44.1kHz/16bit；下混单声道；峰值归一 -1.5dB |
 | `sfx_portrait_switch.wav` | 立绘切换｜工坊指定：C5 soft.wav | [96090](https://freesound.org/people/stamperadam/sounds/96090/) | C5 soft.wav | stamperadam | 1.61 | 1.61 | Freesound 原档转 wav 44.1kHz/16bit；下混单声道；峰值归一 -1.5dB |

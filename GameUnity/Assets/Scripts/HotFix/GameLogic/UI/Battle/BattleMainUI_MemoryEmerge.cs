@@ -54,11 +54,11 @@ namespace GameLogic
 		private const float EmergeHaloAlpha = 0.12f;
 
 		// ---- 声音 ----
-		/// <summary>光点开始汇聚：记忆飞向中心。</summary>
+		/// <summary>光点开始汇聚：记忆飞向中心（0.91s 钢片琴滑音，正好铺满 0.9s 汇聚段）。</summary>
 		private const float EmergeMergeCueAt = EmergeMergeStart;
-		/// <summary>光点相撞落地。</summary>
+		/// <summary>光点相撞落地（复用「记忆落槽」的枕头闷落，不引入玻璃/硬质音色）。</summary>
 		private const float EmergeLandCueAt = EmergeRingStart;
-		/// <summary>情绪圆成形后浮出的那一刻，才是配表里那条「涌现」铃音。</summary>
+		/// <summary>情绪圆成形后浮出的那一刻，纯五度钢片琴绽放。</summary>
 		private const float EmergeChimeCueAt = 2.90f;
 		private const float EmergeBgmDuckFactor = 0.4f;
 		private const float EmergeBgmDuckSeconds = 0.35f;
@@ -190,13 +190,18 @@ namespace GameLogic
 							elapsed = frameTime - beatShift;
 							fadeStartFrame = frameTime + EmergeSkipHoldSeconds;
 							total = fadeStartFrame - beatShift + EmergeFadeOutSeconds + EmergeTailSeconds;
+
+							// 跳帧后 frameTime 一次跨过前两个 cue 的时间点，若不压掉会两三个音效同时炸响。
+							// 汇聚/落点直接作废，只留绽放那一下当作收尾。
+							mergeCuePlayed = true;
+							landCuePlayed = true;
 						}
 					}
 
 					if (hasAnySource && !mergeCuePlayed && frameTime >= EmergeMergeCueAt)
 					{
 						mergeCuePlayed = true;
-						SoundConfigMgr.Instance.PlaySfx(SfxNames.MemoryGet);
+						SoundConfigMgr.Instance.PlaySfx(SfxNames.EmergeRise);
 					}
 
 					if (hasAnySource && !landCuePlayed && frameTime >= EmergeLandCueAt)
@@ -208,7 +213,7 @@ namespace GameLogic
 					if (!chimeCuePlayed && frameTime >= EmergeChimeCueAt)
 					{
 						chimeCuePlayed = true;
-						SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryEmotionEmerge);
+						SoundConfigMgr.Instance.PlaySfx(SfxNames.EmergeBloom);
 					}
 
 					if (duckBgm)

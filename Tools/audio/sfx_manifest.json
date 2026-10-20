@@ -1,6 +1,7 @@
 {
   "_comment": "《记忆终会消散》音效清单。name 即最终文件名（= YooAsset Address = 配置表 Location）。改音效时只需替换同名文件，不用改这里。freesound_id 固定后重跑可复现。",
   "_style": "温馨治愈向：卡林巴 / 钢片琴 / 软气声 / 闷软落点。禁止 8bit 电子音，也禁止玻璃、石头、撕裂、硬木等「破碎感 / 硬质感」音色。全部 CC0。",
+  "_emerge_cutscene": "记忆涌现过场的三段节拍：1.60s 光点汇聚(sfx_emerge_rise) → 2.50s 相撞落点(sfx_memory_land) → 2.90s 情绪绽放(sfx_emerge_bloom)。前两段只在有来源记忆时才响；无来源（直接授予情绪）时整条时间线前移、只剩绽放。",
   "sounds": [
     { "name": "sfx_ui_hover",       "query": "button hover",    "freesound_id": 862448, "min_duration": 0.02, "max_duration": 0.30, "note": "菜单悬停" },
     { "name": "sfx_ui_panel_open",  "query": "soft whoosh",     "freesound_id": 802465, "min_duration": 0.15, "max_duration": 0.70, "note": "窗口/弹窗弹入（软气声上扬）" },
@@ -22,11 +23,14 @@
     { "name": "sfx_story_ending",         "query": "piano high chord",   "freesound_id": 761658, "min_duration": 0.80, "max_duration": 4.0, "via": "workshop", "note": "结局｜工坊指定：Pencil Scribble (20)" },
 
     { "name": "sfx_memory_get",      "query": "crystal",          "freesound_id": 846190, "min_duration": 0.20, "max_duration": 1.0, "note": "记忆飞入起飞" },
-    { "name": "sfx_memory_land",     "query": "pillow flump",     "freesound_id": 728541, "min_duration": 0.10, "max_duration": 0.70, "note": "记忆落槽（枕头闷落，不是石头）" },
+    { "name": "sfx_memory_land",     "query": "pillow flump",     "freesound_id": 728541, "min_duration": 0.10, "max_duration": 0.70, "note": "记忆落槽（枕头闷落，不是石头）；同时用作涌现过场的「相撞」落点" },
     { "name": "sfx_memory_delete",   "query": "puff of smoke",    "freesound_id": 714257, "min_duration": 0.15, "max_duration": 0.80, "note": "删除记忆（噗一声消散，不是撕裂）" },
     { "name": "sfx_memory_break",    "query": "bubble pop",        "freesound_id": 744140, "min_duration": 0.05, "max_duration": 0.50, "via": "workshop", "note": "记忆破碎（长按满 1 秒那一下）｜由 sfx_story_option_appear 同源 bubble pop 升 3 半音（asetrate 1.1892）+ 40ms 尾淡出派生，0.19s；不重新下载，授权沿用 744140" },
     { "name": "sfx_memory_overflow", "query": "soft piano chord", "freesound_id": 536549, "min_duration": 0.20, "max_duration": 3.0, "via": "workshop", "note": "记忆溢出｜工坊指定：Kalimba C3" },
     { "name": "sfx_memory_locked",   "query": "wood knock",       "freesound_id": 478212, "min_duration": 0.05, "max_duration": 0.50, "note": "记忆锁定的回复" },
+
+    { "name": "sfx_emerge_rise",  "query": "riser",           "freesound_id": 823181, "via": "workshop", "peak_db": -8.4, "note": "涌现过场·光点汇聚上升｜钢片琴滑音 glissando_celesta 变速 1.44x（atempo 不变调）裁到 0.91s，铺满 0.9s 汇聚段" },
+    { "name": "sfx_emerge_bloom", "query": "celesta",         "freesound_id": 420487, "via": "workshop", "peak_db": -3.3, "note": "涌现过场·情绪圆绽放｜钢片琴 C#5(420487) + G#5(420498) 纯五度叠音，G#5 增益 0.12（原录音比 C#5 响 16.5dB），无三度音所以暖而不甜腻" },
 
     { "name": "sfx_item_inspect",  "query": "celesta", "freesound_id": 789792, "min_duration": 0.10, "max_duration": 1.20, "via": "workshop", "note": "检查物件部件（钢片琴单音，不是筹码）｜工坊指定：Pop 3" },
     { "name": "sfx_item_panel_in", "query": "cloth",   "freesound_id": 733264, "min_duration": 0.10, "max_duration": 0.60, "via": "workshop", "note": "物品面板滑入｜工坊指定：Bubble_Pop" },

@@ -47,26 +47,39 @@ namespace GameLogic
 		private const float ItemPageRuleTop = 474f;
 		/// <summary>分隔虚线占纸面宽的比例。</summary>
 		private const float ItemPageRuleWidthRatio = 0.46f;
-		private const float ItemPageDescTop = 500f;
-		private const float ItemPageDescBoxHeight = 130f;
+		private const float ItemPageDescTop = 496f;
+		/// <summary>描述盒高：字放到 28 之后，两行中文 ≈ 92，三行 ≈ 138，留到 150 兜住最长的条目。</summary>
+		private const float ItemPageDescBoxHeight = 150f;
 		private const float ItemPageDescWidthRatio = 0.86f;
-		private const float ItemPageDescFontSize = 17.5f;
-		private const float ItemPageDescMinFontSize = 13.5f;
-		private const float ItemPageHintTop = 644f;
-		private const float ItemPageHintFontSize = 13f;
-		private const float ItemPageChipTop = 684f;
+		/// <summary>描述字号。旧值 17.5 在 1920 参考分辨率下只有 17.5 单位（≈ 手机上 10px），
+		/// 和名称 52 放一起像脚注；对齐对话正文的量级（正文 ≈ 30）才读得动。</summary>
+		private const float ItemPageDescFontSize = 28f;
+		private const float ItemPageDescMinFontSize = 21f;
+		private const float ItemPageHintTop = 656f;
+		private const float ItemPageHintFontSize = 21f;
+		private const float ItemPageHintBoxHeight = 30f;
+		private const float ItemPageChipTop = 696f;
 		/// <summary>没有物品图时，文字块整体上提这么多（约等于物品图区域的高度）。
 		/// 注意纸面 y 是「向下为负」，所以提起来是加正数。</summary>
 		private const float ItemPageNoImageLift = 272f;
 		/// <summary>没有物品图时，部件按钮提到提示下面，不再钉在页脚。</summary>
-		private const float ItemPageChipTopNoImage = 430f;
-		private const float ItemPageChipHeight = 38f;
-		private const float ItemPageChipGap = 8f;
+		private const float ItemPageChipTopNoImage = 432f;
+		private const float ItemPageChipHeight = 48f;
+		private const float ItemPageChipGap = 10f;
+		/// <summary>部件按钮宽度：按数量在 150（多）/196（少）之间自适应，字大了不能再钉死 132。</summary>
+		private const float ItemPageChipMinWidth = 150f;
+		private const float ItemPageChipMaxWidth = 196f;
+		private const float ItemPageChipFontSize = 22f;
+		private const float ItemPageChipMinFontSize = 15f;
 		private const float ItemPageFadeSeconds = 0.18f;
 		private const float ItemPageCloseFadeSeconds = 0.14f;
 		/// <summary>热点圈的直径。</summary>
 		private const float ItemPageHotspotSize = 74f;
 		private const float ItemPageHotspotPulseSeconds = 0.75f;
+		/// <summary>圈下面那张写部件名的小纸片。字号跟着整体放大，12 号在实机上是一团墨。</summary>
+		private const float ItemPageHotspotTagFontSize = 19f;
+		private const float ItemPageHotspotTagHeight = 31f;
+		private const float ItemPageHotspotTagMaxWidth = 210f;
 
 		private static readonly Color ItemPageRuledColor = new Color(1f, 1f, 1f, 0.32f);
 		private static readonly Color ItemPageHotspotColor = new Color(0.85f, 0.66f, 0.30f, 0.95f);
@@ -338,11 +351,12 @@ namespace GameLogic
 			descRect.anchoredPosition = new Vector2(0f, -ItemPageDescTop + offsetY);
 			desc.overflowMode = TextOverflowModes.Overflow;
 			desc.color = new Color(0.42f, 0.34f, 0.25f, 1f);
-			// 描述可能很长（比如布布那件），给它一条下限：字缩到 13.5 还放不下才溢出。
+			// 描述可能很长（比如布布那件），给它一条下限：字缩到 21 还放不下才溢出。
 			desc.enableAutoSizing = true;
 			desc.fontSizeMin = ItemPageDescMinFontSize;
 			desc.fontSizeMax = ItemPageDescFontSize;
-			desc.lineSpacing = 12f;
+			// 行距按字号给：28 的字配 12 会挤成一团。
+			desc.lineSpacing = 14f;
 
 			string hint = BuildItemPageHint(item);
 			if (string.IsNullOrEmpty(hint))
@@ -351,7 +365,8 @@ namespace GameLogic
 			}
 
 			TextMeshProUGUI hintText = CreateOverlayText(paper, hint, ItemPageHintFontSize,
-				Vector2.zero, new Vector2(paperWidth * 0.9f, 24f), TextAlignmentOptions.Center);
+				Vector2.zero, new Vector2(paperWidth * 0.94f, ItemPageHintBoxHeight),
+				TextAlignmentOptions.Center);
 			RectTransform hintRect = hintText.rectTransform;
 			hintRect.anchorMin = new Vector2(0.5f, 1f);
 			hintRect.anchorMax = new Vector2(0.5f, 1f);
@@ -423,7 +438,12 @@ namespace GameLogic
 			}
 
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
-			const float chipWidth = 132f;
+			// 字放大之后按钮也得跟着长：按数量均分纸面可用宽度，再夹在 150~196 之间。
+			// 4 个部件（收录机）落在 194，2 个（磁带）落在 196。
+			float available = paper.sizeDelta.x * 0.94f;
+			float chipWidth = Mathf.Clamp(
+				(available - (listParts.Count - 1) * ItemPageChipGap) / listParts.Count,
+				ItemPageChipMinWidth, ItemPageChipMaxWidth);
 			float totalWidth = listParts.Count * chipWidth + (listParts.Count - 1) * ItemPageChipGap;
 			float startX = -totalWidth * 0.5f + chipWidth * 0.5f;
 			for (int i = 0; i < listParts.Count; i++)
@@ -434,11 +454,15 @@ namespace GameLogic
 					? "查看部件：" + part.PartName
 					: (saveData.HasMemory(memoryId) ? "已发现：" : "检查部件：") + part.PartName;
 				// 这些部件在图上没有位置，记忆飞入就从页面中心飞（source 传 null，落到 Panel 上取中心）。
-				CreateOverlayButton(paper, label,
+				TextMeshProUGUI chipText = CreateOverlayButton(paper, label,
 					new Vector2(startX + i * (chipWidth + ItemPageChipGap), -chipTop),
 					new Vector2(chipWidth, ItemPageChipHeight),
 					() => InspectNarrativeItemPart(memoryId, null),
-					true);
+					true, ItemPageChipFontSize);
+				// 「检查部件：磁带仓」8 个字在 22 号下 ≈ 176，边距一扣就顶出来，给条缩字下限。
+				chipText.enableAutoSizing = true;
+				chipText.fontSizeMin = ItemPageChipMinFontSize;
+				chipText.fontSizeMax = ItemPageChipFontSize;
 			}
 		}
 
@@ -579,17 +603,18 @@ namespace GameLogic
 			background.color = ItemPageTagColor;
 			background.raycastTarget = false;
 
-			TextMeshProUGUI label = CreateOverlayText(go.transform, partName, 12f, Vector2.zero,
-				new Vector2(140f, 20f), TextAlignmentOptions.Center);
+			TextMeshProUGUI label = CreateOverlayText(go.transform, partName, ItemPageHotspotTagFontSize,
+				Vector2.zero, new Vector2(ItemPageHotspotTagMaxWidth, ItemPageHotspotTagHeight),
+				TextAlignmentOptions.Center);
 			label.enableWordWrapping = false;
 			label.overflowMode = TextOverflowModes.Overflow;
 			label.color = new Color(0.48f, 0.36f, 0.2f, 1f);
 			label.ForceMeshUpdate();
-			float width = Mathf.Clamp(label.preferredWidth + 16f, 40f, 140f);
-			rect.sizeDelta = new Vector2(width, 21f);
-			rect.anchoredPosition = new Vector2(0f, -ItemPageHotspotSize * 0.5f - 4f);
+			float width = Mathf.Clamp(label.preferredWidth + 20f, 56f, ItemPageHotspotTagMaxWidth);
+			rect.sizeDelta = new Vector2(width, ItemPageHotspotTagHeight);
+			rect.anchoredPosition = new Vector2(0f, -ItemPageHotspotSize * 0.5f - 5f);
 			RectTransform labelRect = label.rectTransform;
-			labelRect.sizeDelta = new Vector2(width, 21f);
+			labelRect.sizeDelta = new Vector2(width, ItemPageHotspotTagHeight);
 		}
 
 		/// <summary>部件是否能在图上圈出来（有物品图 + 坐标落在 0~1）。</summary>
@@ -612,6 +637,12 @@ namespace GameLogic
 		private void CloseItemPage()
 		{
 			if (m_overlay == null)
+			{
+				return;
+			}
+
+			// 检查门还没走完就不许关，只提示还差几处（见 BattleMainUI_ItemInspectGate）。
+			if (!CanCloseItemPage())
 			{
 				return;
 			}

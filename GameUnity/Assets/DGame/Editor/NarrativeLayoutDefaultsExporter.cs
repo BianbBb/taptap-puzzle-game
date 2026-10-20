@@ -25,6 +25,7 @@ namespace DGame
 		}
 
 		private const string PreferencePrefix = "NarrativeHudLayout.";
+		private const string CharacterScalePartPrefix = "CharacterScale.";
 		private const string OutputPath = "Assets/Scripts/HotFix/GameLogic/UI/Battle/NarrativeLayoutDefaults.Generated.cs";
 
 		[MenuItem("DGame Tools/剧情/将当前布局保存为打包默认布局")]
@@ -41,14 +42,32 @@ namespace DGame
 			parts.Add("Items");
 			parts.Add("Collection");
 			parts.Add("LayoutEditButton");
-			AddSessionCharacterParts(parts);
+			var npcIds = new HashSet<string>();
+			AddSessionCharacterParts(parts, npcIds);
+			// 角色缩放按「每个角色一个键」导出，剧情里出现过的 NPC 都带上
+			foreach (string npcId in npcIds)
+			{
+				parts.Add(CharacterScalePartPrefix + npcId);
+			}
+
 			var rows = new List<string>();
 			foreach (string part in parts.OrderBy(value => value, StringComparer.Ordinal))
 			{
+				if (part.StartsWith(CharacterScalePartPrefix, StringComparison.Ordinal))
+				{
+					string scaleKey = PreferencePrefix + part;
+					if (!PlayerPrefs.HasKey(scaleKey)) continue;
+					rows.Add("\t\t\tentries.Add(" + Quote(part) + ", new Entry(false, 0f, 0f, true, " +
+						Float(PlayerPrefs.GetFloat(scaleKey)) + ", false, 0, false, false));");
+					continue;
+				}
+
 				string key = PreferencePrefix + part;
 				bool hasPosition = PlayerPrefs.HasKey(key + ".X") && PlayerPrefs.HasKey(key + ".Y");
-				bool hasScale = PlayerPrefs.HasKey(key + ".Scale");
-				bool hasLayer = PlayerPrefs.HasKey(key + ".Layer");
+				// 人物缩放按角色存、图层按场景定，part 级的这两个键已经废弃，不再导出
+				bool isCharacterPart = part.StartsWith("Character.", StringComparison.Ordinal);
+				bool hasScale = !isCharacterPart && PlayerPrefs.HasKey(key + ".Scale");
+				bool hasLayer = !isCharacterPart && PlayerPrefs.HasKey(key + ".Layer");
 				bool hasMirror = PlayerPrefs.HasKey(key + ".Mirror");
 				if (!hasPosition && !hasScale && !hasLayer && !hasMirror) continue;
 				rows.Add("\t\t\tentries.Add(" + Quote(part) + ", new Entry(" +
@@ -74,7 +93,7 @@ namespace DGame
 			Debug.Log($"剧情默认布局已导出：{rows.Count} 项，{OutputPath}。打包前请提交该文件并重新生成 GameLogic DLL。");
 		}
 
-		private static void AddSessionCharacterParts(HashSet<string> parts)
+		private static void AddSessionCharacterParts(HashSet<string> parts, HashSet<string> npcIds)
 		{
 			string projectPath = Directory.GetParent(Application.dataPath).FullName;
 			string sessionsPath = Path.Combine(projectPath, "Configs/Json/tbnarrativesessionconfig.json");
@@ -88,6 +107,7 @@ namespace DGame
 				{
 					string npcId = name.Trim();
 					if (npcId.Length == 0) continue;
+					npcIds.Add(npcId);
 					parts.Add("Character." + session.id + ".NpcDialogue." + npcId);
 					parts.Add("Character." + session.id + ".PlayerDialogue." + npcId);
 				}

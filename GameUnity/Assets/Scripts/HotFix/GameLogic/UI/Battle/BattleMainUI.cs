@@ -155,27 +155,39 @@ namespace GameLogic
 		private Image m_imgNpcPortrait;
 		private TextMeshProUGUI m_tmpNpcPlaceholder;
 		private Vector2 m_npcPortraitSlotSize = new Vector2(600f, 830f);
-		private string m_loadedNpcPortraitLocation;
-		private RectTransform m_rtSceneCharacter;
-		private Image m_imgSceneCharacter;
-		private RectTransform m_rtOtherCharacter;
-		private Image m_imgOtherCharacter;
-		private string m_loadedOtherCharacterLocation;
-		private string m_requestedOtherCharacterLocation;
-		private CancellationTokenSource m_otherCharacterSpriteRequest;
-		private float m_otherCharacterRequestTime;
-		private string m_otherCharacterNpcId;
-		private int m_otherCharacterVersion;
-		private string m_loadedSceneCharacterLocation;
-		private string m_requestedSceneCharacterLocation;
-		private CancellationTokenSource m_sceneCharacterSpriteRequest;
-		private float m_sceneCharacterRequestTime;
-		private int m_sceneBackgroundVersion;
+		// 同框角色槽：一幕最多 3 人在场（S07 老周/陈先生/陈果）。槽位按 npcSet 顺序固定，
+		// 「谁在说话」只决定这一槽播什么表情，不再决定其余人要不要显示。
+		private const int MaxSceneCharacterSlots = 3;
+		private readonly List<SceneCharacterSlot> m_characterSlots = new List<SceneCharacterSlot>();
+		private string m_currentSpeakerNpcId;
+
+		/// <summary>
+		/// 一个角色槽的完整状态。立绘与 Spine 各留一套「已加载 / 已请求」记录，
+		/// 换人时能立刻清干净——否则异步回来的旧图和旧骨骼会在新人物加载完之前继续站着。
+		/// </summary>
+		private sealed class SceneCharacterSlot
+		{
+			public int Index;
+			public RectTransform Rect;
+			public Image Image;
+			public string NpcId;
+			public string LoadedSprite;
+			public string RequestedSprite;
+			public float RequestTime;
+			public CancellationTokenSource SpriteRequest;
+			public int Version;
 #if SPINE_UNITY && SPINE_CSHARP
-		private UISpineWidget m_npcSpine;
-		private string m_loadedNpcSpineLocation;
-		// 当前正在播的姿势（骨骼动画名），用于「同一表情不重播」和「空表情沿用上一句」
-		private string m_npcSpinePose;
+			public UISpineWidget Spine;
+			public string LoadedSpine;
+			// 这一槽当前正在播的姿势（骨骼动画名），用于「同一表情不重播」和「空表情沿用上一句」
+			public string LoadedPose;
+#endif
+		}
+
+		private int m_sceneBackgroundVersion;
+		// 缺素材（既无骨骼也无立绘）的角色只提示一次，别每句都刷屏
+		private readonly HashSet<string> m_warnedMissingNpcVisuals = new HashSet<string>();
+#if SPINE_UNITY && SPINE_CSHARP
 		private readonly HashSet<string> m_unavailableNpcSpines = new HashSet<string>();
 		// 缺表情的动作只在控制台提示一次，MapNpcSpinePose 是静态方法，所以这里也用静态集合
 		private static readonly HashSet<string> s_warnedSpinePoseGaps = new HashSet<string>();
@@ -287,10 +299,15 @@ namespace GameLogic
 		{
 			m_narrativeService.AffectionChanged -= OnAffectionChanged;
 			m_narrativeService.EmotionEmerged -= OnEmotionEmerged;
-			CancelSpriteRequest(ref m_otherCharacterSpriteRequest);
-			CancelSpriteRequest(ref m_sceneCharacterSpriteRequest);
+			for (int i = 0; i < m_characterSlots.Count; i++)
+			{
+				SceneCharacterSlot slot = m_characterSlots[i];
+				if (slot == null) continue;
+				CancelSpriteRequest(ref slot.SpriteRequest);
+				slot.Version++;
+			}
+			m_characterSlots.Clear();
 			m_messageScrollVersion++;
-			m_npcPortraitVersion++;
 			m_dialoguePresentVersion++;
 			m_messagePinnedToLatest = true;
 			m_memorySlotImages.Clear();
@@ -338,7 +355,6 @@ namespace GameLogic
 			HideNpcSpine();
 			m_imgNpcPortrait = null;
 			m_tmpNpcPlaceholder = null;
-			m_loadedNpcPortraitLocation = null;
 			m_imgSceneRoot = null;
 			m_sceneLayerImages.Clear();
 			m_loadedSceneKey = null;
@@ -348,15 +364,7 @@ namespace GameLogic
 			AbortSceneSearch();
 			m_titleCardRoot = null;
 			m_cgTitleCard = null;
-			m_rtSceneCharacter = null;
-			m_imgSceneCharacter = null;
-			m_rtOtherCharacter = null;
-			m_imgOtherCharacter = null;
-			m_loadedOtherCharacterLocation = null;
-			m_requestedOtherCharacterLocation = null;
-			m_otherCharacterVersion++;
-			m_loadedSceneCharacterLocation = null;
-			m_requestedSceneCharacterLocation = null;
+			m_currentSpeakerNpcId = null;
 			m_overlayBodyContent = null;
 			m_dialoguePanel = null;
 			m_rtNpcSubtitle = null;
@@ -619,6 +627,19 @@ namespace GameLogic
 			{
 				return;
 			}
+
+			// 物品检查门：这一句刚好把物件交到玩家手上时，强制翻物品页，看够部位才往下走。
+			// 没有配 inspectGate / 这句没给东西 / 部件都看过了，都会直接放行。
+			if (enteredGrantedItems.Count > 0)
+			{
+				bool passed = await RunItemInspectGateAsync(story,
+					enteredGrantedItems[enteredGrantedItems.Count - 1], presentVersion);
+				if (!passed)
+				{
+					return;
+				}
+			}
+
 			if (npcDialogue)
 			{
 				await AutoAdvanceStoryNodeAsync(story, presentVersion);
@@ -1259,6 +1280,18 @@ namespace GameLogic
 			}, token);
 		}
 
+		// ---- 记忆栏槽位 ----
+		// 旧值 78×78 是照 dialogue_memory_slot_bg.png 的原生 76×78 一比一摆的，代价是名字只能挤到 8~11 号，
+		// 在手机上就是一坨墨。底图是九切（spriteBorder 18），放大不会变形，所以直接按「名字读得清」来定尺寸：
+		// 最长记忆名是 6 个字（收录机记忆1），24 号单行 ≈ 144，槽宽 150 刚好一行放下。
+		private const float MemorySlotWidth = 150f;
+		private const float MemorySlotHeight = 108f;
+		private const float MemorySlotGap = 14f;
+		/// <summary>有缩略图时名字带的厚度：24 号中文单行 ≈ 30 高，36 既兜得住又不至于把插画压掉一半。</summary>
+		private const float MemorySlotLabelBandHeight = 36f;
+		private const float MemorySlotLabelFontSizeMax = 24f;
+		private const float MemorySlotLabelFontSizeMin = 14f;
+
 		private void BuildMemorySlots()
 		{
 			m_memorySlotImages.Clear();
@@ -1285,8 +1318,9 @@ namespace GameLogic
 			}
 
 			layout.childAlignment = TextAnchor.MiddleRight;
-			layout.spacing = 12f;
-			layout.padding = new RectOffset(24, 144, 16, 16);
+			layout.spacing = MemorySlotGap;
+			// 上下各留 10：131 高的纸带里塞得下 108 的槽，槽位仍然垂直居中。
+			layout.padding = new RectOffset(24, 144, 10, 10);
 			layout.childControlWidth = false;
 			layout.childControlHeight = false;
 			layout.childForceExpandWidth = false;
@@ -1334,7 +1368,7 @@ namespace GameLogic
 				slotGroup.blocksRaycasts = true;
 				slotGroup.interactable = true;
 				RectTransform slotRect = slot.GetComponent<RectTransform>();
-				slotRect.sizeDelta = new Vector2(78f, 78f);
+				slotRect.sizeDelta = new Vector2(MemorySlotWidth, MemorySlotHeight);
 				Image slotImage = slot.GetComponent<Image>();
 				slotImage.color = new Color(1f, 1f, 1f, 0.35f);
 				ApplyHudSprite(slotImage, "dialogue_memory_slot_bg", false, token, true);
@@ -1351,15 +1385,15 @@ namespace GameLogic
 				thumb.raycastTarget = false;
 				thumb.enabled = false;
 
-				// 名字底板：有图时只占底部 18px，避免文字压在插画上。
+				// 名字底板：有图时压住槽位底部一条，给 24 号的字一个干净的底。
 				var labelBackGo = new GameObject("LabelBack", typeof(RectTransform), typeof(Image));
 				labelBackGo.transform.SetParent(slot.transform, false);
 				RectTransform labelBackRect = labelBackGo.GetComponent<RectTransform>();
 				labelBackRect.anchorMin = new Vector2(0f, 0f);
 				labelBackRect.anchorMax = new Vector2(1f, 0f);
 				labelBackRect.pivot = new Vector2(0.5f, 0f);
-				labelBackRect.anchoredPosition = new Vector2(0f, 3f);
-				labelBackRect.sizeDelta = new Vector2(0f, 18f);
+				labelBackRect.anchoredPosition = new Vector2(0f, 2f);
+				labelBackRect.sizeDelta = new Vector2(0f, MemorySlotLabelBandHeight);
 				Image labelBack = labelBackGo.GetComponent<Image>();
 				labelBack.color = new Color(HudPaperPanel.r, HudPaperPanel.g, HudPaperPanel.b, 0.88f);
 				labelBack.raycastTarget = false;
@@ -1381,8 +1415,8 @@ namespace GameLogic
 				label.enableWordWrapping = true;
 				label.overflowMode = TextOverflowModes.Ellipsis;
 				label.enableAutoSizing = true;
-				label.fontSizeMin = 10f;
-				label.fontSizeMax = 28f;
+				label.fontSizeMin = MemorySlotLabelFontSizeMin;
+				label.fontSizeMax = MemorySlotLabelFontSizeMax;
 				var hover = slot.AddComponent<EventTrigger>();
 				var enter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
 				int slotIndex = i;
@@ -1397,8 +1431,8 @@ namespace GameLogic
 				RectTransform deleteRect = delete.GetComponent<RectTransform>();
 				deleteRect.anchorMin = deleteRect.anchorMax = Vector2.one;
 				deleteRect.pivot = new Vector2(0.5f, 0.5f);
-				deleteRect.anchoredPosition = new Vector2(-7f, -7f);
-				deleteRect.sizeDelta = new Vector2(30f, 30f);
+				deleteRect.anchoredPosition = new Vector2(-9f, -9f);
+				deleteRect.sizeDelta = new Vector2(40f, 40f);
 				Image deleteHitArea = delete.GetComponent<Image>();
 				deleteHitArea.color = new Color(1f, 1f, 1f, 0.001f);
 				EventTrigger holdTrigger = delete.AddComponent<EventTrigger>();
@@ -1442,7 +1476,8 @@ namespace GameLogic
 			float viewportWidth = m_scrollMemoryList.viewport != null
 				? m_scrollMemoryList.viewport.rect.width : m_scrollMemoryList.GetComponent<RectTransform>().rect.width;
 			HorizontalLayoutGroup layout = content.GetComponent<HorizontalLayoutGroup>();
-			float slotsWidth = count * 78f + Mathf.Max(0, count - 1) * 12f +
+			float slotsWidth = count * MemorySlotWidth +
+				Mathf.Max(0, count - 1) * MemorySlotGap +
 				layout.padding.left + layout.padding.right;
 			content.sizeDelta = new Vector2(Mathf.Max(viewportWidth, slotsWidth), 0f);
 			if (changed && slotsWidth > viewportWidth)
@@ -1460,7 +1495,7 @@ namespace GameLogic
 			rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
 			rect.pivot = new Vector2(0.5f, 0.5f);
 			rect.anchoredPosition = Vector2.zero;
-			rect.sizeDelta = new Vector2(21f, 4f);
+			rect.sizeDelta = new Vector2(28f, 5f);
 			rect.localRotation = Quaternion.Euler(0f, 0f, angle);
 			Image image = stroke.GetComponent<Image>();
 			image.color = HudPaperText;
@@ -1624,8 +1659,8 @@ namespace GameLogic
 					MemoryConfig memory = NarrativeConfigMgr.Instance.GetMemory(ids[i]);
 					label.text = memory == null ? ids[i] : memory.MemoryName;
 					label.enableAutoSizing = true;
-					label.fontSizeMin = 10f;
-					label.fontSizeMax = 16f;
+					label.fontSizeMin = MemorySlotLabelFontSizeMin;
+					label.fontSizeMax = MemorySlotLabelFontSizeMax;
 					label.overflowMode = TextOverflowModes.Ellipsis;
 					label.enableWordWrapping = true;
 					label.color = HudPaperText;
@@ -1671,10 +1706,13 @@ namespace GameLogic
 					labelRect.anchorMin = new Vector2(0f, 0f);
 					labelRect.anchorMax = new Vector2(1f, 0f);
 					labelRect.pivot = new Vector2(0.5f, 0f);
-					labelRect.anchoredPosition = new Vector2(0f, 3f);
-					labelRect.sizeDelta = new Vector2(0f, 18f);
-					label.fontSizeMin = 8f;
-					label.fontSizeMax = 11f;
+					labelRect.anchoredPosition = new Vector2(0f, 2f);
+					labelRect.sizeDelta = new Vector2(-12f, MemorySlotLabelBandHeight);
+					// 有图时名字钉在带子里必须单行：6 个字的「收录机记忆1」一换行，TMP 会为了塞下两行
+					// 一路缩到 14 号，等于又回到看不清。关掉折行让它只按宽度缩，最多 24 → 22。
+					label.enableWordWrapping = false;
+					label.fontSizeMin = MemorySlotLabelFontSizeMin;
+					label.fontSizeMax = MemorySlotLabelFontSizeMax;
 				}
 				else
 				{
@@ -1684,6 +1722,7 @@ namespace GameLogic
 					labelRect.anchoredPosition = Vector2.zero;
 					labelRect.offsetMin = Vector2.zero;
 					labelRect.offsetMax = Vector2.zero;
+					label.enableWordWrapping = true;
 				}
 			}
 
@@ -2610,8 +2649,23 @@ namespace GameLogic
 		{
 			if (story == null) return;
 			var grantedEmotions = new List<string>();
+			var grantedMemories = new List<string>();
 			m_actionService.Execute(story.OnExitActionIds,
-				saveData.BuildTurnKey(story.Id) + "|node-exit", saveData, true, grantedEmotions);
+				saveData.BuildTurnKey(story.Id) + "|node-exit", saveData, true, grantedEmotions, null,
+				grantedMemories);
+			// GrantMemory 动作写进来的记忆要补一次涌现扫描：离场动作不走 CommitTurn，
+			// 没有别的地方会做「新记忆 → 凑够两段 → 情绪涌现」这一步（例：S04 结尾 M17 起死回生）。
+			if (grantedMemories.Count > 0)
+			{
+				RefreshMemorySlots();
+				IReadOnlyList<string> emerged = m_narrativeService.ScanEmergenceAndApply(saveData);
+				for (int i = 0; i < emerged.Count; i++)
+				{
+					if (!grantedEmotions.Contains(emerged[i]))
+						grantedEmotions.Add(emerged[i]);
+				}
+			}
+
 			// 自动推进的节点（没有回复选项）不经过 CommitTurn，不会派发 EmotionEmerged，这里补入队；
 			// 真正的播放由调用方在推进/转场之前 await，避免被下一句或日终盖掉。
 			for (int i = 0; i < grantedEmotions.Count; i++)
@@ -2671,14 +2725,11 @@ namespace GameLogic
 			SetDialogueAdvanceCatcherActive(false);
 			if (visible)
 			{
-				CancelSpriteRequest(ref m_sceneCharacterSpriteRequest);
-				CancelSpriteRequest(ref m_otherCharacterSpriteRequest);
-				m_requestedSceneCharacterLocation = null;
-				m_requestedOtherCharacterLocation = null;
-				m_npcPortraitVersion++;
-				HideNpcSpine();
-				if (m_rtSceneCharacter != null) m_rtSceneCharacter.gameObject.SetActive(false);
-				if (m_rtOtherCharacter != null) m_rtOtherCharacter.gameObject.SetActive(false);
+				// 日终反思是整屏演出：所有同框角色一起离场，回来时由下一幕重新排
+				for (int i = 0; i < m_characterSlots.Count; i++)
+				{
+					HideCharacterSlot(m_characterSlots[i]);
+				}
 				if (m_imgNpcPortrait != null) m_imgNpcPortrait.enabled = false;
 				if (m_tmpNpcPlaceholder != null) m_tmpNpcPlaceholder.gameObject.SetActive(false);
 			}
@@ -2834,6 +2885,8 @@ namespace GameLogic
 			IReadOnlyList<string> emergedEmotions = m_narrativeService.ScanEmergenceAndApply(saveData);
 			RefreshUI();
 			PlayItemMemoryFlyIn(memoryId, source);
+			// 检查门走完最后一个部位时，这里会把物品页关掉并放行剧情（见 BattleMainUI_ItemInspectGate）。
+			NotifyInspectGateProgress();
 			// 调查部件绕过 CommitTurn，涌现不会派事件，这里补上过场触发。
 			for (int i = 0; i < emergedEmotions.Count; i++)
 			{
@@ -3577,8 +3630,9 @@ namespace GameLogic
 			return text;
 		}
 
-		private static void CreateOverlayButton(Transform parent, string label, Vector2 position,
-			Vector2 size, Action action, bool fromTop = false)
+		/// <summary>纸面按钮。返回按钮上的文字，调用方要放大/自适应用字号时自己改。</summary>
+		private static TextMeshProUGUI CreateOverlayButton(Transform parent, string label, Vector2 position,
+			Vector2 size, Action action, bool fromTop = false, float fontSize = 17f)
 		{
 			var go = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button));
 			go.transform.SetParent(parent, false);
@@ -3613,15 +3667,16 @@ namespace GameLogic
 					.Append(rect.DOScale(1f, 0.12f)).SetUpdate(true).SetLink(go)
 					.OnComplete(() => action?.Invoke());
 			});
-			TextMeshProUGUI text = CreateOverlayText(go.transform, label, 17, Vector2.zero, size,
+			TextMeshProUGUI text = CreateOverlayText(go.transform, label, fontSize, Vector2.zero, size,
 				TextAlignmentOptions.Center);
 			text.overflowMode = TextOverflowModes.Ellipsis;
 			text.enableWordWrapping = true;
 			RectTransform textRect = text.rectTransform;
 			textRect.anchorMin = Vector2.zero;
 			textRect.anchorMax = Vector2.one;
-			textRect.offsetMin = new Vector2(8f, 2f);
-			textRect.offsetMax = new Vector2(-8f, -2f);
+			textRect.offsetMin = new Vector2(10f, 2f);
+			textRect.offsetMax = new Vector2(-10f, -2f);
+			return text;
 		}
 
 		private static TMP_InputField CreateOverlayInputField(Transform parent, string initialValue,
@@ -3817,8 +3872,7 @@ namespace GameLogic
 
 		private void RefreshNpcPortrait(StoryNodeConfig story)
 		{
-			RefreshOtherCharacter(story);
-			RefreshNpcPortraitAsync(story).Forget();
+			RefreshSceneCharacters(story);
 		}
 
 		private List<string> GetSessionNpcSet()
@@ -3832,165 +3886,237 @@ namespace GameLogic
 				.Select(id => id.Trim()).Where(id => id.Length > 0).Distinct().ToList();
 		}
 
-		private Vector2 GetActiveCharacterDefaultPosition()
+		/// <summary>
+		/// 本幕该同时在场的角色。npcSet 决定常驻阵容（顺序即站位），节点说话人不在阵容里
+		/// （AI 内心话、陈父、妻子这类）时补进来——「谁说话」不再影响「谁站着」。
+		/// </summary>
+		private List<string> ResolvePresentNpcIds(StoryNodeConfig story)
 		{
-			string npcId = m_currentStoryNode != null ? m_currentStoryNode.NpcId : null;
-			return GetCharacterDefaultPosition(npcId);
-		}
+			var present = new List<string>();
+			string speaker = story != null && !string.IsNullOrWhiteSpace(story.NpcId)
+				? story.NpcId.Trim()
+				: null;
+			// 节点级「这位中途走了」：只留说话人，其余槽收起
+			if (story != null && story.HideOtherNpc)
+			{
+				if (!string.IsNullOrEmpty(speaker)) present.Add(speaker);
+				return present;
+			}
 
-		private void RefreshOtherCharacter(StoryNodeConfig story)
-		{
 			List<string> npcSet = GetSessionNpcSet();
-			if (story == null || !IsNpcDialogueTurn(story) || npcSet.Count < 2 ||
-				!npcSet.Contains(story.NpcId))
-			{
-				CancelSpriteRequest(ref m_otherCharacterSpriteRequest);
-				m_requestedOtherCharacterLocation = null;
-				m_otherCharacterVersion++;
-				m_otherCharacterNpcId = null;
-				if (m_rtOtherCharacter != null) m_rtOtherCharacter.gameObject.SetActive(false);
-				return;
-			}
-			string otherNpc = npcSet.FirstOrDefault(id => id != story.NpcId);
-			if (string.IsNullOrWhiteSpace(otherNpc)) return;
-			m_otherCharacterNpcId = otherNpc;
+			for (int i = 0; i < npcSet.Count && present.Count < MaxSceneCharacterSlots; i++)
+				present.Add(npcSet[i]);
 
-			EnsureSceneCharacterView();
-			if (m_rtSceneCharacter == null || m_imgSceneRoot == null) return;
-			if (m_rtOtherCharacter == null)
-			{
-				var go = new GameObject("OtherSceneCharacter", typeof(RectTransform), typeof(Image));
-				go.transform.SetParent(m_imgSceneRoot.transform, false);
-				m_rtOtherCharacter = go.GetComponent<RectTransform>();
-				m_imgOtherCharacter = go.GetComponent<Image>();
-				m_imgOtherCharacter.preserveAspect = true;
-				m_imgOtherCharacter.raycastTarget = false;
-				// 同 SceneLayer：没有贴图时先别让它画白色方块
-				m_imgOtherCharacter.enabled = false;
-			}
-			m_rtOtherCharacter.anchorMin = m_rtOtherCharacter.anchorMax = new Vector2(0.5f, 0f);
-			m_rtOtherCharacter.pivot = new Vector2(0.5f, 0f);
-			m_rtOtherCharacter.anchoredPosition = ReadLayoutPosition(GetOtherCharacterLayoutPart(),
-				GetCharacterDefaultPosition(otherNpc));
-			m_rtOtherCharacter.sizeDelta = new Vector2(600f, 960f);
-			m_rtOtherCharacter.localScale = ReadCharacterVisualScale(GetOtherCharacterLayoutPart());
-			m_imgOtherCharacter.raycastTarget = m_layoutEditMode;
-			RegisterLayoutDragHandle(m_rtOtherCharacter, "OtherCharacter");
-			string location = ResolveNpcPortraitLocation(otherNpc, null);
-			if (string.IsNullOrWhiteSpace(location))
-			{
-				CancelSpriteRequest(ref m_otherCharacterSpriteRequest);
-				m_requestedOtherCharacterLocation = null;
-				m_rtOtherCharacter.gameObject.SetActive(false);
-				return;
-			}
-			m_rtOtherCharacter.gameObject.SetActive(true);
-			// 换人时旧图还在就先显示旧图，绝不能留一个没有贴图的白色立绘框
-			m_imgOtherCharacter.enabled = HasUsableSprite(m_imgOtherCharacter);
-			if (location == m_loadedOtherCharacterLocation && m_imgOtherCharacter.sprite != null)
-			{
-				CancelSpriteRequest(ref m_otherCharacterSpriteRequest);
-				m_requestedOtherCharacterLocation = null;
-				return;
-			}
-			if (location == m_requestedOtherCharacterLocation &&
-				Time.unscaledTime - m_otherCharacterRequestTime < 5f) return;
-			CancelSpriteRequest(ref m_otherCharacterSpriteRequest);
-			m_requestedOtherCharacterLocation = location;
-			m_otherCharacterRequestTime = Time.unscaledTime;
-			m_otherCharacterSpriteRequest = CancellationTokenSource.CreateLinkedTokenSource(
-				gameObject.GetCancellationTokenOnDestroy());
-			int version = ++m_otherCharacterVersion;
-			m_imgOtherCharacter.SetSprite(location, false, loaded =>
-			{
-				if (IsDestroyed || version != m_otherCharacterVersion || loaded == null || loaded.sprite == null) return;
-				m_loadedOtherCharacterLocation = location;
-				m_requestedOtherCharacterLocation = null;
-				loaded.enabled = HasUsableSprite(loaded);
-				loaded.preserveAspect = true;
-				loaded.raycastTarget = false;
-			}, m_otherCharacterSpriteRequest.Token);
+			if (!string.IsNullOrEmpty(speaker) && !IsSilentNpcId(speaker) && !present.Contains(speaker) &&
+				present.Count < MaxSceneCharacterSlots)
+				present.Add(speaker);
+			return present;
 		}
 
-		private async UniTaskVoid RefreshNpcPortraitAsync(StoryNodeConfig story)
+		/// <summary>AI / 旁白 只是「心里话」的 npcId，不该真的站到场景里。</summary>
+		private static bool IsSilentNpcId(string npcId)
+			=> string.Equals(npcId, "AI", StringComparison.OrdinalIgnoreCase) || npcId == "旁白";
+
+		/// <summary>
+		/// 按「在场角色」刷新所有槽。槽位分配只看 npcSet 顺序，与当前是谁在说话无关，
+		/// 所以换说话人时人不会互换位置、也不会整块消失。
+		/// </summary>
+		private void RefreshSceneCharacters(StoryNodeConfig story)
 		{
-			if (story == null)
+			if (IsDestroyed) return;
+			if (m_imgSceneRoot == null) BindSceneBackgroundView();
+			if (m_imgSceneRoot == null) return;
+
+			m_currentSpeakerNpcId = story != null ? story.NpcId : null;
+			List<string> present = ResolvePresentNpcIds(story);
+			int count = Mathf.Min(present.Count, MaxSceneCharacterSlots);
+			for (int i = 0; i < MaxSceneCharacterSlots; i++)
 			{
-				return;
+				if (i >= count)
+				{
+					SceneCharacterSlot spare = GetCharacterSlot(i);
+					if (spare != null) HideCharacterSlot(spare);
+					continue;
+				}
+
+				SceneCharacterSlot slot = EnsureCharacterSlot(i);
+				if (slot != null) ShowCharacterSlot(slot, i, count, present[i], story);
+			}
+		}
+
+		private SceneCharacterSlot GetCharacterSlot(int index)
+			=> index >= 0 && index < m_characterSlots.Count ? m_characterSlots[index] : null;
+
+		private SceneCharacterSlot EnsureCharacterSlot(int index)
+		{
+			if (m_imgSceneRoot == null) BindSceneBackgroundView();
+			if (m_imgSceneRoot == null) return null;
+			while (m_characterSlots.Count <= index) m_characterSlots.Add(null);
+			SceneCharacterSlot slot = m_characterSlots[index];
+			if (slot != null) return slot;
+
+			// 第一槽沿用旧节点名，第二槽兼容旧的 OtherSceneCharacter，层级里已有的节点不重建
+			string objectName = index == 0 ? "SceneCharacter" : "SceneCharacter" + index;
+			Transform existing = m_imgSceneRoot.transform.Find(objectName);
+			if (existing == null && index == 1) existing = m_imgSceneRoot.transform.Find("OtherSceneCharacter");
+			GameObject go;
+			if (existing != null)
+			{
+				go = existing.gameObject;
+			}
+			else
+			{
+				go = new GameObject(objectName, typeof(RectTransform));
+				go.transform.SetParent(m_imgSceneRoot.transform, false);
 			}
 
-			EnsureSceneCharacterView();
+			slot = new SceneCharacterSlot
+			{
+				Index = index,
+				Rect = go.GetComponent<RectTransform>(),
+			};
+			slot.Image = go.GetComponent<Image>();
+			if (slot.Image == null) slot.Image = go.AddComponent<Image>();
+			slot.Image.type = Image.Type.Simple;
+			slot.Image.useSpriteMesh = false;
+			slot.Image.preserveAspect = true;
+			slot.Image.color = Color.white;
+			slot.Image.raycastTarget = false;
+			// 没有贴图时先别让它画白色方块
+			if (!HasUsableSprite(slot.Image)) slot.Image.enabled = false;
+			slot.Rect.anchorMin = slot.Rect.anchorMax = new Vector2(0.5f, 0f);
+			slot.Rect.pivot = new Vector2(0.5f, 0f);
+			slot.Rect.sizeDelta = new Vector2(600f, CharacterSlotHeight);
+			m_characterSlots[index] = slot;
+			RegisterCharacterSlotDragHandle(slot);
+			return slot;
+		}
 
-			m_npcPortraitVersion++;
+		private void ShowCharacterSlot(SceneCharacterSlot slot, int index, int count, string npcId,
+			StoryNodeConfig story)
+		{
+			bool npcChanged = slot.NpcId != npcId;
+			slot.NpcId = npcId;
+			slot.Rect.gameObject.SetActive(true);
+			string part = GetCharacterSlotLayoutPart(slot);
+			slot.Rect.anchoredPosition = ReadLayoutPosition(part,
+				GetCharacterDefaultPosition(npcId, index, count));
+			slot.Rect.sizeDelta = new Vector2(600f, CharacterSlotHeight);
+			slot.Rect.localScale = ReadCharacterVisualScale(part);
+			slot.Rect.pivot = new Vector2(0.5f, 0f);
+			slot.Rect.anchorMin = slot.Rect.anchorMax = new Vector2(0.5f, 0f);
+			slot.Image.raycastTarget = m_layoutEditMode;
+
+			if (npcChanged)
+			{
+				// 换人必须当场清干净：旧图留在槽里等异步加载，只要慢一拍，
+				// 画面上就是「字幕写着 A、站着的是 B」——这正是要修的那个 bug。
+				ClearCharacterSlotVisual(slot);
+			}
+
+			// 只有说话人播这一句的表情，其他人回待机，免得两个人同时抢动作
+			string poseAsset = IsCurrentSpeaker(npcId) ? story?.AnimationAsset : "normal";
+			RefreshCharacterSlotVisualAsync(slot, npcId, poseAsset).Forget();
+		}
+
+		private bool IsCurrentSpeaker(string npcId)
+			=> !string.IsNullOrEmpty(npcId) && npcId == m_currentSpeakerNpcId;
+
+		private string GetCharacterSlotLayoutPart(SceneCharacterSlot slot)
+			=> GetCharacterLayoutPart(slot != null ? slot.NpcId : null, true);
+
+		private void HideCharacterSlot(SceneCharacterSlot slot)
+		{
+			if (slot == null) return;
+			slot.NpcId = null;
+			ClearCharacterSlotVisual(slot);
+			if (slot.Rect != null) slot.Rect.gameObject.SetActive(false);
+		}
+
+		/// <summary>
+		/// 把一个槽的可见内容清空（立绘 + 骨骼），并让所有在途的异步请求作废。
+		/// 只清画面，不动 Rect 的位置与缩放。
+		/// </summary>
+		private void ClearCharacterSlotVisual(SceneCharacterSlot slot)
+		{
+			if (slot == null) return;
+			CancelSpriteRequest(ref slot.SpriteRequest);
+			slot.RequestedSprite = null;
+			slot.LoadedSprite = null;
+			slot.Version++;
+			if (slot.Image != null)
+			{
+				slot.Image.sprite = null;
+				slot.Image.enabled = false;
+			}
 #if SPINE_UNITY && SPINE_CSHARP
-			int version = m_npcPortraitVersion;
-			string spineLocation = ResolveNpcSpineLocation(story.NpcId);
+			HideCharacterSlotSpine(slot);
+#endif
+		}
+
+		private async UniTaskVoid RefreshCharacterSlotVisualAsync(SceneCharacterSlot slot, string npcId,
+			string animationAsset)
+		{
+			if (slot == null || slot.Rect == null) return;
+			int version = ++slot.Version;
+#if SPINE_UNITY && SPINE_CSHARP
+			string spineLocation = ResolveNpcSpineLocation(npcId);
 			if (!string.IsNullOrEmpty(spineLocation) && IsPortraitLocationReady(spineLocation) &&
 				!m_unavailableNpcSpines.Contains(spineLocation))
 			{
-				if (await ShowNpcSpineAsync(spineLocation, story.NpcId, story.AnimationAsset, version))
-				{
+				if (await ShowCharacterSlotSpineAsync(slot, spineLocation, npcId, animationAsset, version))
 					return;
-				}
+				if (IsDestroyed || slot.Version != version) return;
 			}
-
-			HideNpcSpine();
 #endif
-			ShowNpcPortraitSprite(story);
+			ShowCharacterSlotSprite(slot, npcId, animationAsset, version);
 		}
 
-		private void ShowNpcPortraitSprite(StoryNodeConfig story)
+		private void ShowCharacterSlotSprite(SceneCharacterSlot slot, string npcId, string animationAsset, int version)
 		{
-			string location = ResolveNpcPortraitLocation(story.NpcId, story.AnimationAsset);
+			if (slot == null || slot.Image == null) return;
+			string location = ResolveNpcPortraitLocation(npcId, animationAsset);
 			if (string.IsNullOrEmpty(location))
 			{
-				CancelSpriteRequest(ref m_sceneCharacterSpriteRequest);
-				m_requestedSceneCharacterLocation = null;
-				HideNpcSpine();
-				if (m_rtSceneCharacter != null) m_rtSceneCharacter.gameObject.SetActive(false);
-				if (m_imgNpcPortrait != null) m_imgNpcPortrait.enabled = false;
-				if (m_tmpNpcPlaceholder != null) m_tmpNpcPlaceholder.gameObject.SetActive(false);
+				// 这个角色还没有骨骼也没有立绘：槽位留在原位、只是不画东西。
+				// 旧实现会把整槽 SetActive(false)，画面里只剩另一个人，看起来就像「说话的是别人」。
+				WarnMissingNpcVisual(npcId);
+				slot.Image.enabled = false;
 				return;
 			}
 
-			EnsureSceneCharacterView();
-			if (m_rtSceneCharacter == null || m_imgSceneCharacter == null)
+			if (location == slot.LoadedSprite && HasUsableSprite(slot.Image))
 			{
+				FitSceneCharacterSprite(slot.Image);
 				return;
 			}
-
-			m_rtSceneCharacter.gameObject.SetActive(true);
-			if (location == m_loadedSceneCharacterLocation && m_imgSceneCharacter.sprite != null)
-			{
-				CancelSpriteRequest(ref m_sceneCharacterSpriteRequest);
-				m_requestedSceneCharacterLocation = null;
-				FitSceneCharacterSprite(m_imgSceneCharacter);
-				return;
-			}
-			if (location == m_requestedSceneCharacterLocation &&
-				Time.unscaledTime - m_sceneCharacterRequestTime < 5f) return;
+			if (location == slot.RequestedSprite && Time.unscaledTime - slot.RequestTime < 5f) return;
 
 			SoundConfigMgr.Instance.PlaySfx(SfxNames.PortraitSwitch);
-			HideNpcSpine();
-			CancelSpriteRequest(ref m_sceneCharacterSpriteRequest);
-			m_requestedSceneCharacterLocation = location;
-			m_sceneCharacterRequestTime = Time.unscaledTime;
-			m_sceneCharacterSpriteRequest = CancellationTokenSource.CreateLinkedTokenSource(
+			CancelSpriteRequest(ref slot.SpriteRequest);
+			slot.RequestedSprite = location;
+			slot.RequestTime = Time.unscaledTime;
+			slot.SpriteRequest = CancellationTokenSource.CreateLinkedTokenSource(
 				gameObject.GetCancellationTokenOnDestroy());
-			m_imgSceneCharacter.SetSprite(location, false, image =>
+			slot.Image.SetSprite(location, false, image =>
 			{
-				if (m_requestedSceneCharacterLocation != location || image == null || image.sprite == null ||
-					IsDestroyed || m_monologuePresentation)
+				if (IsDestroyed || slot.Version != version || image == null || image.sprite == null ||
+					m_monologuePresentation)
 				{
 					return;
 				}
 
-				m_loadedSceneCharacterLocation = location;
-				m_loadedNpcPortraitLocation = location;
-				m_requestedSceneCharacterLocation = null;
+				slot.LoadedSprite = location;
+				slot.RequestedSprite = null;
 				FitSceneCharacterSprite(image);
 				HideLegacyNpcPortrait();
-			}, m_sceneCharacterSpriteRequest.Token);
+			}, slot.SpriteRequest.Token);
+		}
+
+		private void WarnMissingNpcVisual(string npcId)
+		{
+			if (string.IsNullOrEmpty(npcId) || !m_warnedMissingNpcVisuals.Add(npcId)) return;
+			DLogger.Warning("角色「{0}」既没有 Spine 也没有立绘，场景里会空一个位置；请补素材", npcId);
 		}
 
 		private static void CancelSpriteRequest(ref CancellationTokenSource request)
@@ -3999,39 +4125,6 @@ namespace GameLogic
 			request.Cancel();
 			request.Dispose();
 			request = null;
-		}
-
-		private void EnsureSceneCharacterView()
-		{
-			if (m_imgSceneRoot == null) BindSceneBackgroundView();
-			if (m_imgSceneRoot == null) return;
-
-			if (m_rtSceneCharacter == null)
-			{
-				Transform existing = m_imgSceneRoot.transform.Find("SceneCharacter");
-				if (existing != null) m_rtSceneCharacter = existing as RectTransform;
-			}
-			if (m_rtSceneCharacter == null)
-			{
-				var go = new GameObject("SceneCharacter", typeof(RectTransform), typeof(Image));
-				go.transform.SetParent(m_imgSceneRoot.transform, false);
-				m_rtSceneCharacter = go.GetComponent<RectTransform>();
-			}
-
-			m_rtSceneCharacter.anchorMin = new Vector2(0.5f, 0f);
-			m_rtSceneCharacter.anchorMax = new Vector2(0.5f, 0f);
-			m_rtSceneCharacter.pivot = new Vector2(0.5f, 0f);
-			m_rtSceneCharacter.anchoredPosition = ReadLayoutPosition(GetCharacterLayoutPart(),
-				GetActiveCharacterDefaultPosition());
-			m_rtSceneCharacter.sizeDelta = new Vector2(600f, 960f);
-			m_rtSceneCharacter.localScale = ReadCharacterVisualScale(GetCharacterLayoutPart());
-			m_imgSceneCharacter = m_rtSceneCharacter.GetComponent<Image>();
-			if (m_imgSceneCharacter == null) m_imgSceneCharacter = m_rtSceneCharacter.gameObject.AddComponent<Image>();
-			m_imgSceneCharacter.raycastTarget = m_layoutEditMode;
-			m_imgSceneCharacter.preserveAspect = true;
-			m_imgSceneCharacter.color = Color.white;
-			if (!HasUsableSprite(m_imgSceneCharacter)) m_imgSceneCharacter.enabled = false;
-			RegisterLayoutDragHandle(m_rtSceneCharacter, "Character");
 		}
 
 		/// <summary>
@@ -4073,35 +4166,34 @@ namespace GameLogic
 		}
 
 #if SPINE_UNITY && SPINE_CSHARP
-		private async UniTask<bool> ShowNpcSpineAsync(string location, string npcId, string animationAsset, int version)
+		private async UniTask<bool> ShowCharacterSlotSpineAsync(SceneCharacterSlot slot, string location,
+			string npcId, string animationAsset, int version)
 		{
-			EnsureSceneCharacterView();
-			if (m_rtSceneCharacter == null || m_imgSceneCharacter == null)
+			if (slot == null || slot.Rect == null || slot.Image == null)
 			{
 				return false;
 			}
 
-			if (location == m_loadedNpcSpineLocation && m_npcSpine != null && !m_npcSpine.IsDestroyed)
+			if (location == slot.LoadedSpine && slot.Spine != null && !slot.Spine.IsDestroyed)
 			{
-				if (!m_npcSpine.HasValidSkeleton)
+				if (!slot.Spine.HasValidSkeleton)
 				{
 					m_unavailableNpcSpines.Add(location);
 					return false;
 				}
 
-				ApplyNpcSpinePose(m_npcSpine, npcId, animationAsset, false);
-				m_npcSpine.FitToSlot(m_rtSceneCharacter.sizeDelta);
-				m_npcSpine.SetRaycastTarget(m_layoutEditMode);
-				HideNpcPortraitSprite();
+				ApplyCharacterSlotSpinePose(slot, npcId, animationAsset, false);
+				slot.Spine.FitToSlot(slot.Rect.sizeDelta);
+				slot.Spine.SetRaycastTarget(m_layoutEditMode);
+				slot.Image.enabled = false;
 				return true;
 			}
 
-			HideNpcSpine();
-			m_rtSceneCharacter.gameObject.SetActive(true);
-			m_imgSceneCharacter.enabled = false;
+			HideCharacterSlotSpine(slot);
+			slot.Image.enabled = false;
 			UISpineWidget widget = await CreateWidgetByPathAsync<UISpineWidget>(
-				m_rtSceneCharacter.transform, location);
-			if (IsDestroyed || version != m_npcPortraitVersion)
+				slot.Rect.transform, location);
+			if (IsDestroyed || slot.Version != version)
 			{
 				widget?.Destroy();
 				return false;
@@ -4122,20 +4214,20 @@ namespace GameLogic
 				return false;
 			}
 
-			m_npcSpine = widget;
-			m_loadedNpcSpineLocation = location;
-			m_loadedNpcPortraitLocation = null;
-			m_npcSpinePose = null;
-			ApplyNpcSpinePose(widget, npcId, animationAsset, true);
-			widget.FitToSlot(m_rtSceneCharacter.sizeDelta);
+			slot.Spine = widget;
+			slot.LoadedSpine = location;
+			slot.LoadedPose = null;
+			ApplyCharacterSlotSpinePose(slot, npcId, animationAsset, true);
+			widget.FitToSlot(slot.Rect.sizeDelta);
 			widget.SetRaycastTarget(m_layoutEditMode);
-			HideNpcPortraitSprite();
+			slot.Image.enabled = false;
 			return true;
 		}
 
-		private void ApplyNpcSpinePose(UISpineWidget widget, string npcId, string animationAsset, bool forceReplay)
+		private void ApplyCharacterSlotSpinePose(SceneCharacterSlot slot, string npcId, string animationAsset,
+			bool forceReplay)
 		{
-			if (widget == null)
+			if (slot == null || slot.Spine == null)
 			{
 				return;
 			}
@@ -4144,28 +4236,46 @@ namespace GameLogic
 			if (string.IsNullOrEmpty(pose))
 			{
 				// 本句没标表情：沿用上一句的姿势，别把正在播的动作打断
-				pose = string.IsNullOrEmpty(m_npcSpinePose) ? DefaultNpcSpinePose : m_npcSpinePose;
+				pose = string.IsNullOrEmpty(slot.LoadedPose) ? DefaultNpcSpinePose : slot.LoadedPose;
 			}
 
-			if (!forceReplay && pose == m_npcSpinePose)
+			if (!forceReplay && pose == slot.LoadedPose)
 			{
 				return;
 			}
 
-			m_npcSpinePose = pose;
+			slot.LoadedPose = pose;
 			// 美术把每个表情的贴图做成同名皮肤（zhengchang/sikao/jingya…），陈先生和陈果没有 default 皮肤，
 			// 不切皮肤就一个格子都挂不上。没有同名皮肤的（如悲伤/气愤只做了动作）退回基准皮肤，
 			// 靠同名动作里的换图关键帧表达。
-			if (widget.HasSkin(pose))
+			if (slot.Spine.HasSkin(pose))
 			{
-				widget.SwitchSkin(pose);
+				slot.Spine.SwitchSkin(pose);
 			}
-			else if (widget.HasSkin(BaseNpcSpineSkin))
+			else if (slot.Spine.HasSkin(BaseNpcSpineSkin))
 			{
-				widget.SwitchSkin(BaseNpcSpineSkin);
+				slot.Spine.SwitchSkin(BaseNpcSpineSkin);
 			}
-			widget.SetAnimation(pose, true, true);
+			slot.Spine.SetAnimation(pose, true, true);
 		}
+
+		private void HideCharacterSlotSpine(SceneCharacterSlot slot)
+		{
+			if (slot == null)
+			{
+				return;
+			}
+
+			if (slot.Spine != null && !slot.Spine.IsDestroyed)
+			{
+				slot.Spine.Destroy();
+			}
+
+			slot.Spine = null;
+			slot.LoadedSpine = null;
+			slot.LoadedPose = null;
+		}
+#endif
 
 		private const string DefaultNpcSpinePose = "zhengchang";
 		private const string BaseNpcSpineSkin = "zhengchang";
@@ -4313,15 +4423,6 @@ namespace GameLogic
 			}
 		}
 
-		private void HideNpcPortraitSprite()
-		{
-			if (m_imgSceneCharacter != null)
-			{
-				m_imgSceneCharacter.enabled = false;
-			}
-			HideLegacyNpcPortrait();
-		}
-
 		private void HideLegacyNpcPortrait()
 		{
 			if (m_imgNpcPortrait != null)
@@ -4335,21 +4436,12 @@ namespace GameLogic
 			}
 		}
 
+		/// <summary>销毁所有槽的骨骼（日终反思、清场时用）。</summary>
 		private void HideNpcSpine()
 		{
-			if (m_npcSpine != null && !m_npcSpine.IsDestroyed)
+			for (int i = 0; i < m_characterSlots.Count; i++)
 			{
-				m_npcSpine.Destroy();
-			}
-
-			m_npcSpine = null;
-			m_loadedNpcSpineLocation = null;
-			m_npcSpinePose = null;
-			if (m_imgSceneCharacter != null)
-			{
-				// Spine 接管期间立绘 Image 的 sprite 是空的：无脑打开会画成一大块白色，
-				// 只在确实有一张能画的图时才恢复显示。
-				m_imgSceneCharacter.enabled = HasUsableSprite(m_imgSceneCharacter);
+				HideCharacterSlotSpine(m_characterSlots[i]);
 			}
 		}
 #else
@@ -4510,7 +4602,7 @@ namespace GameLogic
 				foregrounds = ResolveSceneForegroundLocations(npcId);
 			}
 
-			// 人物插层由场景决定：0=所有前景盖住人物（站在柜台/书桌后面），1=一半前景在人物前。
+			// 人物插层由场景决定：0=所有前景盖住人物（站在柜台/书桌后面），1=第 1 层前景在人物身后。
 			m_sceneCharacterLayer = knownScene
 				? ResolveSceneCharacterLayer(backgroundId)
 				: (npcId == "陈果" || npcId == "女孩" ? 1 : 0);
@@ -4519,7 +4611,10 @@ namespace GameLogic
 			Array.Copy(foregrounds, 0, layers, backgrounds.Length, foregrounds.Length);
 			string key = string.Join("|", layers);
 			EnsureSceneLayerImages(layers.Length);
-			EnsureSceneCharacterView();
+			for (int i = 0; i < m_characterSlots.Count; i++)
+			{
+				if (m_characterSlots[i] != null) EnsureCharacterSlot(i);
+			}
 			if (key == m_loadedSceneKey)
 			{
 				PlaceSceneCharacterBetweenLayers(backgrounds.Length, layers.Length);
@@ -4770,37 +4865,23 @@ namespace GameLogic
 		}
 
 
+		/// <summary>
+		/// 把每个在场角色按自己的图层插进场景层之间。同层多人时按槽位顺序叠，
+		/// 后面的槽压在前面的槽上，保证三人同框时左右关系稳定。
+		/// </summary>
 		private void PlaceSceneCharacterBetweenLayers(int backgroundCount, int layerCount)
 		{
-			if (m_rtSceneCharacter == null) return;
+			if (m_characterSlots.Count == 0) return;
 			int foregroundCount = layerCount - backgroundCount;
-			int activeAt = CharacterInsertIndex(backgroundCount, foregroundCount, ReadCharacterLayer());
-			bool showOther = m_rtOtherCharacter != null && m_rtOtherCharacter.gameObject.activeSelf;
-			int otherAt = showOther
-				? CharacterInsertIndex(backgroundCount, foregroundCount, ReadOtherCharacterLayer())
-				: -1;
-			List<string> npcSet = showOther ? GetSessionNpcSet() : null;
-			bool activeFirst = !showOther || npcSet.IndexOf(m_currentStoryNode.NpcId) <=
-				npcSet.IndexOf(m_otherCharacterNpcId);
 			for (int i = 0; i <= layerCount; i++)
 			{
-				if (i == activeAt && i == otherAt)
+				for (int s = 0; s < m_characterSlots.Count; s++)
 				{
-					if (activeFirst)
-					{
-						m_rtSceneCharacter.SetAsLastSibling();
-						m_rtOtherCharacter.SetAsLastSibling();
-					}
-					else
-					{
-						m_rtOtherCharacter.SetAsLastSibling();
-						m_rtSceneCharacter.SetAsLastSibling();
-					}
-				}
-				else
-				{
-					if (i == activeAt) m_rtSceneCharacter.SetAsLastSibling();
-					if (i == otherAt) m_rtOtherCharacter.SetAsLastSibling();
+					SceneCharacterSlot slot = m_characterSlots[s];
+					if (slot == null || slot.Rect == null || !slot.Rect.gameObject.activeSelf) continue;
+					int at = CharacterInsertIndex(backgroundCount, foregroundCount,
+						ReadCharacterLayer(GetCharacterSlotLayoutPart(slot)));
+					if (at == i) slot.Rect.SetAsLastSibling();
 				}
 				if (i < layerCount && m_sceneLayerImages[i] != null)
 					m_sceneLayerImages[i].transform.SetAsLastSibling();
@@ -4809,8 +4890,12 @@ namespace GameLogic
 
 		private static int CharacterInsertIndex(int backgroundCount, int foregroundCount, int layer)
 		{
+			// layer 1 = 「第 1 层前景在人物身后」，不是「一半前景」。
+			// 陈果房间：椅子在身后，桌面 / 猫玩偶 / 台历都盖在人物前面。
+			// 别用 foregroundCount / 2 —— 前景一层层往上加（比如后来拆出台历），
+			// 除出来的插入点会跟着漂，人物会突然跑到桌子前面。
 			return backgroundCount + (layer == 0 ? 0 :
-				layer == 1 ? Mathf.Min(foregroundCount, Mathf.Max(1, foregroundCount / 2)) : foregroundCount);
+				layer == 1 ? Mathf.Min(1, foregroundCount) : foregroundCount);
 		}
 
 		private static void ApplySceneLayerLayout(Image image, string location)
@@ -4826,6 +4911,7 @@ namespace GameLogic
 				case "scene_chenguo_desk": bounds = new Vector4(0f, 1583f, 3034f, 577f); break;
 				case "scene_chenguo_cat": bounds = new Vector4(1086f, 1354f, 736f, 728f); break;
 				case "scene_chenguo_cat_broken": bounds = new Vector4(1086f, 1354f, 753f, 728f); break;
+				case "scene_chenguo_calendar": bounds = new Vector4(1825f, 1673f, 582f, 447f); break;
 				case "scene_father_bg": bounds = new Vector4(0f, 0f, 3840f, 1729f); break;
 				case "scene_father_fg": bounds = new Vector4(0f, 1707f, 3840f, 453f); break;
 				case "scene_shop_old_window": bounds = new Vector4(2325f, 0f, 1341f, 1467f); break;
@@ -4937,7 +5023,11 @@ namespace GameLogic
 					return true;
 				case "scene_chenguo":
 					backgrounds = new[] { "scene_chenguo_bg" };
-					foregrounds = new[] { "scene_chenguo_chair", "scene_chenguo_desk", "scene_chenguo_cat" };
+					// 台历是桌面上的独立图层（美术从桌面 PNG 里单独拆出来的），压在猫玩偶之后。
+					foregrounds = new[]
+					{
+						"scene_chenguo_chair", "scene_chenguo_desk", "scene_chenguo_cat", "scene_chenguo_calendar"
+					};
 					return true;
 				case "scene_father":
 					backgrounds = new[] { "scene_father_bg" };
@@ -4964,7 +5054,7 @@ namespace GameLogic
 		/// <summary>
 		/// 人物在场景里的插入位置：
 		/// 0 = 所有前景都在人物前面（人站在柜台 / 书桌后面，腿被挡住）；
-		/// 1 = 一半前景在人物前面（陈果房间：椅子在身后，书桌和猫在身前）；
+		/// 1 = 第 1 层前景在人物身后、其余盖住人物（陈果房间：椅子在身后，书桌 / 猫 / 台历在身前）；
 		/// 2 = 人物压在所有前景上面（一般不用）。
 		/// </summary>
 		private static int ResolveSceneCharacterLayer(string backgroundId)
@@ -5020,7 +5110,7 @@ namespace GameLogic
 
 			if (npcId == "陈果" || npcId == "女孩")
 			{
-				return new[] { "scene_chenguo_chair", "scene_chenguo_desk", "scene_chenguo_cat" };
+				return new[] { "scene_chenguo_chair", "scene_chenguo_desk", "scene_chenguo_cat", "scene_chenguo_calendar" };
 			}
 
 			if (npcId == "父亲" || npcId == "陈父")

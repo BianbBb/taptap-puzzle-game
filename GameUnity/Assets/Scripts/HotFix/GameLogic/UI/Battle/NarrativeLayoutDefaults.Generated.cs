@@ -7,12 +7,19 @@ namespace GameLogic
 	{
 		static partial void AddGeneratedEntries(Dictionary<string, Entry> entries)
 		{
-			entries.Add("Character.S01.NpcDialogue.老周", new Entry(true, -745.982f, -4.06317139f, false, 1f, true, 1));
-			entries.Add("Character.S01.NpcDialogue.陈先生", new Entry(true, 556.6367f, -95.89155f, true, 1.1f, false, 0));
-			entries.Add("Character.S01.PlayerDialogue.老周", new Entry(true, -668.781f, 4.87585449f, false, 1f, false, 0));
-			entries.Add("Character.S02.PlayerDialogue.老周", new Entry(true, -667.1558f, -3.25054932f, false, 1f, false, 0));
-			entries.Add("Collection", new Entry(true, 630.5414f, -214.5373f, false, 1f, false, 0));
-			entries.Add("Items", new Entry(true, 645.1693f, 36.90749f, false, 1f, false, 0));
+			entries.Add("Character.S01.NpcDialogue.老周", new Entry(true, -526.9818725585938f, -346.06329345703125f, false, 1f, false, 0, false, false));
+			entries.Add("Character.S01.NpcDialogue.陈先生", new Entry(true, 719.6366577148438f, -591.8914184570312f, false, 1f, false, 0, false, false));
+			entries.Add("CharacterScale.老周", new Entry(false, 0f, 0f, true, 1.4f, false, 0, false, false));
+			entries.Add("CharacterScale.陈先生", new Entry(false, 0f, 0f, true, 1.7f, false, 0, false, false));
+			entries.Add("CharacterScale.陈果", new Entry(false, 0f, 0f, true, 1.5f, false, 0, false, false));
+			entries.Add("Collection", new Entry(true, 851.5414428710938f, -427.53729248046875f, false, 1f, false, 0, false, false));
+			entries.Add("DialoguePanel", new Entry(true, 287f, -103.5f, false, 1f, false, 0, false, false));
+			entries.Add("EmotionPanel", new Entry(true, 0f, 14f, false, 1f, false, 0, false, false));
+			entries.Add("Items", new Entry(true, 852.1692504882812f, -188.09249877929688f, false, 1f, false, 0, false, false));
+			entries.Add("MemoryBar", new Entry(true, 101.99996948242188f, -10.0001220703125f, false, 1f, false, 0, false, false));
+			entries.Add("Menu", new Entry(true, 84.5f, -80.5f, false, 1f, false, 0, false, false));
+			entries.Add("NpcSubtitle", new Entry(true, 0f, -6f, false, 1f, false, 0, false, false));
+			entries.Add("ReplyPanel", new Entry(true, 0f, 14f, false, 1f, false, 0, false, false));
 		}
 	}
 }
