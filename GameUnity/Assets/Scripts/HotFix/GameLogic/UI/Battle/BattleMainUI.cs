@@ -1466,12 +1466,12 @@ namespace GameLogic
 			if (m_layoutEditMode || m_overlay != null) return;
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			IReadOnlyList<string> ids = saveData.GetMemoryIdsInAcquisitionOrder();
-			if (slotIndex < 0 || slotIndex >= ids.Count || !saveData.RemoveMemory(ids[slotIndex])) return;
+			// 只有记忆清理阶段允许删除；其它阶段按钮已隐藏，这里再兜一层防误触。
+			if (slotIndex < 0 || slotIndex >= ids.Count || !saveData.RemoveMemoryDuringCleanup(ids[slotIndex])) return;
 			SoundConfigMgr.Instance.PlaySfx(SfxNames.MemoryDelete);
 			HideMemoryTooltip();
 			RefreshUI();
-			if (saveData.DayPhase == NarrativeDayPhase.MemoryCleanup)
-				ShowMemoryCleanup();
+			ShowMemoryCleanup();
 		}
 
 		private void RefreshMemorySlots()
@@ -1481,7 +1481,10 @@ namespace GameLogic
 				return;
 			}
 
-			IReadOnlyList<string> ids = NarrativeSaveData.Get.GetMemoryIdsInAcquisitionOrder();
+			NarrativeSaveData saveData = NarrativeSaveData.Get;
+			IReadOnlyList<string> ids = saveData.GetMemoryIdsInAcquisitionOrder();
+			// 记忆删除只属于「记忆清理」阶段：其余阶段（对局、独白、结算等）一律不放出删除按钮。
+			bool canDeleteMemory = saveData.DayPhase == NarrativeDayPhase.MemoryCleanup;
 			EnsureMemorySlotCount(Mathf.Max(NarrativeRules.MemoryCapacity, ids.Count));
 			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
 			for (int i = 0; i < m_memorySlotLabels.Count; i++)
@@ -1492,7 +1495,7 @@ namespace GameLogic
 					continue;
 				}
 				if (i < m_memoryDeleteButtons.Count && m_memoryDeleteButtons[i] != null)
-					m_memoryDeleteButtons[i].gameObject.SetActive(i < ids.Count);
+					m_memoryDeleteButtons[i].gameObject.SetActive(canDeleteMemory && i < ids.Count);
 
 				if (i < ids.Count)
 				{
