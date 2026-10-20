@@ -12,6 +12,8 @@ namespace GameLogic
 		private const float BottomInset = 18f;
 		private const float TailInset = 38f;
 		private const float PlainInset = 26f;
+		// 气泡九切上下边框各 58px，低于 116 高时 Unity 会压缩边框、圆角变椭圆，故留 2px 余量。
+		private const float MinBubbleHeight = 118f;
 
 		internal static void Apply(RectTransform row, TextMeshProUGUI text, Image icon,
 			RectTransform background, string message, bool isPlayer)
@@ -37,7 +39,7 @@ namespace GameLogic
 			float textWidth = Mathf.Clamp(Mathf.Ceil(naturalWidth) + 4f, 48f, innerMaxWidth);
 			float textHeight = Mathf.Max(34f, Mathf.Ceil(text.GetPreferredValues(message, textWidth, 10000f).y) + 4f);
 			float bubbleWidth = textWidth + TailInset + PlainInset;
-			float bubbleHeight = Mathf.Max(76f, textHeight + TopInset + BottomInset);
+			float bubbleHeight = Mathf.Max(MinBubbleHeight, textHeight + TopInset + BottomInset);
 			float rowHeight = Mathf.Max(IconSize, bubbleHeight) + 14f;
 
 			row.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rowHeight);
@@ -57,9 +59,11 @@ namespace GameLogic
 
 			textRect.anchorMin = textRect.anchorMax = new Vector2(side, 1f);
 			textRect.pivot = new Vector2(side, 1f);
+			// 单行时文字在气泡内垂直居中（剩余空间大），多行时退化为固定 TopInset。
+			float textTopInset = Mathf.Max(TopInset, (bubbleHeight - textHeight) * 0.5f);
 			textRect.anchoredPosition = new Vector2(
 				isPlayer ? -IconSize - BubbleGap - TailInset : IconSize + BubbleGap + TailInset,
-				-7f - TopInset);
+				-7f - textTopInset);
 			textRect.sizeDelta = new Vector2(textWidth, textHeight);
 			text.ForceMeshUpdate();
 		}
