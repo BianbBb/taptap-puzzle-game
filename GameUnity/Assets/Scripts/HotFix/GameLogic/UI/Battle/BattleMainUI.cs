@@ -127,7 +127,6 @@ namespace GameLogic
 		private int m_memoryTooltipImageVersion;
 		private int m_hoveredMemorySlot = -1;
 		private int m_messageScrollVersion;
-		private int m_npcPortraitVersion;
 		private int m_dialoguePresentVersion;
 		private bool m_messagePinnedToLatest = true;
 		private Button m_btnItemCollection;
@@ -4275,7 +4274,6 @@ namespace GameLogic
 			slot.LoadedSpine = null;
 			slot.LoadedPose = null;
 		}
-#endif
 
 		private const string DefaultNpcSpinePose = "zhengchang";
 		private const string BaseNpcSpineSkin = "zhengchang";
