@@ -1734,6 +1734,8 @@ namespace GameLogic
 			// 先把整段排完版再逐字揭开，框高和居中位置一次定死，打字过程中不会抖。
 			m_tmpNpcSubtitle.text = body;
 			m_tmpNpcSubtitle.maxVisibleCharacters = 0;
+			// 拉伸锚点的宽度要等 Canvas 刷新后才生效，否则 preferredHeight 会按旧宽度算。
+			Canvas.ForceUpdateCanvases();
 			m_tmpNpcSubtitle.ForceMeshUpdate();
 			LayoutNpcSubtitle(m_tmpNpcSubtitle.preferredHeight);
 
