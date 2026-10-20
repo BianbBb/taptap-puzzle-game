@@ -627,6 +627,15 @@ namespace GameLogic
 				IReadOnlyList<string> available = m_narrativeService.GetAvailableEmotions(reply);
 				IReadOnlyList<string> locked = m_narrativeService.GetLockedEmotions(reply);
 				m_selectedEmotionId = m_narrativeService.GetDefaultEmotion(reply);
+
+				// 除「无」以外没有可选情绪时，情绪面板只剩一个能点的「无」，
+				// 这一步没有选择意义：直接用默认情绪提交，让玩家回复直接接回对话。
+				if (available.Count == 0)
+				{
+					await CommitSelectedReplyAsync();
+					return;
+				}
+
 				m_tfReplayEmoNode.gameObject.SetActive(true);
 				m_tfReplayEmoNode.SetAsLastSibling();
 				RectTransform emoRect = m_tfReplayEmoNode as RectTransform;
