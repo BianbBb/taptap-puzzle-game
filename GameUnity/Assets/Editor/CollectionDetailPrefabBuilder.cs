@@ -87,7 +87,7 @@ namespace GameEditor
 		private const float BodyTextWidth = 730f;
 		private const float BodyTextHeight = 440f;
 		private const float BodyFontSize = 35f;
-		private const float BodyLineSpacing = 20f;
+		private const float BodyLineSpacing = 15f;
 		private const float BodyEdgeU = 976f;
 		private const float BodyEdgeV = 765f;
 		private const float BodyEdgeWidth = 16f;
@@ -370,7 +370,8 @@ namespace GameEditor
 		private static void BuildDetail(Transform detail)
 		{
 			GameObject card = NewNode("DetailCard", detail, CardWidth, CardHeight, CardPosX, CardPosY);
-			card.transform.localRotation = Quaternion.Euler(0f, 0f, CardRotationZ);
+			// 用 localEulerAngles 而不是 localRotation：Inspector 里的欧拉角读数才和预期一致
+			card.transform.localEulerAngles = new Vector3(0f, 0f, CardRotationZ);
 
 			// 1. 白纸卡（九宫格，任意拉伸圆角不变形）
 			Image cardBg = NewImage("m_imgDetailBg", card.transform, CardWidth, CardHeight,
@@ -421,12 +422,12 @@ namespace GameEditor
 			// 9. 金色圆章（骑在邮票右上角）
 			Image seal = NewImage("m_imgDetailDec", card.transform, SealWidth, SealHeight,
 				U(SealU), V(SealV), s_seal, false);
-			seal.rectTransform.localRotation = Quaternion.Euler(0f, 0f, SealRotationZ);
+			seal.rectTransform.localEulerAngles = new Vector3(0f, 0f, SealRotationZ);
 
 			// 10. 关闭钮（骑在卡片右上角，允许探出卡外）
 			Image closeImage = NewImage("m_btnDetailClose", card.transform, CloseWidth, CloseHeight,
 				U(CloseU), V(CloseV), s_close, false);
-			closeImage.rectTransform.localRotation = Quaternion.Euler(0f, 0f, CloseRotationZ);
+			closeImage.rectTransform.localEulerAngles = new Vector3(0f, 0f, CloseRotationZ);
 			Button closeButton = closeImage.gameObject.AddComponent<Button>();
 			closeButton.targetGraphic = closeImage;
 			closeButton.transition = Selectable.Transition.None;
