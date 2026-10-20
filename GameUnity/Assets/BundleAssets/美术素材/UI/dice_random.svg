@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- 名字输入框旁的「随机一个」骰子。
+       运行时用的是同目录导出的 ui_dice.png（Unity 不引 Vector Graphics 包，SVG 只作设计源）。
+       改图流程：改这个 svg → 导出 256x256 PNG → 覆盖
+       GameUnity/Assets/BundleAssets/UIRaw/Raw/ui_dice.png（文件名即资源地址，GUID 不动）。 -->
+  <defs>
+    <linearGradient id="face" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#725738"/>
+      <stop offset="1" stop-color="#54402C"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 骰身：圆角方块 + 深色描边 -->
+  <rect x="12" y="12" width="232" height="232" rx="46" ry="46"
+        fill="url(#face)" stroke="#3C2C1E" stroke-width="6"/>
+
+  <!-- 五个点 -->
+  <g fill="#F6EBD3">
+    <circle cx="70" cy="70" r="17"/>
+    <circle cx="186" cy="70" r="17"/>
+    <circle cx="128" cy="128" r="17"/>
+    <circle cx="70" cy="186" r="17"/>
+    <circle cx="186" cy="186" r="17"/>
+  </g>
+
+  <!-- 左上高光，让它在纸面上有点体积 -->
+  <rect x="22" y="22" width="212" height="212" rx="38" ry="38"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="5"/>
+</svg>

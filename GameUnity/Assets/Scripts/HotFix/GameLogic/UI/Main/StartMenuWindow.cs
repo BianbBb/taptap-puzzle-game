@@ -180,11 +180,19 @@ namespace GameLogic
 
 		private partial void OnClickStartBtn()
 		{
-			EnterGame();
+			// 「开始」= 新游戏：先让玩家留名字，确认后清档重开（名字会带进存档）
+			ShowNameEntry(true);
 		}
 
 		private partial void OnClickContinueBtn()
 		{
+			// 老存档可能没有名字（加入名字功能之前存的），继续前补一次
+			if (string.IsNullOrWhiteSpace(NarrativePlayerName.Current))
+			{
+				ShowNameEntry(false);
+				return;
+			}
+
 			EnterGame();
 		}
 
