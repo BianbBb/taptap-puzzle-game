@@ -142,8 +142,10 @@
   {
     "id": "O031502",
     "replyText": "回忆是珍贵的，已检测到不可量化情感浓度，建议打开查看，若无法修复，可寻修理铺修理。",
-    "lockedText": "",
-    "requiredMemory": [],
+    "lockedText": "（需要先发现玩偶腹部里的东西）",
+    "requiredMemory": [
+      "M12"
+    ],
     "allowedEmotion": [],
     "rewardMemory": [],
     "affectionRules": [],
@@ -153,6 +155,24 @@
     "affectionDelta": 0,
     "optionSetId": "O03150",
     "displayOrder": 2,
+    "actionIds": []
+  },
+  {
+    "id": "O032401",
+    "replyText": "（去老周的修理铺）",
+    "lockedText": "",
+    "requiredMemory": [],
+    "allowedEmotion": [
+      "E00"
+    ],
+    "rewardMemory": [],
+    "affectionRules": [],
+    "nextNodeId": "T0325",
+    "isSessionEnd": false,
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O03240",
+    "displayOrder": 1,
     "actionIds": []
   },
   {

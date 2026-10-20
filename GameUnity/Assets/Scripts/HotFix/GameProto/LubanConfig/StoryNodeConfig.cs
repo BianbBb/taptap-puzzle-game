@@ -33,6 +33,8 @@ public sealed partial class StoryNodeConfig : Luban.BeanBase
         {int n0 = _buf.ReadSize(); ExtraNextNodeIds = new System.Collections.Generic.List<string>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { string _e0;  _e0 = _buf.ReadString(); ExtraNextNodeIds.Add(_e0);}}
         Priority = _buf.ReadInt();
         BackgroundId = _buf.ReadString();
+        InspectGate = _buf.ReadString();
+        HideOtherNpc = _buf.ReadBool();
     }
 
     public static StoryNodeConfig DeserializeStoryNodeConfig(ByteBuf _buf)
@@ -100,6 +102,14 @@ public sealed partial class StoryNodeConfig : Luban.BeanBase
     /// 本节点起切换到的场景 ID（见 Scene 键）；为空表示沿用所属 Session 的 backgroundId
     /// </summary>
     public string BackgroundId;
+    /// <summary>
+    /// 物品检查门：空=不拦 / Any=至少看 1 个部位 / All=全部部位（只对 onEnter 授予的物品生效）
+    /// </summary>
+    public string InspectGate;
+    /// <summary>
+    /// 这句起隐藏另一个角色（例：陈先生摔门离开后，陈果独处）
+    /// </summary>
+    public bool HideOtherNpc;
 
     public const int __ID__ = 1445114521;
     public override int GetTypeId() => __ID__;
@@ -131,6 +141,8 @@ public sealed partial class StoryNodeConfig : Luban.BeanBase
         other.ExtraNextNodeIds = ExtraNextNodeIds == null ? null : new System.Collections.Generic.List<string>(ExtraNextNodeIds);
         other.Priority = Priority;
         other.BackgroundId = BackgroundId;
+        other.InspectGate = InspectGate;
+        other.HideOtherNpc = HideOtherNpc;
     }
 
     public StoryNodeConfig DeepCopy()
@@ -158,6 +170,8 @@ public sealed partial class StoryNodeConfig : Luban.BeanBase
         + "extraNextNodeIds:" + Luban.StringUtil.CollectionToString(ExtraNextNodeIds) + ","
         + "priority:" + Priority + ","
         + "backgroundId:" + BackgroundId + ","
+        + "inspectGate:" + InspectGate + ","
+        + "hideOtherNpc:" + HideOtherNpc + ","
         + "}";
     }
 }

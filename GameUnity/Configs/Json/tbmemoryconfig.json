@@ -82,7 +82,7 @@
   },
   {
     "id": "M10",
-    "memoryName": "娃娃记忆1",
+    "memoryName": "友情信物",
     "description": "一个脏兮兮的小猫玩偶，头顶有些开线，漏出了一些棉花，看起来也已经跟了她不少年头",
     "imageId": "mem_doll_token",
     "emotionCardSet": [
@@ -91,7 +91,7 @@
   },
   {
     "id": "M11",
-    "memoryName": "娃娃记忆2",
+    "memoryName": "修复尝试",
     "description": "右脚底的布料已经有些松脱，露出了里面用以填充的棉花，有针脚修补过的痕迹，陈果说她试着修过，但结果不尽人意。",
     "imageId": "mem_doll_repair",
     "emotionCardSet": [
@@ -100,7 +100,7 @@
   },
   {
     "id": "M12",
-    "memoryName": "娃娃记忆3",
+    "memoryName": "未尽之言",
     "description": "玩偶腹部的布料有被拆开又缝合的痕迹，在玩偶内部检测出纸质物件。",
     "imageId": "mem_doll_words",
     "emotionCardSet": [
@@ -145,7 +145,7 @@
   },
   {
     "id": "M17",
-    "memoryName": "娃娃记忆4",
+    "memoryName": "起死回生",
     "description": "我以前也修过这样的娃娃，只是……那都是很久以前的事了。",
     "imageId": "mem_doll_words",
     "emotionCardSet": [

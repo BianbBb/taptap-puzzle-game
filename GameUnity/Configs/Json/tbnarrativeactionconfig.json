@@ -76,5 +76,11 @@
     "actionType": "GrantEmotion",
     "targetId": "E07",
     "inputValue": ""
+  },
+  {
+    "id": "GRANT_MEMORY_M17",
+    "actionType": "GrantMemory",
+    "targetId": "M17",
+    "inputValue": ""
   }
 ]

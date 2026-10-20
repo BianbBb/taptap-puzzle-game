@@ -64,11 +64,19 @@ namespace GameLogic
         /// <summary>记忆门槛锁定，回复不可选</summary>
         public const string MemoryLocked = "sfx_memory_locked";
 
+        // ---------------- 记忆涌现过场（AudioType.Sound）----------------
+        /// <summary>过场·两记忆的光点汇聚上升（0.91s 钢片琴滑音，必须"往上走"）。</summary>
+        public const string EmergeRise = "sfx_emerge_rise";
+        /// <summary>过场·情绪圆成形绽放（C#5+G#5 纯五度钢片琴，无三度音所以不甜腻）。</summary>
+        public const string EmergeBloom = "sfx_emerge_bloom";
+
         // ---------------- 物件 / 场景（AudioType.Sound）----------------
         /// <summary>检查物件部件</summary>
         public const string ItemInspect = "sfx_item_inspect";
         /// <summary>物品面板滑入</summary>
         public const string ItemPanelIn = "sfx_item_panel_in";
+        /// <summary>物品飞进物品栏、落袋那一记「叮」</summary>
+        public const string ItemGain = "sfx_item_gain";
         /// <summary>NPC 立绘表情切换</summary>
         public const string PortraitSwitch = "sfx_portrait_switch";
         /// <summary>场景背景切换</summary>

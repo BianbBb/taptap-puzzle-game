@@ -5,13 +5,14 @@ using GameProto;
 namespace GameLogic
 {
     /// <summary>
-    /// 执行配置白名单内的叙事动作（物品增删 / 情绪授予），并用存档键保证重载幂等。
+    /// 执行配置白名单内的叙事动作（物品增删 / 记忆授予 / 情绪授予），并用存档键保证重载幂等。
     /// </summary>
     public sealed class NarrativeActionService
     {
         private const string GrantItemAction = "GrantItem";
         private const string RemoveItemAction = "RemoveItem";
         private const string GrantEmotionAction = "GrantEmotion";
+        private const string GrantMemoryAction = "GrantMemory";
 
         /// <summary>
         /// <paramref name="grantedEmotions"/> 不为 null 时，把本次**新授予**的情绪 ID 追加进去。
@@ -21,10 +22,15 @@ namespace GameLogic
         /// <paramref name="grantedItems"/> 同理，收集本次执行到的 <c>GrantItem</c> 目标物品 ID。
         /// 物品是**立刻写进存档**的，这个列表只给 UI 判断「要不要播入库演出」用；
         /// 同一批动作里多次授予只保留顺序，容量 1 的语义由 SaveData 负责（后一个顶掉前一个）。
+        ///
+        /// <paramref name="grantedMemories"/> 收集本次**新增**的记忆 ID。
+        /// 记忆一授予就落盘，但它可能凑出新的情绪涌现 —— 调用方拿到这个列表后
+        /// 要自己补一次 <c>ScanEmergenceAndApply</c>，否则情绪不会出现（见 ExecuteNodeExitActions）。
         /// </summary>
         public bool Execute(IReadOnlyList<string> actionIds, string executionKey,
             NarrativeSaveData saveData = null, bool saveImmediately = true,
-            List<string> grantedEmotions = null, List<string> grantedItems = null)
+            List<string> grantedEmotions = null, List<string> grantedItems = null,
+            List<string> grantedMemories = null)
         {
             if (actionIds == null || actionIds.Count == 0)
                 return false;
@@ -45,14 +51,17 @@ namespace GameLogic
                 bool isItemAction = IsType(action.ActionType, GrantItemAction) ||
                     IsType(action.ActionType, RemoveItemAction);
                 bool isEmotionAction = IsType(action.ActionType, GrantEmotionAction);
-                if (!isItemAction && !isEmotionAction)
+                bool isMemoryAction = IsType(action.ActionType, GrantMemoryAction);
+                if (!isItemAction && !isEmotionAction && !isMemoryAction)
                     throw new InvalidOperationException($"Unsupported narrative action type: {action.ActionType}");
 
-                // GrantEmotion 的 TargetId 是情绪 ID，不是物品 ID，校验要分开走。
+                // GrantEmotion / GrantMemory 的 TargetId 分别是情绪 ID / 记忆 ID，校验要分开走。
                 if (isItemAction && !config.HasNarrativeItem(action.TargetId))
                     throw new InvalidOperationException($"Narrative action {id} references unknown item {action.TargetId}.");
                 if (isEmotionAction && !config.HasEmotion(action.TargetId))
                     throw new InvalidOperationException($"Narrative action {id} references unknown emotion {action.TargetId}.");
+                if (isMemoryAction && !config.HasMemory(action.TargetId))
+                    throw new InvalidOperationException($"Narrative action {id} references unknown memory {action.TargetId}.");
 
                 actions.Add(action);
             }
@@ -64,6 +73,15 @@ namespace GameLogic
                     List<string> added = saveData.AddEmotionsWithoutSaving(new[] { action.TargetId });
                     if (added.Count > 0)
                         grantedEmotions?.Add(added[0]);
+                    continue;
+                }
+
+                if (IsType(action.ActionType, GrantMemoryAction))
+                {
+                    // 已经持有就不算新增：GetNarrativeItemIdsInStableOrder 那条链上的调用方靠这个判断要不要刷 UI。
+                    List<string> added = saveData.AddMemoriesWithoutSaving(new[] { action.TargetId });
+                    if (added.Count > 0)
+                        grantedMemories?.Add(added[0]);
                     continue;
                 }
 

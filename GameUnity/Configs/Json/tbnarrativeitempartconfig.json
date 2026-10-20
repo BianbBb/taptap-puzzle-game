@@ -76,24 +76,24 @@
     "partName": "玩偶身体",
     "imageId": "placeholder",
     "memoryId": "M10",
-    "hotspotX": 0.3,
-    "hotspotY": 0.3
+    "hotspotX": 0.5,
+    "hotspotY": 0.35
   },
   {
     "id": "DOLL_PART_02",
     "partName": "右脚",
     "imageId": "placeholder",
     "memoryId": "M11",
-    "hotspotX": 0.7,
-    "hotspotY": 0.3
+    "hotspotX": 0.31,
+    "hotspotY": 0.27
   },
   {
     "id": "DOLL_PART_03",
     "partName": "腹部",
     "imageId": "placeholder",
     "memoryId": "M12",
-    "hotspotX": 0.3,
-    "hotspotY": 0.7
+    "hotspotX": 0.7,
+    "hotspotY": 0.27
   },
   {
     "id": "DOLL_PART_04",
