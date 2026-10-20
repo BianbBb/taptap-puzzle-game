@@ -20,8 +20,12 @@ namespace GameLogic
 {
 	public partial class BattleMainUI
 	{
+		private const string NpcSubtitleRootName = "NpcSubtitlePanel";
 		private const int TYPEWRITER_MS_PER_CHAR = 100;
 		private const int TYPEWRITER_PUNCTUATION_EXTRA_MS = 220;
+		/// <summary>打字机每 N 个字播一次音，避免长句变成机关枪。</summary>
+		private const int TYPEWRITER_SOUND_EVERY_CHARS = 3;
+		private const float TYPEWRITER_SOUND_VOLUME = 0.35f;
 		private const float MESSAGE_SCROLL_OVERFLOW_EPSILON = 1f;
 		private const float MESSAGE_BOTTOM_PADDING = 16f;
 		private const float MESSAGE_SCROLL_SENSITIVITY = 0.3f;
@@ -30,6 +34,22 @@ namespace GameLogic
 		private static readonly Color HudPaperText = new Color(0.28f, 0.22f, 0.16f, 1f);
 		private static readonly Color HudPaperPanel = new Color(0.96f, 0.93f, 0.86f, 1f);
 		private static readonly Color HudPaperButton = new Color(0.93f, 0.82f, 0.62f, 1f);
+
+		// 日终 AI 反思：整屏底图 + 纸面排版。底图与纸面区域是绑定的，换图时要同步 ReflectionPaperArea。
+		private const string ReflectionBackgroundLocation = "reflection_bg";
+		private static readonly Rect ReflectionPaperArea = new Rect(0.296f, 0f, 0.444f, 0.815f);
+		private const float ReflectionTextInsetLeft = 123f;
+		private const float ReflectionTextInsetRight = 130f;
+		private const float ReflectionTitleTop = 95f;
+		private const float ReflectionTitleHeight = 64f;
+		private const float ReflectionTitleFontSize = 44f;
+		private const float ReflectionBodyTop = 180f;
+		private const float ReflectionBodyBottom = 190f;
+		private const float ReflectionBodyFontSize = 34f;
+		private const float ReflectionBodyLineSpacing = 34f;
+		private const float ReflectionContinueRight = 118f;
+		private const float ReflectionContinueBottom = 96f;
+		private static readonly Color ReflectionIconColor = new Color(0.28f, 0.22f, 0.16f, 0.8f);
 		private readonly List<ReplayMessageItem> m_replyItems = new List<ReplayMessageItem>();
 		private readonly List<ReplayEmoItem> m_emotionItems = new List<ReplayEmoItem>();
 		private readonly List<(bool IsPlayer, string Text)> m_messages = new List<(bool, string)>();
@@ -95,7 +115,12 @@ namespace GameLogic
 		private string m_loadedSceneKey;
 		private RectTransform m_overlayBodyContent;
 		private GameObject m_dialoguePanel;
+		private RectTransform m_rtNpcSubtitle;
 		private TextMeshProUGUI m_tmpNpcSubtitle;
+		private TextMeshProUGUI m_tmpNpcSpeaker;
+		private CanvasGroup m_cgNpcContinueHint;
+		private float m_subtitleBodyTopInset;
+		private float m_subtitleBodyBottomInset;
 		private Button m_btnRestart;
 		private Button m_btnDialogueAdvance;
 		private bool m_advanceClickPending;
@@ -139,7 +164,36 @@ namespace GameLogic
 			m_messageList.LoopRectView.mOnEndDragAction = OnMessageListEndDrag;
 			RaiseHudAboveAdvanceCatcher();
 
+			BindAudioFeedback();
 			StartStoryAsync().Forget();
+		}
+
+		/// <summary>订阅叙事玩法事件（好感 / 情绪涌现），并预热高频音效、起 BGM。</summary>
+		private void BindAudioFeedback()
+		{
+			m_narrativeService.AffectionChanged += OnAffectionChanged;
+			m_narrativeService.EmotionEmerged += OnEmotionEmerged;
+
+			SoundConfigMgr.Instance.Preload(
+				SfxNames.StoryText, SfxNames.StoryBubbleIn, SfxNames.MemoryGet, SfxNames.MemoryLand);
+			SoundConfigMgr.Instance.PlayBgm(SfxNames.BgmStory, fadeIn: 1.5f);
+		}
+
+		private void OnAffectionChanged(string npcId, float before, float after)
+		{
+			if (after > before)
+			{
+				SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryAffectionUp);
+			}
+			else if (after < before)
+			{
+				SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryAffectionDown);
+			}
+		}
+
+		private void OnEmotionEmerged(string emotionId)
+		{
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryEmotionEmerge);
 		}
 
 		protected override void OnRefresh()
@@ -149,6 +203,8 @@ namespace GameLogic
 
 		protected override void OnDestroy()
 		{
+			m_narrativeService.AffectionChanged -= OnAffectionChanged;
+			m_narrativeService.EmotionEmerged -= OnEmotionEmerged;
 			CancelSpriteRequest(ref m_otherCharacterSpriteRequest);
 			CancelSpriteRequest(ref m_sceneCharacterSpriteRequest);
 			m_messageScrollVersion++;
@@ -201,7 +257,10 @@ namespace GameLogic
 			m_requestedSceneCharacterLocation = null;
 			m_overlayBodyContent = null;
 			m_dialoguePanel = null;
+			m_rtNpcSubtitle = null;
 			m_tmpNpcSubtitle = null;
+			m_tmpNpcSpeaker = null;
+			m_cgNpcContinueHint = null;
 			m_btnRestart = null;
 			m_btnLayoutEdit = null;
 			m_layoutEditButtonLabel = null;
@@ -245,6 +304,8 @@ namespace GameLogic
 			}
 
 			m_isBusy = true;
+			// 日终 / 结局切过 BGM，回到叙事时切回来（同曲不会重播）
+			SoundConfigMgr.Instance.PlayBgm(SfxNames.BgmStory, fadeIn: 1.5f);
 			try
 			{
 				DestroyOverlay();
@@ -443,6 +504,7 @@ namespace GameLogic
 				item.Show(true);
 			}
 			ResizeReplyPanel();
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryOptionAppear);
 		}
 
 		private void OnClickReply(ReplayMessageItem item)
@@ -463,6 +525,7 @@ namespace GameLogic
 			SetReplyItemData(item, reply, NarrativeSaveData.Get.HasAllMemories(reply.RequiredMemory));
 			if (!item.IsUnlocked)
 			{
+				SoundConfigMgr.Instance.PlaySfx(SfxNames.MemoryLocked, DGame.AudioType.UISound);
 				return;
 			}
 
@@ -631,8 +694,9 @@ namespace GameLogic
 
 			if (item.IsLocked)
 			{
+				SoundConfigMgr.Instance.PlaySfx(SfxNames.UiError, DGame.AudioType.UISound);
 				ShowOverlay("情绪未解锁", "这份情绪还没有在剧情中获得。可以先选择“无”，继续推进故事。",
-					new[] { ("关闭", (Action)(() => DestroyOverlay())) });
+					new[] { ("关闭", (Action)(() => DestroyOverlay())) }, playSound: false);
 				return;
 			}
 
@@ -643,6 +707,7 @@ namespace GameLogic
 				return;
 			}
 
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryEmotionSelect);
 			m_selectedEmotionId = emotionId;
 			CommitReplyAsync().Forget();
 		}
@@ -686,6 +751,7 @@ namespace GameLogic
 
 			m_hasReplied = true;
 			string replyText = m_selectedReply.ReplyText;
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryReplyConfirm);
 			try
 			{
 				NarrativeTurnResult result = m_narrativeService.CommitTurn(
@@ -1316,6 +1382,7 @@ namespace GameLogic
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			IReadOnlyList<string> ids = saveData.GetMemoryIdsInAcquisitionOrder();
 			if (slotIndex < 0 || slotIndex >= ids.Count || !saveData.RemoveMemory(ids[slotIndex])) return;
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.MemoryDelete);
 			HideMemoryTooltip();
 			RefreshUI();
 			if (saveData.DayPhase == NarrativeDayPhase.MemoryCleanup)
@@ -1533,95 +1600,155 @@ namespace GameLogic
 			}
 			if (m_scrollMessage != null) m_scrollMessage.gameObject.SetActive(!showSubtitle);
 
-			if (m_tmpNpcSubtitle != null)
+			if (m_rtNpcSubtitle != null)
 			{
-				m_tmpNpcSubtitle.gameObject.SetActive(showSubtitle);
+				m_rtNpcSubtitle.gameObject.SetActive(showSubtitle);
 				if (!showSubtitle)
 				{
-					m_tmpNpcSubtitle.text = string.Empty;
+					ClearNpcSubtitle();
 				}
 			}
 		}
 
 		private void EnsureNpcSubtitle()
 		{
+			if (m_rtNpcSubtitle != null)
+			{
+				return;
+			}
+
+			Transform root = transform.Find(NpcSubtitleRootName);
+			if (root == null)
+			{
+				DLogger.Error($"BattleMainUI 缺少子节点 {NpcSubtitleRootName}，请执行 DGame Tools/剧情/重建 NPC 字幕 Prefab");
+				return;
+			}
+
+			m_rtNpcSubtitle = root as RectTransform;
+			if (m_rtNpcSubtitle != null)
+			{
+				m_rtNpcSubtitle.anchoredPosition = ReadLayoutPosition("NpcSubtitle", new Vector2(0f, 100f));
+			}
+
+			m_tmpNpcSpeaker = FindSubtitleText(root, "SpeakerLabel");
+			m_tmpNpcSubtitle = FindSubtitleText(root, "Frame/BodyText");
 			if (m_tmpNpcSubtitle != null)
 			{
-				return;
+				m_subtitleBodyTopInset = -m_tmpNpcSubtitle.rectTransform.offsetMax.y;
+				m_subtitleBodyBottomInset = m_tmpNpcSubtitle.rectTransform.offsetMin.y;
 			}
 
-			var go = new GameObject("NpcSubtitle", typeof(RectTransform), typeof(TextMeshProUGUI));
-			go.transform.SetParent(transform, false);
-			RectTransform rect = go.GetComponent<RectTransform>();
-			rect.anchorMin = new Vector2(0.5f, 0f);
-			rect.anchorMax = new Vector2(0.5f, 0f);
-			rect.pivot = new Vector2(0.5f, 0f);
-			rect.anchoredPosition = ReadLayoutPosition("NpcSubtitle", new Vector2(0f, 56f));
-			rect.sizeDelta = new Vector2(1480f, 200f);
-			TextMeshProUGUI text = go.GetComponent<TextMeshProUGUI>();
-			text.text = string.Empty;
-			text.fontSize = 36f;
-			text.color = Color.black;
-			text.alignment = TextAlignmentOptions.Bottom;
-			text.enableWordWrapping = true;
-			text.overflowMode = TextOverflowModes.Overflow;
-			text.raycastTarget = false;
-			ApplySubtitleOutline(text);
-			m_tmpNpcSubtitle = text;
-			go.SetActive(false);
+			Transform hint = root.Find("Frame/ContinueHint");
+			if (hint != null)
+			{
+				m_cgNpcContinueHint = hint.GetComponent<CanvasGroup>();
+				if (m_cgNpcContinueHint == null)
+				{
+					m_cgNpcContinueHint = hint.gameObject.AddComponent<CanvasGroup>();
+				}
+
+				m_cgNpcContinueHint.alpha = 0f;
+				m_cgNpcContinueHint.blocksRaycasts = false;
+				m_cgNpcContinueHint.interactable = false;
+			}
+
+			root.gameObject.SetActive(false);
 		}
 
-		private static void ApplySubtitleOutline(TextMeshProUGUI text)
+		private static TextMeshProUGUI FindSubtitleText(Transform root, string path)
 		{
-			if (text == null)
+			Transform target = root.Find(path);
+			return target == null ? null : target.GetComponent<TextMeshProUGUI>();
+		}
+
+		private void ClearNpcSubtitle()
+		{
+			if (m_tmpNpcSpeaker != null)
+			{
+				m_tmpNpcSpeaker.text = string.Empty;
+			}
+
+			if (m_tmpNpcSubtitle != null)
+			{
+				m_tmpNpcSubtitle.text = string.Empty;
+				m_tmpNpcSubtitle.maxVisibleCharacters = 0;
+			}
+
+			SetContinueHintVisible(false, true);
+		}
+
+		private void SetContinueHintVisible(bool visible, bool immediate = false)
+		{
+			if (m_cgNpcContinueHint == null)
 			{
 				return;
 			}
 
-			text.outlineColor = Color.white;
-			text.outlineWidth = 0.28f;
-			Material material = text.fontMaterial;
-			if (material == null)
+			m_cgNpcContinueHint.DOKill();
+			if (immediate)
+			{
+				m_cgNpcContinueHint.alpha = visible ? 1f : 0f;
+				return;
+			}
+
+			m_cgNpcContinueHint.DOFade(visible ? 1f : 0f, 0.18f);
+		}
+
+		/// <summary>框高由正文实际高度决定，名字与边框锚在顶边，会跟着一起移动。</summary>
+		private void LayoutNpcSubtitle(float textHeight)
+		{
+			if (m_rtNpcSubtitle == null)
 			{
 				return;
 			}
 
-			material.EnableKeyword(ShaderUtilities.Keyword_Outline);
-			material.SetFloat(ShaderUtilities.ID_OutlineWidth, 0.28f);
-			material.SetColor(ShaderUtilities.ID_OutlineColor, Color.white);
-			material.SetFloat(ShaderUtilities.ID_FaceDilate, 0.08f);
+			float height = Mathf.Ceil(Mathf.Max(0f, textHeight)) + m_subtitleBodyTopInset + m_subtitleBodyBottomInset;
+			m_rtNpcSubtitle.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
 		}
 
 		private async UniTask PresentNpcSubtitleAsync(StoryNodeConfig story, int presentVersion)
 		{
 			EnsureNpcSubtitle();
-			if (m_tmpNpcSubtitle == null)
+			if (m_rtNpcSubtitle == null || m_tmpNpcSubtitle == null)
 			{
 				return;
 			}
 
 			string speaker = story.NpcId ?? string.Empty;
 			string body = story.NpcText ?? string.Empty;
-			string full = string.IsNullOrEmpty(speaker) ? body : speaker + "\n" + body;
-			m_tmpNpcSubtitle.gameObject.SetActive(true);
-			if (string.IsNullOrEmpty(full))
+			m_rtNpcSubtitle.gameObject.SetActive(true);
+			SetContinueHintVisible(false, true);
+
+			if (m_tmpNpcSpeaker != null)
+			{
+				m_tmpNpcSpeaker.text = speaker;
+			}
+
+			if (string.IsNullOrEmpty(body))
 			{
 				m_tmpNpcSubtitle.text = string.Empty;
+				LayoutNpcSubtitle(0f);
 				return;
 			}
 
-			m_tmpNpcSubtitle.text = full.Substring(0, 1);
-			ApplySubtitleOutline(m_tmpNpcSubtitle);
-			for (int i = 1; i <= full.Length; i++)
+			// 先把整段排完版再逐字揭开，框高和居中位置一次定死，打字过程中不会抖。
+			m_tmpNpcSubtitle.text = body;
+			m_tmpNpcSubtitle.maxVisibleCharacters = 0;
+			m_tmpNpcSubtitle.ForceMeshUpdate();
+			LayoutNpcSubtitle(m_tmpNpcSubtitle.preferredHeight);
+
+			int total = m_tmpNpcSubtitle.textInfo.characterCount;
+			for (int i = 1; i <= total; i++)
 			{
 				if (IsDestroyed || presentVersion != m_dialoguePresentVersion)
 				{
 					return;
 				}
 
-				m_tmpNpcSubtitle.text = full.Substring(0, i);
+				m_tmpNpcSubtitle.maxVisibleCharacters = i;
+				PlayTypewriterTick(i, body);
 				int delayMs = TYPEWRITER_MS_PER_CHAR;
-				if (IsTypewriterPunctuation(full[i - 1]))
+				if (i - 1 < body.Length && IsTypewriterPunctuation(body[i - 1]))
 				{
 					delayMs += TYPEWRITER_PUNCTUATION_EXTRA_MS;
 				}
@@ -1634,10 +1761,17 @@ namespace GameLogic
 
 				if (wait == TypewriterWaitResult.Skip)
 				{
-					m_tmpNpcSubtitle.text = full;
-					return;
+					m_tmpNpcSubtitle.maxVisibleCharacters = total;
+					break;
 				}
 			}
+
+			if (IsDestroyed || presentVersion != m_dialoguePresentVersion)
+			{
+				return;
+			}
+
+			SetContinueHintVisible(true);
 		}
 
 		private async UniTask PresentNpcMessageAsync(string text, int presentVersion)
@@ -1662,6 +1796,7 @@ namespace GameLogic
 					UpdateShownMessageText(index, text.Substring(0, i));
 				}
 
+				PlayTypewriterTick(i, text);
 				int delayMs = TYPEWRITER_MS_PER_CHAR;
 				if (IsTypewriterPunctuation(text[i - 1]))
 				{
@@ -1680,6 +1815,19 @@ namespace GameLogic
 					return;
 				}
 			}
+		}
+
+		/// <summary>打字机音效节流：每 N 个字一次，跳过空白与标点，音调轻微随机避免机械重复。</summary>
+		private void PlayTypewriterTick(int charIndex, string text)
+		{
+			if (charIndex % TYPEWRITER_SOUND_EVERY_CHARS != 0) return;
+			if (text == null || charIndex <= 0 || charIndex > text.Length) return;
+
+			char current = text[charIndex - 1];
+			if (char.IsWhiteSpace(current) || char.IsPunctuation(current)) return;
+
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryText, DGame.AudioType.Sound,
+				TYPEWRITER_SOUND_VOLUME, UnityEngine.Random.Range(0.96f, 1.04f));
 		}
 
 		private enum TypewriterWaitResult
@@ -1773,6 +1921,10 @@ namespace GameLogic
 
 			m_messages.Add((isPlayer, text));
 			m_messageScrollVersion++;
+			if (isPlayer)
+			{
+				SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryBubbleIn);
+			}
 			LoopListView2 listView = m_messageList.LoopRectView;
 			listView.ClearAutoMoveToItemData();
 			listView.ScrollRect.StopMovement();
@@ -1826,6 +1978,7 @@ namespace GameLogic
 
 		private async UniTask ContinueAfterSessionAsync()
 		{
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.StorySessionEnd);
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			NarrativeSessionConfig next = m_storyScheduler.FindNextSession(saveData);
 			if (next == null && m_storyScheduler.HasUncompletedSessions(saveData) &&
@@ -1851,6 +2004,8 @@ namespace GameLogic
 
 		private void EnterDayEnd()
 		{
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryDayEnd);
+			SoundConfigMgr.Instance.PlayBgm(SfxNames.BgmDayEnd, fadeIn: 1.5f);
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			if (saveData.DayPhase == NarrativeDayPhase.Active && string.IsNullOrWhiteSpace(saveData.CurrentSessionId))
 				saveData.BeginDayMonologue();
@@ -1865,11 +2020,8 @@ namespace GameLogic
 			string body = session != null && !string.IsNullOrWhiteSpace(session.DayMonologue)
 				? session.DayMonologue
 				: $"第 {saveData.CurrentDay} 天结束。\n今天获得 {saveData.MemoryCount} 段记忆，学会 {saveData.OwnedEmotionIds.Count} 种情绪。\n回想过后，新的日子将继续。";
-			string title = session != null ? session.Name + " · 日终" : "日终独白";
-			ShowOverlay(title, body, new[]
-			{
-				("继续", (Action)(() => ContinueAfterDayMonologue()))
-			});
+			string title = $"DAY {saveData.CurrentDay}";
+			ShowReflectionOverlay(title, body, ContinueAfterDayMonologue);
 		}
 
 		private void SetMonologuePresentation(bool visible)
@@ -1884,7 +2036,7 @@ namespace GameLogic
 			if (m_btnLayoutEdit != null) m_btnLayoutEdit.gameObject.SetActive(showHud);
 			if (m_scrollMemoryList != null) m_scrollMemoryList.gameObject.SetActive(showHud);
 			if (m_dialoguePanel != null) m_dialoguePanel.SetActive(showHud);
-			if (m_tmpNpcSubtitle != null) m_tmpNpcSubtitle.gameObject.SetActive(false);
+			if (m_rtNpcSubtitle != null) m_rtNpcSubtitle.gameObject.SetActive(false);
 			if (m_tfReplayMessageNode != null) m_tfReplayMessageNode.gameObject.SetActive(false);
 			if (m_tfReplayEmoNode != null) m_tfReplayEmoNode.gameObject.SetActive(false);
 			SetDialogueAdvanceCatcherActive(false);
@@ -1960,20 +2112,28 @@ namespace GameLogic
 
 			DestroyOverlay();
 			HideMemoryTooltip();
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.MemoryOverflow);
 			SetMonologuePresentation(false);
 			SetDialogueAdvanceCatcherActive(false);
 			if (m_dialoguePanel != null) m_dialoguePanel.SetActive(false);
 			if (m_scrollMemoryList != null) m_scrollMemoryList.gameObject.SetActive(true);
-			if (m_tmpNpcSubtitle != null)
+			if (m_rtNpcSubtitle != null && m_tmpNpcSubtitle != null)
 			{
+				if (m_tmpNpcSpeaker != null) m_tmpNpcSpeaker.text = string.Empty;
 				m_tmpNpcSubtitle.text = $"记忆已满，请点击记忆卡片右上角的删除按钮，保留 {NarrativeRules.MemoryCapacity} 段记忆。";
-				m_tmpNpcSubtitle.gameObject.SetActive(true);
+				m_tmpNpcSubtitle.maxVisibleCharacters = int.MaxValue;
+				m_tmpNpcSubtitle.ForceMeshUpdate();
+				LayoutNpcSubtitle(m_tmpNpcSubtitle.preferredHeight);
+				m_rtNpcSubtitle.gameObject.SetActive(true);
+				SetContinueHintVisible(false, true);
 			}
 			RefreshMemorySlots();
 		}
 
 		private void ShowGameComplete()
 		{
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryEnding);
+			SoundConfigMgr.Instance.PlayBgm(SfxNames.BgmEnding, fadeIn: 2f);
 			ShowOverlay("成为自己", "主线故事已完成。一路留下的记忆与情绪已保存在本机存档中。", new[]
 			{
 				("从头开始", (Action)(() => ConfirmRestartFromBeginning())),
@@ -1994,17 +2154,18 @@ namespace GameLogic
 
 		private void ShowCollection()
 		{
-			ShowCollectionPage(false);
+			GameModule.UIModule.ShowWindowAsync<CollectionWindow>();
 		}
 
-		private void ShowCollectionPage(bool emotions)
+		private void ShowCollectionPage(bool emotions, bool fromTab = false)
 		{
+			if (fromTab) SoundConfigMgr.Instance.PlaySfx(SfxNames.UiTabSwitch, DGame.AudioType.UISound);
 			ShowOverlay("图鉴", emotions ? "圆越大，这份情绪被表达得越多。" : "已获得的记忆", new[]
 			{
-				("记忆", (Action)(() => ShowCollectionPage(false))),
-				("情绪", (Action)(() => ShowCollectionPage(true))),
+				("记忆", (Action)(() => ShowCollectionPage(false, true))),
+				("情绪", (Action)(() => ShowCollectionPage(true, true))),
 				("关闭", (Action)(() => CloseOverlayAnimated()))
-			});
+			}, playSound: !fromTab);
 			if (m_overlayBodyContent == null) return;
 			if (emotions)
 			{
@@ -2335,6 +2496,7 @@ namespace GameLogic
 				panel.DOKill();
 				panel.sizeDelta = new Vector2(900f, 780f);
 				panel.anchoredPosition = new Vector2(150f, -780f);
+				SoundConfigMgr.Instance.PlaySfx(SfxNames.ItemPanelIn);
 				panel.DOAnchorPos(new Vector2(150f, 0f), 0.25f).SetUpdate(true).SetLink(panel.gameObject);
 			}
 			ShowNarrativeItemImage(item.ImageId, visualParts);
@@ -2349,6 +2511,7 @@ namespace GameLogic
 			}
 
 			if (!saveData.AddMemories(new[] { memoryId })) return;
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.ItemInspect);
 			m_narrativeService.RunEmotionScanForDebug(saveData);
 			RefreshUI();
 			PlayItemMemoryFlyIn(memoryId, source);
@@ -2378,6 +2541,7 @@ namespace GameLogic
 				TextAlignmentOptions.Center);
 			label.raycastTarget = false;
 			label.color = HudPaperText;
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.MemoryGet);
 			DOTween.Sequence().Append(DOVirtual.Float(0f, 1f, 0.5f, progress =>
 			{
 				RectTransform target = GetMemorySlotForId(memoryId);
@@ -2385,7 +2549,11 @@ namespace GameLogic
 					flyRect.position = Vector3.Lerp(startPosition, target.TransformPoint(target.rect.center), progress);
 			}).SetEase(Ease.InOutCubic))
 				.Join(flyRect.DOScale(0.7f, 0.5f)).SetUpdate(true).SetLink(fly)
-				.OnComplete(() => UnityEngine.Object.Destroy(fly));
+				.OnComplete(() =>
+				{
+					SoundConfigMgr.Instance.PlaySfx(SfxNames.MemoryLand);
+					UnityEngine.Object.Destroy(fly);
+				});
 		}
 
 		private RectTransform GetMemorySlotForId(string memoryId)
@@ -2580,6 +2748,7 @@ namespace GameLogic
 			PlayerPrefs.SetFloat("NarrativeMasterVolume", volume);
 			PlayerPrefs.Save();
 			AudioListener.volume = volume;
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.UiSliderTick, DGame.AudioType.UISound);
 			ShowVolumeSettings();
 		}
 
@@ -2691,7 +2860,7 @@ namespace GameLogic
 		}
 
 		private void ShowOverlay(string title, string body, IReadOnlyList<(string Label, Action Action)> buttons,
-			bool keepSceneVisible = false)
+			bool keepSceneVisible = false, bool playSound = true)
 		{
 			HideMemoryTooltip();
 			DiscardSuspendedOverlay();
@@ -2719,6 +2888,7 @@ namespace GameLogic
 			panel.pivot = new Vector2(0.5f, 0.5f);
 			panel.sizeDelta = new Vector2(780, 720);
 			panel.anchoredPosition = new Vector2(0f, -720f);
+			if (playSound) SoundConfigMgr.Instance.PlaySfx(SfxNames.UiPanelOpen, DGame.AudioType.UISound);
 			panel.DOAnchorPos(Vector2.zero, 0.25f).SetUpdate(true).SetLink(root);
 			Image panelImage = root.GetComponent<Image>();
 			panelImage.color = HudPaperPanel;
@@ -2788,6 +2958,150 @@ namespace GameLogic
 			float bodyHeight = Mathf.Max(bodyText.preferredHeight + 24f, 80f);
 			bodyContent.sizeDelta = new Vector2(0f, bodyHeight);
 			bodyTextRect.sizeDelta = new Vector2(bodyTextRect.sizeDelta.x, bodyHeight);
+		}
+
+		/// <summary>
+		/// 日终 AI 反思：铺满整屏的底图，文字排进底图里的纸面区域，右下角只留「回车 + 继续」。
+		/// 与通用 ShowOverlay 分开实现，避免影响图鉴、物品、设置等共用弹窗。
+		/// </summary>
+		private void ShowReflectionOverlay(string title, string body, Action onContinue)
+		{
+			HideMemoryTooltip();
+			DiscardSuspendedOverlay();
+			DestroyOverlay();
+			EnsureEventSystem();
+
+			var blocker = new GameObject("NarrativeOverlay", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
+			blocker.transform.SetParent(transform, false);
+			blocker.transform.SetAsLastSibling();
+			RectTransform blockerRect = blocker.GetComponent<RectTransform>();
+			blockerRect.anchorMin = Vector2.zero;
+			blockerRect.anchorMax = Vector2.one;
+			blockerRect.offsetMin = Vector2.zero;
+			blockerRect.offsetMax = Vector2.zero;
+			Image blockerImage = blocker.GetComponent<Image>();
+			blockerImage.color = Color.white;
+			blockerImage.raycastTarget = true;
+			ApplyHudSprite(blockerImage, ReflectionBackgroundLocation, false,
+				gameObject.GetCancellationTokenOnDestroy());
+			m_overlay = blocker;
+
+			CanvasGroup group = blocker.GetComponent<CanvasGroup>();
+			group.alpha = 0f;
+			group.DOFade(1f, 0.3f).SetUpdate(true).SetLink(blocker);
+
+			// 纸面容器：锚定到底图里的纸面范围，节点名保持 Panel 以兼容外层逻辑。
+			var paperObject = new GameObject("Panel", typeof(RectTransform));
+			paperObject.transform.SetParent(blocker.transform, false);
+			RectTransform paper = paperObject.GetComponent<RectTransform>();
+			paper.anchorMin = new Vector2(ReflectionPaperArea.xMin, ReflectionPaperArea.yMin);
+			paper.anchorMax = new Vector2(ReflectionPaperArea.xMax, ReflectionPaperArea.yMax);
+			paper.pivot = new Vector2(0.5f, 0.5f);
+			paper.offsetMin = Vector2.zero;
+			paper.offsetMax = Vector2.zero;
+
+			TextMeshProUGUI titleText = CreateOverlayText(paper, title, ReflectionTitleFontSize,
+				Vector2.zero, new Vector2(0f, ReflectionTitleHeight), TextAlignmentOptions.TopLeft);
+			titleText.fontStyle = FontStyles.Bold;
+			titleText.overflowMode = TextOverflowModes.Overflow;
+			titleText.enableWordWrapping = false;
+			RectTransform titleRect = titleText.rectTransform;
+			titleRect.anchorMin = new Vector2(0f, 1f);
+			titleRect.anchorMax = new Vector2(1f, 1f);
+			titleRect.pivot = new Vector2(0.5f, 1f);
+			titleRect.offsetMin = new Vector2(ReflectionTextInsetLeft,
+				-(ReflectionTitleTop + ReflectionTitleHeight));
+			titleRect.offsetMax = new Vector2(-ReflectionTextInsetRight, -ReflectionTitleTop);
+
+			TextMeshProUGUI bodyText = CreateOverlayText(paper, body, ReflectionBodyFontSize,
+				Vector2.zero, Vector2.zero, TextAlignmentOptions.TopLeft);
+			bodyText.overflowMode = TextOverflowModes.Overflow;
+			bodyText.enableWordWrapping = true;
+			bodyText.lineSpacing = ReflectionBodyLineSpacing;
+			RectTransform bodyRect = bodyText.rectTransform;
+			bodyRect.anchorMin = Vector2.zero;
+			bodyRect.anchorMax = Vector2.one;
+			bodyRect.pivot = new Vector2(0.5f, 0.5f);
+			bodyRect.offsetMin = new Vector2(ReflectionTextInsetLeft, ReflectionBodyBottom);
+			bodyRect.offsetMax = new Vector2(-ReflectionTextInsetRight, -ReflectionBodyTop);
+
+			CreateReflectionContinue(paper, onContinue);
+		}
+
+		private void CreateReflectionContinue(Transform parent, Action onContinue)
+		{
+			var go = new GameObject("Continue", typeof(RectTransform), typeof(Image), typeof(Button));
+			go.transform.SetParent(parent, false);
+			RectTransform rect = go.GetComponent<RectTransform>();
+			rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
+			rect.pivot = new Vector2(1f, 0f);
+			rect.anchoredPosition = new Vector2(-ReflectionContinueRight, ReflectionContinueBottom);
+			rect.sizeDelta = new Vector2(124f, 64f);
+			Image hitArea = go.GetComponent<Image>();
+			hitArea.color = Color.clear;
+			hitArea.raycastTarget = true;
+			Button button = go.GetComponent<Button>();
+			button.transition = Selectable.Transition.None;
+			button.targetGraphic = hitArea;
+			button.onClick.AddListener(() =>
+			{
+				if (!button.interactable) return;
+				button.interactable = false;
+				onContinue?.Invoke();
+			});
+
+			CreateReflectionEnterIcon(go.transform, 30f);
+
+			TextMeshProUGUI label = CreateOverlayText(go.transform, "继续", 32f, Vector2.zero,
+				Vector2.zero, TextAlignmentOptions.MidlineLeft);
+			label.overflowMode = TextOverflowModes.Overflow;
+			label.enableWordWrapping = false;
+			RectTransform labelRect = label.rectTransform;
+			labelRect.anchorMin = Vector2.zero;
+			labelRect.anchorMax = Vector2.one;
+			labelRect.pivot = new Vector2(0.5f, 0.5f);
+			labelRect.offsetMin = new Vector2(44f, 0f);
+			labelRect.offsetMax = Vector2.zero;
+		}
+
+		// 回车（↵）标识：横笔 + 右侧竖笔 + 左侧箭头，全部用空白 Image 拼，不依赖字体字形。
+		private static void CreateReflectionEnterIcon(Transform parent, float size)
+		{
+			var root = new GameObject("EnterIcon", typeof(RectTransform));
+			root.transform.SetParent(parent, false);
+			RectTransform rect = root.GetComponent<RectTransform>();
+			rect.anchorMin = rect.anchorMax = new Vector2(0f, 0.5f);
+			rect.pivot = new Vector2(0f, 0.5f);
+			rect.anchoredPosition = new Vector2(0f, 0f);
+			rect.sizeDelta = new Vector2(size, size);
+
+			float scale = size / 30f;
+			float stroke = Mathf.Max(2f, 2.6f * scale);
+			float barY = 9f * scale;
+			CreateReflectionIconBar(root.transform, new Vector2(2f * scale, barY - stroke * 0.5f),
+				new Vector2(24f * scale, stroke), 0f);
+			CreateReflectionIconBar(root.transform, new Vector2(23f * scale, barY - stroke * 0.5f),
+				new Vector2(stroke, 18f * scale), 0f);
+			CreateReflectionIconBar(root.transform, new Vector2(2f * scale, barY),
+				new Vector2(11f * scale, stroke), 45f);
+			CreateReflectionIconBar(root.transform, new Vector2(2f * scale, barY),
+				new Vector2(11f * scale, stroke), -45f);
+		}
+
+		private static void CreateReflectionIconBar(Transform parent, Vector2 position, Vector2 size,
+			float rotation)
+		{
+			var go = new GameObject("Bar", typeof(RectTransform), typeof(Image));
+			go.transform.SetParent(parent, false);
+			RectTransform rect = go.GetComponent<RectTransform>();
+			rect.anchorMin = rect.anchorMax = Vector2.zero;
+			rect.pivot = Vector2.zero;
+			rect.anchoredPosition = position;
+			rect.sizeDelta = size;
+			rect.localRotation = Quaternion.Euler(0f, 0f, rotation);
+			Image image = go.GetComponent<Image>();
+			image.color = ReflectionIconColor;
+			image.raycastTarget = false;
 		}
 
 		private static RectTransform CreateOverlayScrollViewport(Transform parent, string name)
@@ -3013,6 +3327,7 @@ namespace GameLogic
 				return;
 			}
 			panel.DOKill();
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.UiPanelClose, DGame.AudioType.UISound);
 			panel.DOAnchorPos(new Vector2(panel.anchoredPosition.x, -panel.rect.height), 0.18f)
 				.SetUpdate(true).SetLink(panel.gameObject).OnComplete(DestroyOverlay);
 		}
@@ -3221,6 +3536,7 @@ namespace GameLogic
 			if (location == m_requestedSceneCharacterLocation &&
 				Time.unscaledTime - m_sceneCharacterRequestTime < 5f) return;
 
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.PortraitSwitch);
 			HideNpcSpine();
 			CancelSpriteRequest(ref m_sceneCharacterSpriteRequest);
 			m_requestedSceneCharacterLocation = location;
@@ -3592,6 +3908,7 @@ namespace GameLogic
 			}
 
 			m_loadedSceneKey = key;
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.SceneSwitch);
 			int version = ++m_sceneBackgroundVersion;
 			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
 			for (int i = 0; i < m_sceneLayerImages.Count; i++)
@@ -3988,10 +4305,7 @@ namespace GameLogic
 			}
 
 			SetDialoguePresentationMode(false);
-			if (m_tmpNpcSubtitle != null)
-			{
-				m_tmpNpcSubtitle.text = string.Empty;
-			}
+			ClearNpcSubtitle();
 
 			DestroyOverlay();
 			if (m_isBusy)

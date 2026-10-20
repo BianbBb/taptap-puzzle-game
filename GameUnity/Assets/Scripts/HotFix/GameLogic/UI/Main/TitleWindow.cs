@@ -12,6 +12,11 @@ namespace GameLogic
 
 		public override bool CanEscClose => false;
 
+		protected override void OnCreate()
+		{
+			SoundConfigMgr.Instance.PlayBgm(SfxNames.BgmTitle, fadeIn: 1.5f);
+		}
+
 		#region 事件
 
 		private partial void OnClickEnterGameBtn()

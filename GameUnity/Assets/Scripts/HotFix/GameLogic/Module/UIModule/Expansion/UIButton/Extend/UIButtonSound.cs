@@ -23,6 +23,12 @@ namespace GameLogic
 
         public void OnPointerClick(PointerEventData eventData)
         {
+            if (m_clickSoundId == (int)SysSoundID.BTN_CLICK)
+            {
+                SoundConfigMgr.Instance.PlaySfx(SfxNames.UiClick, DGame.AudioType.UISound);
+                return;
+            }
+
             SoundConfigMgr.Instance.Play(m_clickSoundId, DGame.AudioType.UISound, isInPool: true);
         }
     }

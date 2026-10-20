@@ -18,6 +18,7 @@ namespace GameLogic
 
 		private bool m_hoverBound;
 		private TextMeshProUGUI m_hoverLabel;
+		private Button m_hoverButton;
 
 		public override bool FullScreen => true;
 
@@ -27,6 +28,7 @@ namespace GameLogic
 		{
 			BindHover();
 			RefreshUI();
+			SoundConfigMgr.Instance.PlayBgm(SfxNames.BgmTitle, fadeIn: 1.2f);
 		}
 
 		protected override void OnRefresh()
@@ -121,6 +123,13 @@ namespace GameLogic
 				return;
 			}
 
+			// 只在真正换了高亮目标时响，避免同一项反复进出刷音
+			if (m_hoverButton != button)
+			{
+				m_hoverButton = button;
+				SoundConfigMgr.Instance.PlaySfx(SfxNames.UiHover, DGame.AudioType.UISound);
+			}
+
 			RestoreHoverLabel();
 
 			m_imgHighlight.gameObject.SetActive(true);
@@ -151,6 +160,7 @@ namespace GameLogic
 			{
 				return;
 			}
+			m_hoverButton = null;
 			m_imgHighlight.gameObject.SetActive(false);
 		}
 

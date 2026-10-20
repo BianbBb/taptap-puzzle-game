@@ -545,6 +545,7 @@ namespace GameLogic
             }
             m_isTweenPopping = true;
             transform.localScale = Vector3.one * 0.8f;
+            SoundConfigMgr.Instance.PlaySfx(SfxNames.UiPanelOpen, DGame.AudioType.UISound);
             transform.DOScale(Vector3.one, NORMAL_TWEEN_POP_TIME)
                 .SetEase(Ease.OutBack)
                 .SetUpdate(true)

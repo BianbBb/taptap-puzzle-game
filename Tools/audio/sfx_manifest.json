@@ -1,0 +1,41 @@
+{
+  "_comment": "《记忆终会消散》音效清单。name 即最终文件名（= YooAsset Address = 配置表 Location）。改音效时只需替换同名文件，不用改这里。freesound_id 固定后重跑可复现。",
+  "_style": "叙事情感题材：纸感 / 木质 / 玻璃 / 极简钢琴。禁止 8bit 电子音。全部 CC0。",
+  "sounds": [
+    { "name": "sfx_ui_hover",            "query": "button hover",        "freesound_id": 862448, "min_duration": 0.02, "max_duration": 0.30, "note": "菜单悬停" },
+    { "name": "sfx_ui_panel_open",       "query": "paper whoosh",        "freesound_id": 484967, "min_duration": 0.15, "max_duration": 0.70, "note": "窗口/弹窗弹入" },
+    { "name": "sfx_ui_panel_close",      "query": "paper slide",         "freesound_id": 115480, "min_duration": 0.15, "max_duration": 0.70, "note": "弹窗弹出" },
+    { "name": "sfx_ui_error",            "query": "wood knock",          "freesound_id": 388269, "min_duration": 0.10, "max_duration": 0.60, "note": "错误/锁定提示" },
+    { "name": "sfx_ui_tab_switch",       "query": "page turn short",     "freesound_id": 369960, "min_duration": 0.10, "max_duration": 0.60, "note": "图鉴翻页" },
+    { "name": "sfx_ui_slider_tick",      "query": "tiny click",          "freesound_id": 370848, "min_duration": 0.01, "max_duration": 0.15, "note": "音量滑块（兼试听）" },
+
+    { "name": "sfx_story_text",          "query": "typewriter",          "freesound_id": 160678, "min_duration": 0.02, "max_duration": 0.30, "note": "打字机逐字" },
+    { "name": "sfx_story_bubble_in",     "query": "bubble pop soft",     "freesound_id": 776443, "min_duration": 0.10, "max_duration": 0.50, "note": "玩家气泡出现" },
+    { "name": "sfx_story_option_appear", "query": "paper page flip",     "freesound_id": 472030, "min_duration": 0.05, "max_duration": 0.50, "note": "回复选项出现" },
+    { "name": "sfx_story_emotion_select","query": "glass tap",            "freesound_id": 388652, "min_duration": 0.05, "max_duration": 0.50, "note": "情绪按钮选中" },
+    { "name": "sfx_story_reply_confirm", "query": "woodblock",            "freesound_id": 692828, "min_duration": 0.10, "max_duration": 0.80, "note": "提交回复" },
+    { "name": "sfx_story_affection_up",  "query": "glockenspiel",         "freesound_id": 539915, "min_duration": 0.30, "max_duration": 1.60, "note": "好感上升" },
+    { "name": "sfx_story_affection_down","query": "soft mallet",          "freesound_id": 593544, "min_duration": 0.30, "max_duration": 1.60, "note": "好感下降" },
+    { "name": "sfx_story_emotion_emerge","query": "shimmer rise",         "freesound_id": 703283, "min_duration": 0.80, "max_duration": 3.00, "note": "情绪涌现" },
+    { "name": "sfx_story_session_end",   "query": "cinematic soft hit",   "freesound_id": 728515, "min_duration": 0.30, "max_duration": 1.50, "note": "一段结束" },
+    { "name": "sfx_story_day_end",       "query": "low piano hit",        "freesound_id": 127166, "min_duration": 0.30, "max_duration": 1.20, "note": "进入日终" },
+    { "name": "sfx_story_ending",        "query": "piano high chord",     "freesound_id": 508788, "min_duration": 0.80, "max_duration": 4.00, "note": "结局" },
+
+    { "name": "sfx_memory_get",          "query": "crystal",              "freesound_id": 846190, "min_duration": 0.20, "max_duration": 1.00, "note": "记忆飞入起飞" },
+    { "name": "sfx_memory_land",         "query": "stone tap",            "freesound_id": 350343, "min_duration": 0.10, "max_duration": 0.60, "note": "记忆落槽" },
+    { "name": "sfx_memory_delete",       "query": "paper tear short",     "freesound_id": 676624, "min_duration": 0.15, "max_duration": 0.80, "note": "删除记忆" },
+    { "name": "sfx_memory_overflow",     "query": "soft piano chord",     "freesound_id": 578353, "min_duration": 0.20, "max_duration": 3.00, "crop": 1.4, "note": "记忆溢出" },
+    { "name": "sfx_memory_locked",       "query": "wood knock",           "freesound_id": 478212, "min_duration": 0.05, "max_duration": 0.50, "note": "记忆锁定的回复" },
+
+    { "name": "sfx_item_inspect",        "query": "ceramic clink",        "freesound_id": 201805, "min_duration": 0.10, "max_duration": 0.80, "note": "检查物件部件" },
+    { "name": "sfx_item_panel_in",       "query": "cloth",                "freesound_id": 789038, "min_duration": 0.10, "max_duration": 0.60, "note": "物品面板滑入" },
+    { "name": "sfx_portrait_switch",     "query": "cloth rustle",         "freesound_id": 493468, "min_duration": 0.10, "max_duration": 0.60, "note": "立绘切换" },
+    { "name": "sfx_scene_switch",        "query": "transition whoosh",    "freesound_id": 683183, "min_duration": 0.30, "max_duration": 1.60, "note": "背景切换" },
+
+    { "name": "bgm_title",      "query": "ambient piano",      "freesound_id": 849528, "format": "mp3", "min_duration": 30, "max_duration": 400, "prefer_longest": false, "peak_db": -3.0, "note": "标题/主菜单（需无缝循环）" },
+    { "name": "bgm_story",      "query": "minimal piano",      "freesound_id": 663688, "format": "mp3", "min_duration": 30, "max_duration": 400, "prefer_longest": false, "peak_db": -6.0, "note": "局内叙事（循环，低动态）" },
+    { "name": "bgm_dayend",     "query": "dark ambient",       "freesound_id": 470643, "format": "mp3", "min_duration": 30, "max_duration": 400, "prefer_longest": false, "peak_db": -4.0, "note": "日终独白" },
+    { "name": "bgm_ending",     "query": "emotional piano",    "freesound_id": 868509, "format": "mp3", "min_duration": 30, "max_duration": 400, "prefer_longest": false, "peak_db": -3.0, "note": "结局" },
+    { "name": "amb_story_room", "query": "room tone interior", "freesound_id": 164798, "format": "mp3", "min_duration": 20, "max_duration": 180, "prefer_longest": false, "peak_db": -24.0, "note": "室内底噪（循环，极低）" }
+  ]
+}
