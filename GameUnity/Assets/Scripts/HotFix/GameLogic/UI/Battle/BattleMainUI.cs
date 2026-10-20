@@ -4873,13 +4873,19 @@ namespace GameLogic
 			int foregroundCount = layerCount - backgroundCount;
 			for (int i = 0; i <= layerCount; i++)
 			{
-				for (int s = 0; s < m_characterSlots.Count; s++)
+				// 先插中间那位（index 2），左右两人后插，于是三人重叠时中间那个在最后面
+				for (int pass = 0; pass < 2; pass++)
 				{
-					SceneCharacterSlot slot = m_characterSlots[s];
-					if (slot == null || slot.Rect == null || !slot.Rect.gameObject.activeSelf) continue;
-					int at = CharacterInsertIndex(backgroundCount, foregroundCount,
-						ReadCharacterLayer(GetCharacterSlotLayoutPart(slot)));
-					if (at == i) slot.Rect.SetAsLastSibling();
+					for (int s = 0; s < m_characterSlots.Count; s++)
+					{
+						bool middle = s >= 2;
+						if ((pass == 0) != middle) continue;
+						SceneCharacterSlot slot = m_characterSlots[s];
+						if (slot == null || slot.Rect == null || !slot.Rect.gameObject.activeSelf) continue;
+						int at = CharacterInsertIndex(backgroundCount, foregroundCount,
+							ReadCharacterLayer(GetCharacterSlotLayoutPart(slot)));
+						if (at == i) slot.Rect.SetAsLastSibling();
+					}
 				}
 				if (i < layerCount && m_sceneLayerImages[i] != null)
 					m_sceneLayerImages[i].transform.SetAsLastSibling();
@@ -5021,10 +5027,12 @@ namespace GameLogic
 					return true;
 				case "scene_chenguo":
 					backgrounds = new[] { "scene_chenguo_bg" };
-					// 台历是桌面上的独立图层（美术从桌面 PNG 里单独拆出来的），压在猫玩偶之后。
+					// 前景自下而上：椅子（在人物身后）→ 桌面 → 台历 → 猫玩偶（最上）。
+					// 台历和猫玩偶都是「摆在桌子上的东西」，必须压住桌面；猫再压台历一层，
+					// 免得以后两者挪到重叠时被台历切一刀。
 					foregrounds = new[]
 					{
-						"scene_chenguo_chair", "scene_chenguo_desk", "scene_chenguo_cat", "scene_chenguo_calendar"
+						"scene_chenguo_chair", "scene_chenguo_desk", "scene_chenguo_calendar", "scene_chenguo_cat"
 					};
 					return true;
 				case "scene_father":
@@ -5108,7 +5116,7 @@ namespace GameLogic
 
 			if (npcId == "陈果" || npcId == "女孩")
 			{
-				return new[] { "scene_chenguo_chair", "scene_chenguo_desk", "scene_chenguo_cat", "scene_chenguo_calendar" };
+				return new[] { "scene_chenguo_chair", "scene_chenguo_desk", "scene_chenguo_calendar", "scene_chenguo_cat" };
 			}
 
 			if (npcId == "父亲" || npcId == "陈父")
