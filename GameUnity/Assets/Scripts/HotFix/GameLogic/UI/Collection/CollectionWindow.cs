@@ -36,7 +36,7 @@ namespace GameLogic
 		// ---- 情绪圆（沿用对话界面情绪条的一套参数） ----
 		private const float EmotionRowWidth = 900f;
 		private const float EmotionSpacing = 24f;
-		private const float EmotionMinDiameter = 44f;
+		private const float EmotionMinDiameter = 56f;
 		private const float EmotionMaxDiameterCap = 128f;
 		private const float EmotionFullCount = 9f;
 
@@ -44,6 +44,35 @@ namespace GameLogic
 		private GameObject m_emotionRow;
 		private bool m_showEmotion;
 		private int m_pageVersion;
+
+		// prefab 里滚动结构节点已改名为 m_goScroll / m_goContent（绑定表给的是 GameObject），
+		// 这里就地还原出组件引用，避免滚动相关代码到处写 GetComponent。
+		private ScrollRect m_scrollRectCache;
+		private RectTransform m_rtContentCache;
+
+		private ScrollRect m_scrollRect
+		{
+			get
+			{
+				if (m_scrollRectCache == null && m_goScroll != null)
+				{
+					m_scrollRectCache = m_goScroll.GetComponent<ScrollRect>();
+				}
+				return m_scrollRectCache;
+			}
+		}
+
+		private RectTransform m_rtContent
+		{
+			get
+			{
+				if (m_rtContentCache == null && m_goContent != null)
+				{
+					m_rtContentCache = m_goContent.GetComponent<RectTransform>();
+				}
+				return m_rtContentCache;
+			}
+		}
 
 		#region 生命周期
 
@@ -233,9 +262,8 @@ namespace GameLogic
 					Mathf.Clamp01(saveData.GetEmotionUseCount(emotion.Id) / EmotionFullCount));
 				item.rectTransform.sizeDelta = new Vector2(diameter, diameter);
 
-				EmotionConfig captured = emotion;
-				bool capturedOwned = owned;
-				item.BindClickEvent(_ => ShowDetail(captured, capturedOwned), needEmptyImg: true);
+				// 情绪圆只做展示：不可点击，悬停轻微放大。
+				item.gameObject.AddComponent<UIHoverScale>();
 				item.Show(true);
 			}
 		}
@@ -255,8 +283,8 @@ namespace GameLogic
 
 		#region 详情弹层
 
-		// 美术给的弹窗切图只有「看图」这一套（相纸 + 白槽 + 虚线框 + 齿轮 + 关闭钮），没有文字底板，
-		// 所以详情就是一张大图；未解锁时留空白相纸（= 没拍到的照片），不加说明文字。
+		// 详情版式：白纸大卡 + 齿孔邮票 + 金属圆章/关闭钮 + 标题点阵 + 分隔线 + 米黄正文框。
+		// 所有尺寸与颜色都落在 CollectionWindow.prefab 的 DetailCard 下，运行时代码只填文本与配图。
 		private GameObject DetailRoot => m_imgDetailMask != null ? m_imgDetailMask.transform.parent.gameObject : null;
 
 		private void ShowDetail(MemoryConfig entry, bool owned)
@@ -264,6 +292,18 @@ namespace GameLogic
 			GameObject root = DetailRoot;
 			if (root == null || entry == null) return;
 			root.SetActive(true);
+
+			if (m_tmpDetailTitle != null)
+			{
+				m_tmpDetailTitle.text = owned ? entry.MemoryName : "未解锁";
+			}
+
+			if (m_tmpDetailBody != null)
+			{
+				m_tmpDetailBody.text = owned
+					? entry.Description
+					: "检查物品上的线索可发现这段记忆。";
+			}
 
 			if (m_imgDetailContent == null) return;
 			m_imgDetailContent.color = new Color(1f, 1f, 1f, 0f);
@@ -282,16 +322,11 @@ namespace GameLogic
 		private void HideDetail()
 		{
 			GameObject root = DetailRoot;
-			if (root != null) root.SetActive(false);
-		}
-
-		private void ShowDetail(EmotionConfig entry, bool owned)
-		{
-			GameObject root = DetailRoot;
-			if (root == null || entry == null) return;
-			root.SetActive(true);
-
-			if (m_imgDetailContent != null) m_imgDetailContent.color = new Color(1f, 1f, 1f, 0f);
+			if (root == null) return;
+			// 清空文本，避免下次打开时先闪一帧上一条的内容。
+			if (m_tmpDetailTitle != null) m_tmpDetailTitle.text = string.Empty;
+			if (m_tmpDetailBody != null) m_tmpDetailBody.text = string.Empty;
+			root.SetActive(false);
 		}
 
 		#endregion
