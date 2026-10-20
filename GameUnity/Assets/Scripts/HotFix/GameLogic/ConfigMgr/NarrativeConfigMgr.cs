@@ -34,6 +34,9 @@ namespace GameLogic
         public NarrativeItemPartConfig GetNarrativeItemPart(string id)
             => string.IsNullOrWhiteSpace(id) ? null : Tables.TbNarrativeItemPartConfig.GetOrDefaultNoStatic(id);
 
+        public EmotionMemoryRuleConfig GetEmotionMemoryRule(string id)
+            => string.IsNullOrWhiteSpace(id) ? null : Tables.TbEmotionMemoryRuleConfig.GetOrDefaultNoStatic(id);
+
         public bool HasEmotion(string id)
             => !string.IsNullOrWhiteSpace(id) && Tables.TbEmotionConfig.dataMap.ContainsKey(id);
 
@@ -73,6 +76,8 @@ namespace GameLogic
         public IReadOnlyList<NarrativeItemConfig> AllNarrativeItems => Tables.TbNarrativeItemConfig.dataList;
 
         public IReadOnlyList<NarrativeItemPartConfig> AllNarrativeItemParts => Tables.TbNarrativeItemPartConfig.dataList;
+
+        public IReadOnlyList<EmotionMemoryRuleConfig> AllEmotionMemoryRules => Tables.TbEmotionMemoryRuleConfig.dataList;
 
         public int EmotionCount => Tables.TbEmotionConfig.dataList.Count;
 

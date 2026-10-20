@@ -22,6 +22,9 @@ namespace GameLogic
         [JsonProperty("EmotionUseCounts")]
         private Dictionary<string, int> m_emotionUseCounts = new Dictionary<string, int>();
 
+        [JsonProperty("RuleTriggerCounts")]
+        private Dictionary<string, int> m_ruleTriggerCounts = new Dictionary<string, int>();
+
         [JsonProperty("NpcAffection")]
         private Dictionary<string, float> m_npcAffection = new Dictionary<string, float>();
 
@@ -224,6 +227,7 @@ namespace GameLogic
             m_ownedMemoryOrder.Clear();
             m_ownedEmotionIds.Clear();
             m_emotionUseCounts.Clear();
+            m_ruleTriggerCounts.Clear();
             m_npcAffection.Clear();
             m_storyFlags.Clear();
             m_completedSessionIds.Clear();
@@ -607,6 +611,23 @@ namespace GameLogic
             m_emotionUseCounts[emotionId] = count + 1;
         }
 
+        /// <summary>情绪记忆规则（EmotionMemoryRule）已触发次数，用于 OncePerRun / MaxTriggerCount 判定。</summary>
+        public int GetRuleTriggerCount(string ruleId)
+            => !string.IsNullOrWhiteSpace(ruleId) && m_ruleTriggerCounts.TryGetValue(ruleId, out int count)
+                ? count
+                : 0;
+
+        internal void MarkRuleTriggeredWithoutSaving(string ruleId)
+        {
+            if (string.IsNullOrWhiteSpace(ruleId))
+            {
+                return;
+            }
+
+            m_ruleTriggerCounts.TryGetValue(ruleId, out int count);
+            m_ruleTriggerCounts[ruleId] = count + 1;
+        }
+
         internal void ApplyTurnState(string npcId, float affection, string nextNodeId,
             string turnKey, bool sessionEnded, IEnumerable<string> addedFlags)
         {
@@ -657,6 +678,7 @@ namespace GameLogic
             m_ownedMemoryOrder = GetMemoryIdsInAcquisitionOrder().ToList();
             m_ownedEmotionIds = m_ownedEmotionIds ?? new HashSet<string>();
             m_emotionUseCounts = m_emotionUseCounts ?? new Dictionary<string, int>();
+            m_ruleTriggerCounts = m_ruleTriggerCounts ?? new Dictionary<string, int>();
             m_npcAffection = m_npcAffection ?? new Dictionary<string, float>();
             m_storyFlags = m_storyFlags ?? new HashSet<string>();
             m_completedSessionIds = m_completedSessionIds ?? new HashSet<string>();

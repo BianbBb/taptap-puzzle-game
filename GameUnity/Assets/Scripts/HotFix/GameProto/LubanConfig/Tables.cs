@@ -374,6 +374,27 @@ namespace GameProto
                 m_TbNarrativeItemPartConfig.ResolveRef(this);
             }
         }
+        /// <summary>
+        /// 情绪记忆规则配置表
+        /// </summary>
+        private TbEmotionMemoryRuleConfig m_TbEmotionMemoryRuleConfig;
+        public TbEmotionMemoryRuleConfig TbEmotionMemoryRuleConfig 
+        {
+            get
+            {
+                if (m_TbEmotionMemoryRuleConfig == null)
+                {
+                    m_TbEmotionMemoryRuleConfig = new TbEmotionMemoryRuleConfig(m_defaultLoader("tbemotionmemoryruleconfig"));
+                    m_TbEmotionMemoryRuleConfig.ResolveRef(this);
+                }
+                return m_TbEmotionMemoryRuleConfig;
+            }
+            set
+            {
+                m_TbEmotionMemoryRuleConfig = value;
+                m_TbEmotionMemoryRuleConfig.ResolveRef(this);
+            }
+        }
 
         #endregion
 
@@ -408,6 +429,7 @@ namespace GameProto
             m_TbNarrativeActionConfig = null;
             m_TbNarrativeItemConfig = null;
             m_TbNarrativeItemPartConfig = null;
+            m_TbEmotionMemoryRuleConfig = null;
         }
 
         public void Init(){}

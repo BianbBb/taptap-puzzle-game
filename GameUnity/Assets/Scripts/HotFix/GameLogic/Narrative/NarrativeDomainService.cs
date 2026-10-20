@@ -168,14 +168,22 @@ namespace GameLogic
             m_actionService.Execute(node.OnExitActionIds, turnKey + "|node-exit", saveData, false);
             m_actionService.Execute(reply.ActionIds, turnKey + "|reply", saveData, false);
             List<string> addedMemories = saveData.AddMemoriesWithoutSaving(reply.RewardMemory);
-            List<string> emergedEmotions = FindEmergentEmotions(saveData);
-            saveData.AddEmotionsWithoutSaving(emergedEmotions);
 
             // 图鉴情绪圆的直径取这个计数，必须在 ApplyTurnState（唯一落盘点）之前累加。
             if (!IsNoneEmotionId(emotionId))
             {
                 saveData.AddEmotionUseWithoutSaving(emotionId);
             }
+
+            // 情绪值累积到规则阈值、且前置记忆齐备时激活新记忆；必须在情绪计数之后、落盘之前。
+            List<string> ruleMemories = ActivateMemoriesByEmotionRule(saveData);
+            if (ruleMemories.Count > 0)
+            {
+                addedMemories.AddRange(ruleMemories);
+            }
+
+            List<string> emergedEmotions = FindEmergentEmotions(saveData);
+            saveData.AddEmotionsWithoutSaving(emergedEmotions);
 
             saveData.ApplyTurnState(node.NpcId, affectionAfter, nextNodeId, turnKey,
                 sessionEnded, null);
@@ -400,6 +408,73 @@ namespace GameLogic
                     throw new InvalidOperationException($"Reward memory definition does not exist: {memoryId}");
                 }
             }
+        }
+
+        /// <summary>
+        /// 按情绪记忆规则激活记忆：情绪累计使用次数达到阈值，且前置记忆全部持有时，
+        /// 获得规则配置的奖励记忆。任一条件不满足都不触发。
+        /// 规则按 Priority 降序执行；一条规则产出的记忆可能满足另一条规则的前置，
+        /// 因此循环到不再有新记忆产出为止。
+        /// </summary>
+        private List<string> ActivateMemoriesByEmotionRule(NarrativeSaveData saveData)
+        {
+            var activated = new List<string>();
+            IReadOnlyList<EmotionMemoryRuleConfig> rules = NarrativeConfigMgr.Instance.AllEmotionMemoryRules;
+            if (rules == null || rules.Count == 0)
+            {
+                return activated;
+            }
+
+            List<EmotionMemoryRuleConfig> ordered = rules
+                .Where(rule => rule != null && !string.IsNullOrWhiteSpace(rule.EmotionId))
+                .OrderByDescending(rule => rule.Priority)
+                .ThenBy(rule => rule.Id, StringComparer.Ordinal)
+                .ToList();
+
+            // 防止规则互相引用导致死循环；正常配置远小于该上限。
+            int guard = ordered.Count + 1;
+            bool progressed = true;
+            while (progressed && guard-- > 0)
+            {
+                progressed = false;
+                foreach (EmotionMemoryRuleConfig rule in ordered)
+                {
+                    if (saveData.GetEmotionUseCount(rule.EmotionId) < rule.Threshold)
+                    {
+                        continue;
+                    }
+
+                    if (!NarrativeRules.HasAllMemories(rule.RequiredMemoryIds, saveData.HasMemory))
+                    {
+                        continue;
+                    }
+
+                    int triggered = saveData.GetRuleTriggerCount(rule.Id);
+                    if (rule.MaxTriggerCount > 0 && triggered >= rule.MaxTriggerCount)
+                    {
+                        continue;
+                    }
+
+                    // OncePerRun / OncePerDay 在本实现里都只触发一次；跨天重置于当前版本没有调用点。
+                    if (!string.Equals(rule.RepeatPolicy, "Repeatable", StringComparison.OrdinalIgnoreCase) &&
+                        triggered > 0)
+                    {
+                        continue;
+                    }
+
+                    List<string> granted = saveData.AddMemoriesWithoutSaving(rule.RewardMemoryIds);
+                    if (granted.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    saveData.MarkRuleTriggeredWithoutSaving(rule.Id);
+                    activated.AddRange(granted);
+                    progressed = true;
+                }
+            }
+
+            return activated;
         }
 
         private List<string> FindEmergentEmotions(NarrativeSaveData saveData)
