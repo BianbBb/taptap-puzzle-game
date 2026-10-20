@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using DGame;
 using GameProto;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -64,11 +65,14 @@ namespace GameLogic
         [JsonProperty("DayPhase")]
         private NarrativeDayPhase m_dayPhase = NarrativeDayPhase.Active;
 
+        /// <summary>玩家在「新游戏」时填的名字，剧本里的 $PlayerName 会替换成它。</summary>
+        [JsonProperty("PlayerName")]
+        private string m_playerName = string.Empty;
 
         [JsonProperty("LastCommittedTurnKey")]
         private string m_lastCommittedTurnKey = string.Empty;
 
-        protected override int CurrentSaveDataVersion => 7;
+        protected override int CurrentSaveDataVersion => 8;
 
         public static NarrativeSaveData Get => BaseClientSaveData.Get<NarrativeSaveData>();
 
@@ -149,6 +153,23 @@ namespace GameLogic
 
         [JsonIgnore]
         public NarrativeDayPhase DayPhase => m_dayPhase;
+
+        /// <summary>玩家名字；没填过为空串，渲染前请走 NarrativePlayerName.Resolve。</summary>
+        [JsonIgnore]
+        public string PlayerName => m_playerName ?? string.Empty;
+
+        /// <summary>写入玩家名字（会去空白、截断长度）；StartNewGame 不会清它。</summary>
+        public void SetPlayerName(string playerName)
+        {
+            string normalized = NarrativePlayerName.Normalize(playerName);
+            if (normalized == m_playerName)
+            {
+                return;
+            }
+
+            m_playerName = normalized;
+            Save();
+        }
 
         public int MemoryCount => m_ownedMemoryIds.Count;
 
@@ -304,6 +325,16 @@ namespace GameLogic
         {
             if (string.Equals(actionType, "GrantItem", System.StringComparison.OrdinalIgnoreCase))
             {
+                // 容量固定为 NarrativeRules.NarrativeItemCapacity（=1）：新物件顶替旧物件是既定语义。
+                // 正常剧情里每个 GrantItem 都在同一节点的 OnExit 配了成对的 RemoveItem，
+                // 走到这里还留着上一件，说明配表漏了一对 add/remove —— 打日志，别让道具静默丢失。
+                if (m_ownedNarrativeItemIds.Count > 0 && !m_ownedNarrativeItemIds.Contains(itemId))
+                {
+                    DLogger.Warning("Narrative item slot overflow: granting {0} while [{1}] is still held. " +
+                        "Check the OnExit RemoveItem pair of the previous node.", itemId,
+                        string.Join(",", m_ownedNarrativeItemIds));
+                }
+
                 m_ownedNarrativeItemIds.Clear();
                 m_ownedNarrativeItemIds.Add(itemId);
             }
@@ -688,6 +719,7 @@ namespace GameLogic
             m_currentDay = System.Math.Max(1, m_currentDay);
             m_currentSessionId = m_currentSessionId ?? string.Empty;
             m_currentNodeId = m_currentNodeId ?? string.Empty;
+            m_playerName = m_playerName ?? string.Empty;
             m_lastCommittedTurnKey = m_lastCommittedTurnKey ?? string.Empty;
             m_lastCompletedSessionId = m_lastCompletedSessionId ?? string.Empty;
             if (oldVersion < 5 && m_dayPhase == NarrativeDayPhase.GameComplete)

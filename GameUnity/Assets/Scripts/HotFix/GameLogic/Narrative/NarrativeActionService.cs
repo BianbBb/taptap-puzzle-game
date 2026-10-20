@@ -17,10 +17,14 @@ namespace GameLogic
         /// <paramref name="grantedEmotions"/> 不为 null 时，把本次**新授予**的情绪 ID 追加进去。
         /// 情绪只写内存态（不落盘），落盘与演出时机由调用方决定：
         /// CommitTurn 会把它并进涌现列表走 <c>EmotionEmerged</c>；UI 路径则自己触发过场。
+        ///
+        /// <paramref name="grantedItems"/> 同理，收集本次执行到的 <c>GrantItem</c> 目标物品 ID。
+        /// 物品是**立刻写进存档**的，这个列表只给 UI 判断「要不要播入库演出」用；
+        /// 同一批动作里多次授予只保留顺序，容量 1 的语义由 SaveData 负责（后一个顶掉前一个）。
         /// </summary>
         public bool Execute(IReadOnlyList<string> actionIds, string executionKey,
             NarrativeSaveData saveData = null, bool saveImmediately = true,
-            List<string> grantedEmotions = null)
+            List<string> grantedEmotions = null, List<string> grantedItems = null)
         {
             if (actionIds == null || actionIds.Count == 0)
                 return false;
@@ -64,6 +68,8 @@ namespace GameLogic
                 }
 
                 saveData.ApplyNarrativeItemActionWithoutSaving(action.ActionType, action.TargetId);
+                if (grantedItems != null && IsType(action.ActionType, GrantItemAction))
+                    grantedItems.Add(action.TargetId);
             }
 
             saveData.MarkActionKeyWithoutSaving(executionKey);

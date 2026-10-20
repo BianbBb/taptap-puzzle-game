@@ -73,6 +73,71 @@ namespace GameLogic
                 }
             }
 
+            // 场景交互点：坐标必须在 0~1，引用的物品/记忆/动作都必须存在。
+            // 配表不用 ref（见 docs），所以这层检查是唯一的安全网。
+            foreach (SceneHotspotConfig hotspot in config.AllSceneHotspots)
+            {
+                if (hotspot.HotspotX < 0f || hotspot.HotspotX > 1f ||
+                    hotspot.HotspotY < 0f || hotspot.HotspotY > 1f)
+                {
+                    AddError(issues, "HOTSPOT_POSITION_OUT_OF_RANGE", hotspot.Id,
+                        $"hotspot center must be within 0..1; received ({hotspot.HotspotX}, {hotspot.HotspotY}).");
+                }
+
+                if (hotspot.Width <= 0f || hotspot.Height <= 0f || hotspot.Width > 1f || hotspot.Height > 1f)
+                {
+                    AddError(issues, "HOTSPOT_SIZE_INVALID", hotspot.Id,
+                        $"hotspot size must be within 0..1; received ({hotspot.Width}, {hotspot.Height}).");
+                }
+
+                if (!string.IsNullOrWhiteSpace(hotspot.ItemId) && !config.HasNarrativeItem(hotspot.ItemId))
+                {
+                    AddError(issues, "HOTSPOT_ITEM_MISSING", hotspot.Id,
+                        $"references unknown item {hotspot.ItemId}.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(hotspot.MemoryId))
+                {
+                    usedMemories.Add(hotspot.MemoryId);
+                    if (!config.HasMemory(hotspot.MemoryId))
+                    {
+                        AddError(issues, "HOTSPOT_MEMORY_MISSING", hotspot.Id,
+                            $"references unknown memory {hotspot.MemoryId}.");
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(hotspot.ActionId) && !config.HasAction(hotspot.ActionId))
+                {
+                    AddError(issues, "HOTSPOT_ACTION_MISSING", hotspot.Id,
+                        $"references unknown action {hotspot.ActionId}.");
+                }
+            }
+
+            // 每个 SceneSearch 节点所在的背景至少要有一个交互点，否则玩家会被晾在一个点不动的场景里。
+            foreach (StoryNodeConfig node in config.AllStoryNodes)
+            {
+                if (node.TurnType == null ||
+                    !node.TurnType.Trim().Equals("SceneSearch", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(node.DefaultNextNodeId))
+                {
+                    AddError(issues, "SCENE_SEARCH_NO_NEXT", node.Id,
+                        "a SceneSearch node needs a default next node to leave the exploration.");
+                }
+
+                // 节点级 backgroundId 为空时走 Session 级场景，校验器不知道节点属于哪个 Session，
+                // 这种情况留给运行期（ShouldRunSceneSearch 会打 warning 并退回普通节点流程）。
+                if (!string.IsNullOrWhiteSpace(node.BackgroundId) &&
+                    config.GetSceneHotspots(node.BackgroundId).Count == 0)
+                {
+                    AddWarning(issues, "SCENE_SEARCH_NO_HOTSPOT", node.Id,
+                        $"no scene hotspot found for background {node.BackgroundId}; the node falls back to a normal turn.");
+                }
+            }
+
             var grantedItems = new HashSet<string>(StringComparer.Ordinal);
             var removedItems = new HashSet<string>(StringComparer.Ordinal);
             foreach (NarrativeActionConfig action in config.AllActions)

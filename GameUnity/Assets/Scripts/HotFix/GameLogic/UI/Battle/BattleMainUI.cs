@@ -22,6 +22,8 @@ namespace GameLogic
 	{
 		private const string NpcSubtitleRootName = "NpcSubtitlePanel";
 		private const string NpcSpeakerLabelPrefix = "SpeakerLabel";
+		/// <summary>名字的装饰副本（阴影、描边）靠名字里的这些片段识别，颜色不跟 npcId 走。</summary>
+		private static readonly string[] NpcSpeakerDecorLabelKeywords = { "Shadow", "Outline" };
 		/// <summary>末行少于这个字数就算孤字，需要处理。</summary>
 		private const int SubtitleWidowMinChars = 4;
 		private const float SubtitleWidowInsetStep = 10f;
@@ -35,6 +37,13 @@ namespace GameLogic
 		private const float MESSAGE_BOTTOM_PADDING = 16f;
 		private const float MESSAGE_SCROLL_SENSITIVITY = 0.3f;
 		private const float REPLY_PANEL_HEIGHT = 441f;
+		// 对话框九切内缩量：左右上都是拼贴装饰带的像素宽度（左绿板 96 / 右便签 250 / 顶横条 116），
+		// 消息区必须落在这圈之内，否则气泡会压到装饰上。
+		private const float MESSAGE_AREA_LEFT_INSET = 96f;
+		private const float MESSAGE_AREA_RIGHT_INSET = 250f;
+		private const float MESSAGE_AREA_TOP_INSET = 116f;
+		// 选项面板隐藏时消息区只留这点底边距，否则 441 的预留会让对话框下半一直空着。
+		private const float MESSAGE_AREA_BOTTOM_INSET = 24f;
 		private const string NpcPortraitPlaceholderText = "NPC角色素材";
 		private static readonly Color HudPaperText = new Color(0.28f, 0.22f, 0.16f, 1f);
 		private static readonly Color HudPaperPanel = new Color(0.96f, 0.93f, 0.86f, 1f);
@@ -45,11 +54,15 @@ namespace GameLogic
 		private const string ItemSlotBagOpenLocation = "dialogue_item_btn_open";
 		/// <summary>空背包的透明度，比有物品时淡一档，暗示「这里还没东西」。</summary>
 		private const float ItemSlotEmptyAlpha = 0.45f;
-		private const float ItemSlotItemSize = 62f;
+		/// <summary>物品图标尺寸。故意大于 slot，让物品顶出纸面，用来提示「刚拿到一件可交互的东西」。</summary>
+		private const float ItemSlotItemSize = 124f;
 		/// <summary>物品图标相对 slot 中心的 Y 偏移（正值向上）。对齐到开口处。</summary>
 		private const float ItemSlotItemOffsetY = 34f;
 		private const float ItemSlotBreathAmplitude = 0.055f;
 		private const float ItemSlotBreathPeriod = 2.4f;
+		/// <summary>鼠标悬停时的金色描边。</summary>
+		private static readonly Color ItemSlotHoverColor = new Color(1f, 0.79f, 0.28f, 1f);
+		private const float ItemSlotHoverOutlineWidth = 3f;
 
 		// 日终 AI 反思：整屏底图 + 纸面排版。底图与纸面区域是绑定的，换图时要同步 ReflectionPaperArea。
 		private const string ReflectionBackgroundLocation = "reflection_bg";
@@ -94,7 +107,9 @@ namespace GameLogic
 		private CanvasGroup m_reflectionCoverGroup;
 		private readonly List<ReplayMessageItem> m_replyItems = new List<ReplayMessageItem>();
 		private readonly List<ReplayEmoItem> m_emotionItems = new List<ReplayEmoItem>();
-		private readonly List<(bool IsPlayer, string Text)> m_messages = new List<(bool, string)>();
+		/// <summary>BubbleColor 的 alpha 为 0 表示这条消息不染情绪色。</summary>
+		private readonly List<(bool IsPlayer, string Text, Color BubbleColor)> m_messages =
+			new List<(bool, string, Color)>();
 		private readonly List<Image> m_memorySlotImages = new List<Image>();
 		private readonly List<Image> m_memorySlotThumbs = new List<Image>();
 		private readonly List<Image> m_memorySlotLabelBacks = new List<Image>();
@@ -121,6 +136,8 @@ namespace GameLogic
 		private int m_itemSlotBagVersion;
 		private bool m_itemSlotHasItem;
 		private bool m_itemSlotBreathing;
+		private Outline m_itemSlotOutline;
+		private bool m_itemSlotHovered;
 		private readonly NarrativeDomainService m_narrativeService = new NarrativeDomainService();
 		private readonly NarrativeActionService m_actionService = new NarrativeActionService();
 		private readonly NarrativeStoryScheduler m_storyScheduler = new NarrativeStoryScheduler();
@@ -164,16 +181,24 @@ namespace GameLogic
 		private Image m_imgSceneRoot;
 		private readonly List<Image> m_sceneLayerImages = new List<Image>();
 		private string m_loadedSceneKey;
+		// 场景切换过渡层：整屏纯色，插在 BG 之后（盖住场景与角色，不盖 UI）
+		private Image m_imgSceneTransition;
+		private CanvasGroup m_cgSceneTransition;
+		private bool m_sceneTransitionActive;
+		// 每幕开场的「日期 + 地点」黑场过场卡
+		private GameObject m_titleCardRoot;
+		private CanvasGroup m_cgTitleCard;
 		private RectTransform m_overlayBodyContent;
 		private GameObject m_dialoguePanel;
 		private RectTransform m_rtNpcSubtitle;
 		private TextMeshProUGUI m_tmpNpcSubtitle;
 		private readonly List<TextMeshProUGUI> m_npcSpeakerLabels = new List<TextMeshProUGUI>();
+		/// <summary>名字的阴影/描边副本：文本跟着同步，颜色留在 prefab 里的原值。</summary>
+		private readonly List<TextMeshProUGUI> m_npcSpeakerDecorLabels = new List<TextMeshProUGUI>();
 		private CanvasGroup m_cgNpcContinueHint;
 		private float m_subtitleBodyTopInset;
 		private float m_subtitleBodyBottomInset;
 		private float m_subtitleBodySideInset;
-		private Button m_btnRestart;
 		private Button m_btnDialogueAdvance;
 		private bool m_advanceClickPending;
 		private bool m_isBusy;
@@ -199,7 +224,7 @@ namespace GameLogic
 			BuildMemorySlots();
 			ApplyChatListLayout();
 			EnsureNpcSubtitle();
-			EnsureRestartButton();
+			// 左上角常驻「从头开始」按钮已下线；重开入口只剩结局弹窗里的那个选项。
 			// 布局编辑入口按钮已下线；需要临时调人物大小/位置时按 F2 进入布局编辑
 			// EnsureLayoutEditButton();
 			EnsureDialogueAdvanceCatcher();
@@ -228,7 +253,8 @@ namespace GameLogic
 			m_narrativeService.EmotionEmerged += OnEmotionEmerged;
 
 			SoundConfigMgr.Instance.Preload(
-				SfxNames.StoryText, SfxNames.StoryBubbleIn, SfxNames.MemoryGet, SfxNames.MemoryLand);
+				SfxNames.StoryText, SfxNames.StoryBubbleIn, SfxNames.MemoryGet, SfxNames.MemoryLand,
+				SfxNames.EmergeRise, SfxNames.EmergeBloom);
 			SoundConfigMgr.Instance.PlayBgm(SfxNames.BgmStory, fadeIn: 1.5f);
 		}
 
@@ -289,6 +315,8 @@ namespace GameLogic
 			m_itemSlotBagVersion++;
 			m_itemSlotHasItem = false;
 			m_itemSlotBreathing = false;
+			m_itemSlotOutline = null;
+			m_itemSlotHovered = false;
 			DestroyEmergenceCutscene();
 			m_pendingEmergeEmotionIds.Clear();
 			if (m_overlay != null) UnityEngine.Object.Destroy(m_overlay);
@@ -311,6 +339,12 @@ namespace GameLogic
 			m_imgSceneRoot = null;
 			m_sceneLayerImages.Clear();
 			m_loadedSceneKey = null;
+			m_imgSceneTransition = null;
+			m_cgSceneTransition = null;
+			m_sceneTransitionActive = false;
+			AbortSceneSearch();
+			m_titleCardRoot = null;
+			m_cgTitleCard = null;
 			m_rtSceneCharacter = null;
 			m_imgSceneCharacter = null;
 			m_rtOtherCharacter = null;
@@ -325,8 +359,8 @@ namespace GameLogic
 			m_rtNpcSubtitle = null;
 			m_tmpNpcSubtitle = null;
 			m_npcSpeakerLabels.Clear();
+			m_npcSpeakerDecorLabels.Clear();
 			m_cgNpcContinueHint = null;
-			m_btnRestart = null;
 			m_btnLayoutEdit = null;
 			m_layoutEditButtonLabel = null;
 			m_btnDialogueAdvance = null;
@@ -441,6 +475,7 @@ namespace GameLogic
 					}
 
 					saveData.BeginSession(session.Id, entryNodeId);
+					await PlaySessionTitleCardAsync(session);
 				}
 
 				string currentNodeId = saveData.CurrentNodeId;
@@ -497,15 +532,26 @@ namespace GameLogic
 			m_dialoguePresentVersion++;
 			int presentVersion = m_dialoguePresentVersion;
 			RefreshNpcPortrait(story);
-			RefreshSceneBackground(story);
+			await RefreshSceneBackgroundAsync(story);
+			await RevealSessionTitleCardAsync();
 			var enteredGrantedEmotions = new List<string>();
+			var enteredGrantedItems = new List<string>();
 			try
 			{
 				m_actionService.Execute(story.OnEnterActionIds,
 					NarrativeSaveData.Get.BuildTurnKey(story.Id) + "|node-enter",
-					null, true, enteredGrantedEmotions);
+					null, true, enteredGrantedEmotions, enteredGrantedItems);
 				RefreshMemorySlots();
-				RefreshItemSlot();
+				// 有东西入库就播「飞进物品栏」，落袋那一刻才点亮槽位；
+				// 容量 1，同一批给了多件也只演最后一件（前面那件已经被顶掉）。
+				if (enteredGrantedItems.Count > 0)
+				{
+					PlayItemGrantFlyIn(enteredGrantedItems[enteredGrantedItems.Count - 1]);
+				}
+				else
+				{
+					RefreshItemSlot();
+				}
 			}
 			catch (Exception exception)
 			{
@@ -527,7 +573,7 @@ namespace GameLogic
 			if (IsEndingCardTurn(story))
 			{
 				SetDialogueAdvanceCatcherActive(false);
-				await PlayEndingCardAsync(story.NpcText);
+				await PlayEndingCardAsync(NarrativePlayerName.Resolve(story.NpcText));
 				if (IsDestroyed || presentVersion != m_dialoguePresentVersion)
 				{
 					return;
@@ -541,6 +587,14 @@ namespace GameLogic
 			SetDialoguePresentationMode(npcDialogue);
 			m_advanceClickPending = false;
 			SetDialogueAdvanceCatcherActive(true);
+
+			// 场景探索节点：不播对白，把输入整个交给场景热点。
+			// RunSceneSearchAsync 自己负责关掉推进拦截器，点中目标后推进到 DefaultNextNodeId。
+			if (ShouldRunSceneSearch(story))
+			{
+				await RunSceneSearchAsync(story);
+				return;
+			}
 
 			// 进节点就授予的情绪：先把过场播完再显示这句对白，否则会和打字机抢画面。
 			// 放在状态重置之后，中途被打断也不会留下上一次的选中态。
@@ -557,7 +611,7 @@ namespace GameLogic
 			if (npcDialogue)
 				await PresentNpcSubtitleAsync(story, presentVersion);
 			else
-				await PresentNpcMessageAsync(story.NpcText, presentVersion);
+				await PresentNpcMessageAsync(NarrativePlayerName.Resolve(story.NpcText), presentVersion);
 			if (IsDestroyed || presentVersion != m_dialoguePresentVersion)
 			{
 				return;
@@ -632,6 +686,7 @@ namespace GameLogic
 		private static void SetReplyItemData(ReplayMessageItem item, ReplyOptionConfig reply, bool isUnlocked)
 		{
 			string displayText = isUnlocked ? reply.ReplyText : reply.LockedText;
+			displayText = NarrativePlayerName.Resolve(displayText);
 			if (!isUnlocked && string.IsNullOrWhiteSpace(displayText))
 			{
 				displayText = "（暂不可选）";
@@ -649,7 +704,8 @@ namespace GameLogic
 				SetDialogueAdvanceCatcherActive(false);
 				SetEmotionItemsActive(false);
 				m_tfReplayMessageNode.gameObject.SetActive(false);
-				ShowPlayerReplyMessage(reply.ReplyText);
+				ApplyMessageAreaBottomInset(MESSAGE_AREA_BOTTOM_INSET);
+				ShowPlayerReplyMessage(NarrativePlayerName.Resolve(reply.ReplyText));
 				IReadOnlyList<string> available = m_narrativeService.GetAvailableEmotions(reply);
 				IReadOnlyList<string> locked = m_narrativeService.GetLockedEmotions(reply);
 				m_selectedEmotionId = m_narrativeService.GetDefaultEmotion(reply);
@@ -858,7 +914,8 @@ namespace GameLogic
 			}
 
 			m_hasReplied = true;
-			string replyText = m_selectedReply.ReplyText;
+			string replyText = NarrativePlayerName.Resolve(m_selectedReply.ReplyText);
+			string emotionId = m_selectedEmotionId;
 			SoundConfigMgr.Instance.PlaySfx(SfxNames.StoryReplyConfirm);
 			try
 			{
@@ -870,6 +927,10 @@ namespace GameLogic
 				m_tfReplayEmoNode.gameObject.SetActive(false);
 				SetEmotionItemsActive(false);
 				ShowPlayerReplyMessage(replyText);
+				TintShownPlayerReply(ResolveReplyBubbleColor(emotionId));
+
+				// 先让玩家看清自己说的话（含情绪底色），点一下/回车才继续，否则下一句会把它顶走。
+				await WaitPlayerReplyAcknowledgeAsync();
 
 				// 涌现过场必须在下一节点表现和日终转场之前播完，否则会被盖掉。
 				await PlayPendingEmergeCutscenesAsync();
@@ -899,6 +960,7 @@ namespace GameLogic
 				if (m_tfReplayMessageNode != null)
 				{
 					m_tfReplayMessageNode.gameObject.SetActive(true);
+					ResizeReplyPanel();
 				}
 			}
 			finally
@@ -989,7 +1051,7 @@ namespace GameLogic
 			itemRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,
 				m_scrollMessage.GetComponent<RectTransform>().rect.width);
 			if (message.IsPlayer)
-				((RightMessageItem)item).SetMessage(message.Text);
+				((RightMessageItem)item).SetMessage(message.Text, message.BubbleColor);
 			else
 				((LeftMessageItem)item).SetMessage(message.Text);
 			return item.LoopItem;
@@ -1002,8 +1064,8 @@ namespace GameLogic
 			{
 				emotionRect.anchorMin = emotionRect.anchorMax = new Vector2(0.5f, 0f);
 				emotionRect.pivot = new Vector2(0.5f, 0f);
-				emotionRect.anchoredPosition = ReadLayoutPosition("EmotionPanel", new Vector2(0f, 14f));
-				emotionRect.sizeDelta = new Vector2(680f, 120f);
+				emotionRect.anchoredPosition = ReadLayoutPosition("EmotionPanel", new Vector2(-77f, 14f));
+				emotionRect.sizeDelta = new Vector2(644f, 120f);
 			}
 
 			RectTransform replyRect = m_tfReplayMessageNode as RectTransform;
@@ -1011,7 +1073,7 @@ namespace GameLogic
 			{
 				replyRect.anchorMin = replyRect.anchorMax = new Vector2(0.5f, 0f);
 				replyRect.pivot = new Vector2(0.5f, 0f);
-				replyRect.anchoredPosition = ReadLayoutPosition("ReplyPanel", new Vector2(0f, 14f));
+				replyRect.anchoredPosition = ReadLayoutPosition("ReplyPanel", new Vector2(-77f, 14f));
 				replyRect.sizeDelta = new Vector2(575f, REPLY_PANEL_HEIGHT);
 				Image replyBackground = replyRect.GetComponent<Image>();
 				if (replyBackground == null) replyBackground = replyRect.gameObject.AddComponent<Image>();
@@ -1039,8 +1101,20 @@ namespace GameLogic
 			// the right-hand notes and the header are decoration, not message space.
 			scrollRect.anchorMin = Vector2.zero;
 			scrollRect.anchorMax = Vector2.one;
-			scrollRect.offsetMin = new Vector2(96f, REPLY_PANEL_HEIGHT + 20f);
-			scrollRect.offsetMax = new Vector2(-196f, -116f);
+			scrollRect.offsetMin = new Vector2(MESSAGE_AREA_LEFT_INSET, MESSAGE_AREA_BOTTOM_INSET);
+			scrollRect.offsetMax = new Vector2(-MESSAGE_AREA_RIGHT_INSET, -MESSAGE_AREA_TOP_INSET);
+		}
+
+		/// <summary>单独改消息区底边距：选项面板显示时让位给它，隐藏时收回小留白。</summary>
+		private void ApplyMessageAreaBottomInset(float inset)
+		{
+			RectTransform scrollRect = m_scrollMessage != null ? m_scrollMessage.transform as RectTransform : null;
+			if (scrollRect == null)
+			{
+				return;
+			}
+
+			scrollRect.offsetMin = new Vector2(scrollRect.offsetMin.x, inset);
 		}
 
 		private void ResizeReplyPanel()
@@ -1614,14 +1688,67 @@ namespace GameLogic
 			m_imgItemSlot.preserveAspect = true;
 			m_imgItemSlot.raycastTarget = false;
 			m_imgItemSlot.enabled = false;
+			// 描边用 UGUI 自带的 Outline（4 份偏移副本垫在图形下面），不需要额外材质，也不会被裁到 slot 里。
+			m_itemSlotOutline = go.AddComponent<Outline>();
+			m_itemSlotOutline.effectColor = ItemSlotHoverColor;
+			m_itemSlotOutline.effectDistance = new Vector2(ItemSlotHoverOutlineWidth, -ItemSlotHoverOutlineWidth);
+			m_itemSlotOutline.useGraphicAlpha = true;
+			m_itemSlotOutline.enabled = false;
+			EnsureItemSlotHover();
+		}
+
+		/// <summary>物品栏的鼠标悬停：只在「已经有物品」时点亮金色轮廓。</summary>
+		private void EnsureItemSlotHover()
+		{
+			if (m_btnItemCollection == null || m_btnItemCollection.gameObject.GetComponent<EventTrigger>() != null)
+			{
+				return;
+			}
+
+			EventTrigger trigger = m_btnItemCollection.gameObject.AddComponent<EventTrigger>();
+			EventTrigger.Entry enter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+			enter.callback.AddListener(_ => SetItemSlotHovered(true));
+			trigger.triggers.Add(enter);
+			EventTrigger.Entry exit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+			exit.callback.AddListener(_ => SetItemSlotHovered(false));
+			trigger.triggers.Add(exit);
+		}
+
+		private void SetItemSlotHovered(bool hovered)
+		{
+			m_itemSlotHovered = hovered;
+			RefreshItemSlotOutline();
+		}
+
+		private void RefreshItemSlotOutline()
+		{
+			if (m_itemSlotOutline != null)
+			{
+				m_itemSlotOutline.enabled = m_itemSlotHovered && m_itemSlotHasItem &&
+					m_imgItemSlot != null && m_imgItemSlot.enabled;
+			}
 		}
 
 		private void RefreshItemSlot()
 		{
 			EnsureItemSlot();
 			if (m_imgItemSlot == null) return;
+			// 入库演出进行中：槽位保持空态，等 PlayItemGrantFlyIn 落袋时再点亮。
+			// 否则「场景拾取 → GrantItem → GrantMemory → RefreshUI」这条链会先把图标亮起来，
+			// 飞行图标再飞过去，看起来像同时拿到了两件东西。
+			if (m_itemGrantFlyActive)
+			{
+				ApplyItemSlotBagVisual(false);
+				m_itemSlotImageId = null;
+				m_itemSlotVersion++;
+				m_imgItemSlot.enabled = false;
+				RefreshItemSlotOutline();
+				return;
+			}
+			// 物品栏容量 1（NarrativeRules.NarrativeItemCapacity），存的就是唯一那一件；
+			// 这里取 [0] 和 ShowItems() 的取法保持一致，不要按字典序取末位。
 			IReadOnlyList<string> ids = NarrativeSaveData.Get.GetNarrativeItemIdsInStableOrder();
-			NarrativeItemConfig item = ids.Count == 0 ? null : NarrativeConfigMgr.Instance.GetNarrativeItem(ids[ids.Count - 1]);
+			NarrativeItemConfig item = ids.Count == 0 ? null : NarrativeConfigMgr.Instance.GetNarrativeItem(ids[0]);
 			string imageId = item == null ? null : item.ImageId;
 			bool hasItem = !string.IsNullOrWhiteSpace(imageId) && GameModule.ResourceModule.CheckLocationValid(imageId);
 			ApplyItemSlotBagVisual(hasItem);
@@ -1630,6 +1757,7 @@ namespace GameLogic
 				m_itemSlotImageId = null;
 				m_itemSlotVersion++;
 				m_imgItemSlot.enabled = false;
+				RefreshItemSlotOutline();
 				return;
 			}
 			if (imageId == m_itemSlotImageId && m_imgItemSlot.sprite != null) return;
@@ -1641,6 +1769,7 @@ namespace GameLogic
 				loaded.enabled = true;
 				loaded.preserveAspect = true;
 				loaded.raycastTarget = false;
+				RefreshItemSlotOutline();
 			}, gameObject.GetCancellationTokenOnDestroy());
 		}
 
@@ -1651,6 +1780,7 @@ namespace GameLogic
 		private void ApplyItemSlotBagVisual(bool hasItem)
 		{
 			m_itemSlotHasItem = hasItem;
+			RefreshItemSlotOutline();
 			Image bag = m_btnItemCollection != null ? m_btnItemCollection.image : null;
 			if (bag != null)
 			{
@@ -1762,6 +1892,77 @@ namespace GameLogic
 			AddMessage(true, replyText);
 		}
 
+		/// <summary>给刚显示的那条玩家回复染上情绪色；颜色 alpha 为 0 表示不染。</summary>
+		private void TintShownPlayerReply(Color bubbleColor)
+		{
+			if (m_messageList == null || m_messages.Count == 0)
+			{
+				return;
+			}
+
+			int index = m_messages.Count - 1;
+			if (!m_messages[index].IsPlayer)
+			{
+				return;
+			}
+
+			string text = m_messages[index].Text;
+			m_messages[index] = (true, text, bubbleColor);
+			LoopListViewItem2 shown = m_messageList.LoopRectView.GetShownItemByItemIndex(index);
+			if (shown != null)
+			{
+				m_messageList.GetItem<RightMessageItem>(shown.GoId)?.SetMessage(text, bubbleColor);
+			}
+		}
+
+		/// <summary>情绪 ID → 气泡底色；「无」和未知情绪返回透明，保持米色纸片。</summary>
+		private static Color ResolveReplyBubbleColor(string emotionId)
+		{
+			if (string.IsNullOrWhiteSpace(emotionId) ||
+				string.Equals(emotionId, NarrativeRules.NoneEmotionId, StringComparison.OrdinalIgnoreCase))
+			{
+				return Color.clear;
+			}
+
+			EmotionConfig emotion = NarrativeConfigMgr.Instance.GetEmotion(emotionId);
+			return emotion == null ? Color.clear : EmotionVisual.ResolveColor(emotion);
+		}
+
+		/// <summary>玩家回复先停在屏幕上，等一次点击/回车再往下推进剧情。</summary>
+		private async UniTask WaitPlayerReplyAcknowledgeAsync()
+		{
+			int version = m_dialoguePresentVersion;
+			// 回复选项面板期间 catcher 是关着的，这里重新打开才接得到点击。
+			SetDialogueAdvanceCatcherActive(true);
+			m_advanceClickPending = false;
+			while (true)
+			{
+				if (IsDestroyed || version != m_dialoguePresentVersion)
+				{
+					return;
+				}
+
+				if (ConsumeAdvanceClick() || WasDialogueAdvanceKeyPressed())
+				{
+					m_advanceClickPending = false;
+					return;
+				}
+
+				await UniTask.Yield(PlayerLoopTiming.Update);
+			}
+		}
+
+		private static bool WasDialogueAdvanceKeyPressed()
+		{
+#if ENABLE_INPUT_SYSTEM
+			if (Keyboard.current == null) return false;
+			return Keyboard.current.enterKey.wasPressedThisFrame ||
+				Keyboard.current.numpadEnterKey.wasPressedThisFrame;
+#else
+			return Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
+#endif
+		}
+
 		private static bool IsNpcDialogueTurn(StoryNodeConfig story)
 		{
 			if (story == null || string.IsNullOrWhiteSpace(story.TurnType))
@@ -1867,10 +2068,13 @@ namespace GameLogic
 		/// <summary>
 		/// 名字可能有多层（阴影、描边副本），全部按 SpeakerLabel 前缀收集，写入时一起同步，
 		/// 在 prefab 里再加 SpeakerLabelShadow2 之类不用改代码。
+		/// 其中阴影/描边副本单独归到装饰层：文本跟着走，颜色留在 prefab（白色描边压在米白面板上是「提亮」，
+		/// 换成角色色反而会糊成一团）。
 		/// </summary>
 		private void CollectSpeakerLabels(Transform root)
 		{
 			m_npcSpeakerLabels.Clear();
+			m_npcSpeakerDecorLabels.Clear();
 			TextMeshProUGUI[] candidates = root.GetComponentsInChildren<TextMeshProUGUI>(true);
 			for (int i = 0; i < candidates.Length; i++)
 			{
@@ -1880,19 +2084,51 @@ namespace GameLogic
 					continue;
 				}
 
-				if (candidate.gameObject.name.StartsWith(NpcSpeakerLabelPrefix, StringComparison.Ordinal))
+				string nodeName = candidate.gameObject.name;
+				if (!nodeName.StartsWith(NpcSpeakerLabelPrefix, StringComparison.Ordinal))
+				{
+					continue;
+				}
+
+				if (IsNpcSpeakerDecorLabel(nodeName))
+				{
+					m_npcSpeakerDecorLabels.Add(candidate);
+				}
+				else
 				{
 					m_npcSpeakerLabels.Add(candidate);
 				}
 			}
 		}
 
+		private static bool IsNpcSpeakerDecorLabel(string nodeName)
+		{
+			for (int i = 0; i < NpcSpeakerDecorLabelKeywords.Length; i++)
+			{
+				if (nodeName.IndexOf(NpcSpeakerDecorLabelKeywords[i], StringComparison.Ordinal) >= 0)
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		/// <summary>说话人名字按 npcId 上色，阴影副本只同步文本。</summary>
 		private void SetNpcSpeaker(string speaker)
 		{
 			speaker = speaker ?? string.Empty;
+			Color color = NpcSpeakerPalette.Resolve(speaker);
 			for (int i = 0; i < m_npcSpeakerLabels.Count; i++)
 			{
-				m_npcSpeakerLabels[i].text = speaker;
+				TextMeshProUGUI label = m_npcSpeakerLabels[i];
+				label.text = speaker;
+				label.color = color;
+			}
+
+			for (int i = 0; i < m_npcSpeakerDecorLabels.Count; i++)
+			{
+				m_npcSpeakerDecorLabels[i].text = speaker;
 			}
 		}
 
@@ -2066,7 +2302,7 @@ namespace GameLogic
 			}
 
 			string speaker = story.NpcId ?? string.Empty;
-			string body = story.NpcText ?? string.Empty;
+			string body = NarrativePlayerName.Resolve(story.NpcText) ?? string.Empty;
 			m_rtNpcSubtitle.gameObject.SetActive(true);
 			SetContinueHintVisible(false, true);
 
@@ -2235,13 +2471,14 @@ namespace GameLogic
 				return;
 			}
 
-			m_messages[index] = (m_messages[index].IsPlayer, text);
+			m_messages[index] = (m_messages[index].IsPlayer, text, m_messages[index].BubbleColor);
 			LoopListView2 listView = m_messageList.LoopRectView;
 			LoopListViewItem2 shown = listView.GetShownItemByItemIndex(index);
 			if (shown != null)
 			{
 				if (m_messages[index].IsPlayer)
-					m_messageList.GetItem<RightMessageItem>(shown.GoId)?.SetMessage(text);
+					m_messageList.GetItem<RightMessageItem>(shown.GoId)
+						?.SetMessage(text, m_messages[index].BubbleColor);
 				else
 					m_messageList.GetItem<LeftMessageItem>(shown.GoId)?.SetMessage(text);
 				listView.OnItemSizeChanged(index);
@@ -2260,7 +2497,7 @@ namespace GameLogic
 				c == '!' || c == '?' || c == ';' || c == ':';
 		}
 
-		private void AddMessage(bool isPlayer, string text)
+		private void AddMessage(bool isPlayer, string text, Color bubbleColor = default)
 		{
 			bool wasPinned = m_messagePinnedToLatest;
 			if (m_messages.Count > 0)
@@ -2269,7 +2506,7 @@ namespace GameLogic
 				wasPinned = wasPinned || prevLast != null;
 			}
 
-			m_messages.Add((isPlayer, text));
+			m_messages.Add((isPlayer, text, bubbleColor));
 			m_messageScrollVersion++;
 			if (isPlayer)
 			{
@@ -2387,7 +2624,7 @@ namespace GameLogic
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			NarrativeSessionConfig session = NarrativeConfigMgr.Instance.GetSession(saveData.LastCompletedSessionId);
 			string body = session != null && !string.IsNullOrWhiteSpace(session.DayMonologue)
-				? session.DayMonologue
+				? NarrativePlayerName.Resolve(session.DayMonologue)
 				: $"第 {saveData.CurrentDay} 天结束。\n今天获得 {saveData.MemoryCount} 段记忆，学会 {saveData.OwnedEmotionIds.Count} 种情绪。\n回想过后，新的日子将继续。";
 			string title = $"DAY {saveData.CurrentDay}";
 			ShowReflectionOverlay(title, body, ContinueAfterDayMonologue);
@@ -2401,7 +2638,6 @@ namespace GameLogic
 			if (m_btnSettings != null) m_btnSettings.gameObject.SetActive(showHud);
 			if (m_btnEmoCollection != null) m_btnEmoCollection.gameObject.SetActive(showHud);
 			if (m_btnItemCollection != null) m_btnItemCollection.gameObject.SetActive(showHud);
-			if (m_btnRestart != null) m_btnRestart.gameObject.SetActive(showHud);
 			if (m_btnLayoutEdit != null) m_btnLayoutEdit.gameObject.SetActive(showHud);
 			if (m_scrollMemoryList != null) m_scrollMemoryList.gameObject.SetActive(showHud);
 			if (m_dialoguePanel != null) m_dialoguePanel.SetActive(showHud);
@@ -2533,49 +2769,32 @@ namespace GameLogic
 				return;
 			}
 
-			NarrativeSaveData saveData = NarrativeSaveData.Get;
-			var buttons = new List<(string Label, Action Action)>();
-			var visualParts = new List<NarrativeItemPartConfig>();
-			bool hasVisualImage = !string.IsNullOrWhiteSpace(item.ImageId) && item.ImageId != "placeholder" &&
-				GameModule.ResourceModule.CheckLocationValid(item.ImageId);
+			// 部件分两路：能在物品图上圈出来的走热点；圈不住的（没坐标、或这件物品没有图）
+			// 在纸面底部列成小按钮。两路都不进物品栏，只加记忆。
+			var hotParts = new List<NarrativeItemPartConfig>();
+			var listParts = new List<NarrativeItemPartConfig>();
 			if (item.PartIds != null)
 			{
 				foreach (string partId in item.PartIds)
 				{
 					NarrativeItemPartConfig part = NarrativeConfigMgr.Instance.GetNarrativeItemPart(partId);
-					if (part == null) continue;
-					if (hasVisualImage && part.HotspotX >= 0f && part.HotspotX <= 1f &&
-						part.HotspotY >= 0f && part.HotspotY <= 1f)
+					if (part == null)
 					{
-						visualParts.Add(part);
 						continue;
 					}
 
-					string memoryId = part.MemoryId;
-					string partName = part.PartName;
-					string label = string.IsNullOrWhiteSpace(memoryId)
-						? "查看部件：" + partName
-						: (saveData.HasMemory(memoryId) ? "已发现：" : "检查部件：") + partName;
-					buttons.Add((label, (Action)(() => InspectNarrativeItemPart(memoryId,
-						EventSystem.current?.currentSelectedGameObject?.transform as RectTransform))));
+					if (HasItemPageHotspot(item, part))
+					{
+						hotParts.Add(part);
+					}
+					else
+					{
+						listParts.Add(part);
+					}
 				}
 			}
 
-			buttons.Add(("关闭", (Action)(() => CloseOverlayAnimated())));
-			string inspectHint = visualParts.Count > 0
-				? "\n\n点击物品上的不同部位，发现与它有关的记忆。发现过的记忆不会重复获得。"
-				: "\n\n选择一个部件进行检查。发现过的记忆不会重复获得。";
-			ShowOverlay(item.ItemName, item.Description + inspectHint, buttons, true);
-			RectTransform panel = m_overlay == null ? null : m_overlay.transform.Find("Panel") as RectTransform;
-			if (panel != null)
-			{
-				panel.DOKill();
-				panel.sizeDelta = new Vector2(900f, 780f);
-				panel.anchoredPosition = new Vector2(150f, -780f);
-				SoundConfigMgr.Instance.PlaySfx(SfxNames.ItemPanelIn);
-				panel.DOAnchorPos(new Vector2(150f, 0f), 0.25f).SetUpdate(true).SetLink(panel.gameObject);
-			}
-			ShowNarrativeItemImage(item.ImageId, visualParts);
+			ShowItemPage(item, hotParts, listParts);
 		}
 
 		private void InspectNarrativeItemPart(string memoryId, RectTransform source = null)
@@ -2649,116 +2868,6 @@ namespace GameLogic
 				if (ids[i] == memoryId && m_memorySlotImages[i] != null)
 					return m_memorySlotImages[i].rectTransform;
 			return null;
-		}
-
-		private void ShowNarrativeItemImage(string imageId, IReadOnlyList<NarrativeItemPartConfig> parts)
-		{
-			if (string.IsNullOrWhiteSpace(imageId) || imageId == "placeholder" || m_overlayBodyContent == null ||
-				!GameModule.ResourceModule.CheckLocationValid(imageId))
-			{
-				return;
-			}
-
-			var imageObject = new GameObject("NarrativeItemImage", typeof(RectTransform), typeof(Image));
-			imageObject.transform.SetParent(m_overlayBodyContent, false);
-			RectTransform imageRect = imageObject.GetComponent<RectTransform>();
-			imageRect.anchorMin = new Vector2(0.5f, 1f);
-			imageRect.anchorMax = new Vector2(0.5f, 1f);
-			imageRect.pivot = new Vector2(0.5f, 1f);
-			imageRect.anchoredPosition = new Vector2(0f, -8f);
-			imageRect.sizeDelta = new Vector2(480f, 300f);
-			Image image = imageObject.GetComponent<Image>();
-			image.preserveAspect = true;
-			image.raycastTarget = false;
-			image.SetSprite(imageId, false, loaded =>
-			{
-				if (loaded != null && loaded.sprite != null)
-				{
-					loaded.preserveAspect = true;
-					loaded.raycastTarget = false;
-					float fit = Mathf.Min(imageRect.rect.width / loaded.sprite.rect.width,
-						imageRect.rect.height / loaded.sprite.rect.height);
-					Vector2 displaySize = loaded.sprite.rect.size * fit;
-					CreateNarrativeItemHotspots(imageRect, displaySize, parts);
-				}
-			}, gameObject.GetCancellationTokenOnDestroy());
-
-			TextMeshProUGUI bodyText = m_overlayBodyContent.GetComponentInChildren<TextMeshProUGUI>(true);
-			if (bodyText == null)
-			{
-				return;
-			}
-
-			bodyText.rectTransform.anchoredPosition = new Vector2(0f, -340f);
-			bodyText.rectTransform.offsetMin = new Vector2(24f, bodyText.rectTransform.offsetMin.y);
-			bodyText.rectTransform.offsetMax = new Vector2(-24f, bodyText.rectTransform.offsetMax.y);
-			Canvas.ForceUpdateCanvases();
-			bodyText.ForceMeshUpdate();
-			float textHeight = Mathf.Max(bodyText.preferredHeight + 24f, 80f);
-			bodyText.rectTransform.sizeDelta = new Vector2(bodyText.rectTransform.sizeDelta.x, textHeight);
-			m_overlayBodyContent.sizeDelta = new Vector2(0f, textHeight + 360f);
-		}
-
-		private void CreateNarrativeItemHotspots(RectTransform imageRect, Vector2 displaySize,
-			IReadOnlyList<NarrativeItemPartConfig> parts)
-		{
-			if (parts == null) return;
-			for (int i = 0; i < parts.Count; i++)
-			{
-				NarrativeItemPartConfig part = parts[i];
-				if (part == null) continue;
-				var go = new GameObject("Hotspot_" + part.Id, typeof(RectTransform), typeof(Image), typeof(Button));
-				go.transform.SetParent(imageRect, false);
-				RectTransform rect = go.GetComponent<RectTransform>();
-				rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-				rect.pivot = new Vector2(0.5f, 0.5f);
-				rect.anchoredPosition = new Vector2((part.HotspotX - 0.5f) * displaySize.x,
-					(part.HotspotY - 0.5f) * displaySize.y);
-				float hotspotSize = part.Id == "CLOCK_PART_01" ? 132f : 88f;
-				rect.sizeDelta = new Vector2(hotspotSize, hotspotSize);
-				Image hotspotImage = go.GetComponent<Image>();
-				hotspotImage.color = new Color(1f, 0.78f, 0.32f, 0.12f);
-				var highlight = new GameObject("Highlight", typeof(RectTransform), typeof(CanvasGroup));
-				highlight.transform.SetParent(rect, false);
-				RectTransform highlightRect = highlight.GetComponent<RectTransform>();
-				highlightRect.anchorMin = Vector2.zero;
-				highlightRect.anchorMax = Vector2.one;
-				highlightRect.offsetMin = new Vector2(-4f, -4f);
-				highlightRect.offsetMax = new Vector2(4f, 4f);
-				CreateItemHotspotBorder(highlightRect, "Top", new Vector2(0f, 1f), new Vector2(1f, 1f));
-				CreateItemHotspotBorder(highlightRect, "Bottom", Vector2.zero, new Vector2(1f, 0f));
-				CreateItemHotspotBorder(highlightRect, "Left", Vector2.zero, new Vector2(0f, 1f));
-				CreateItemHotspotBorder(highlightRect, "Right", new Vector2(1f, 0f), Vector2.one);
-				CanvasGroup glow = highlight.GetComponent<CanvasGroup>();
-				glow.blocksRaycasts = false;
-				glow.DOFade(0.45f, 0.75f).SetLoops(-1, LoopType.Yoyo).SetUpdate(true).SetLink(highlight);
-				Button button = go.GetComponent<Button>();
-				button.transition = Selectable.Transition.ColorTint;
-				ColorBlock colors = button.colors;
-				colors.normalColor = new Color(1f, 1f, 1f, 0f);
-				colors.highlightedColor = new Color(1f, 0.82f, 0.48f, 0.16f);
-				colors.pressedColor = new Color(1f, 0.72f, 0.28f, 0.24f);
-				colors.selectedColor = new Color(1f, 0.82f, 0.48f, 0.16f);
-				button.colors = colors;
-				string memoryId = part.MemoryId;
-				button.onClick.AddListener(() => InspectNarrativeItemPart(memoryId, rect));
-			}
-		}
-
-		private static void CreateItemHotspotBorder(RectTransform parent, string name,
-			Vector2 anchorMin, Vector2 anchorMax)
-		{
-			var edge = new GameObject(name, typeof(RectTransform), typeof(Image));
-			edge.transform.SetParent(parent, false);
-			RectTransform rect = edge.GetComponent<RectTransform>();
-			rect.anchorMin = anchorMin;
-			rect.anchorMax = anchorMax;
-			rect.anchoredPosition = Vector2.zero;
-			rect.sizeDelta = new Vector2(anchorMin.x == anchorMax.x ? 4f : 0f,
-				anchorMin.y == anchorMax.y ? 4f : 0f);
-			Image image = edge.GetComponent<Image>();
-			image.color = new Color(1f, 0.78f, 0.32f, 0.9f);
-			image.raycastTarget = false;
 		}
 
 		private void ShowSettings()
@@ -3701,9 +3810,8 @@ namespace GameLogic
 
 		private Vector2 GetActiveCharacterDefaultPosition()
 		{
-			if (!IsNpcDialogueTurn(m_currentStoryNode)) return new Vector2(-850f, 0f);
-			List<string> npcSet = GetSessionNpcSet();
-			return new Vector2(npcSet.IndexOf(m_currentStoryNode.NpcId) == 1 ? 850f : -850f, 0f);
+			string npcId = m_currentStoryNode != null ? m_currentStoryNode.NpcId : null;
+			return GetCharacterDefaultPosition(npcId);
 		}
 
 		private void RefreshOtherCharacter(StoryNodeConfig story)
@@ -3733,11 +3841,13 @@ namespace GameLogic
 				m_imgOtherCharacter = go.GetComponent<Image>();
 				m_imgOtherCharacter.preserveAspect = true;
 				m_imgOtherCharacter.raycastTarget = false;
+				// 同 SceneLayer：没有贴图时先别让它画白色方块
+				m_imgOtherCharacter.enabled = false;
 			}
 			m_rtOtherCharacter.anchorMin = m_rtOtherCharacter.anchorMax = new Vector2(0.5f, 0f);
 			m_rtOtherCharacter.pivot = new Vector2(0.5f, 0f);
 			m_rtOtherCharacter.anchoredPosition = ReadLayoutPosition(GetOtherCharacterLayoutPart(),
-				new Vector2(npcSet.IndexOf(otherNpc) == 0 ? -850f : 850f, 0f));
+				GetCharacterDefaultPosition(otherNpc));
 			m_rtOtherCharacter.sizeDelta = new Vector2(600f, 960f);
 			m_rtOtherCharacter.localScale = ReadCharacterVisualScale(GetOtherCharacterLayoutPart());
 			m_imgOtherCharacter.raycastTarget = m_layoutEditMode;
@@ -3751,6 +3861,8 @@ namespace GameLogic
 				return;
 			}
 			m_rtOtherCharacter.gameObject.SetActive(true);
+			// 换人时旧图还在就先显示旧图，绝不能留一个没有贴图的白色立绘框
+			m_imgOtherCharacter.enabled = HasUsableSprite(m_imgOtherCharacter);
 			if (location == m_loadedOtherCharacterLocation && m_imgOtherCharacter.sprite != null)
 			{
 				CancelSpriteRequest(ref m_otherCharacterSpriteRequest);
@@ -3770,7 +3882,7 @@ namespace GameLogic
 				if (IsDestroyed || version != m_otherCharacterVersion || loaded == null || loaded.sprite == null) return;
 				m_loadedOtherCharacterLocation = location;
 				m_requestedOtherCharacterLocation = null;
-				loaded.enabled = true;
+				loaded.enabled = HasUsableSprite(loaded);
 				loaded.preserveAspect = true;
 				loaded.raycastTarget = false;
 			}, m_otherCharacterSpriteRequest.Token);
@@ -3894,13 +4006,23 @@ namespace GameLogic
 			m_imgSceneCharacter.raycastTarget = m_layoutEditMode;
 			m_imgSceneCharacter.preserveAspect = true;
 			m_imgSceneCharacter.color = Color.white;
+			if (!HasUsableSprite(m_imgSceneCharacter)) m_imgSceneCharacter.enabled = false;
 			RegisterLayoutDragHandle(m_rtSceneCharacter, "Character");
+		}
+
+		/// <summary>
+		/// 这张 Image 现在能不能画。Unity 的 Image 在没有 sprite（或 sprite 的贴图已被卸载）时
+		/// 画的是白色实心矩形——全屏层/立绘框都会变成一屏白，所以开显示前统一用这个判断。
+		/// </summary>
+		private static bool HasUsableSprite(Image image)
+		{
+			return image != null && image.sprite != null && image.sprite.texture != null;
 		}
 
 		private void FitSceneCharacterSprite(Image image)
 		{
 			if (image == null) return;
-			image.enabled = true;
+			image.enabled = HasUsableSprite(image);
 			image.type = Image.Type.Simple;
 			image.useSpriteMesh = false;
 			image.preserveAspect = true;
@@ -4201,7 +4323,9 @@ namespace GameLogic
 			m_npcSpinePose = null;
 			if (m_imgSceneCharacter != null)
 			{
-				m_imgSceneCharacter.enabled = true;
+				// Spine 接管期间立绘 Image 的 sprite 是空的：无脑打开会画成一大块白色，
+				// 只在确实有一张能画的图时才恢复显示。
+				m_imgSceneCharacter.enabled = HasUsableSprite(m_imgSceneCharacter);
 			}
 		}
 #else
@@ -4328,7 +4452,11 @@ namespace GameLogic
 			}
 		}
 
-		private void RefreshSceneBackground(StoryNodeConfig story)
+		/// <summary>
+		/// 场景刷新。backgroundId 优先取节点级（幕内换景），为空回退 Session 级。
+		/// 场景真变化时播过渡：店铺之间走「亮白」，其他场景走「渐黑」。
+		/// </summary>
+		private async UniTask RefreshSceneBackgroundAsync(StoryNodeConfig story)
 		{
 			if (m_imgSceneRoot == null)
 			{
@@ -4337,21 +4465,31 @@ namespace GameLogic
 
 			string npcId = NarrativeSaveData.Get.CurrentSessionId == "S01" ? "陈先生" :
 				story == null ? string.Empty : story.NpcId;
-			// 优先按 Session.backgroundId 取场景；未配置或映射不到时回退到旧的 npcId 规则。
-			string backgroundId = ResolveCurrentSessionBackgroundId();
-			string[] backgrounds;
-			string[] foregrounds;
-			if (string.IsNullOrWhiteSpace(backgroundId) ||
-				!TryResolveBackgroundLocations(backgroundId, out backgrounds, out foregrounds))
+			// 节点级 backgroundId 优先（幕内换景），为空回退 Session 级；都取不到再走旧的 npcId 规则。
+			string backgroundId = story == null ? string.Empty : story.BackgroundId;
+			if (string.IsNullOrWhiteSpace(backgroundId))
+			{
+				backgroundId = ResolveCurrentSessionBackgroundId();
+			}
+			string[] backgrounds = Array.Empty<string>();
+			string[] foregrounds = Array.Empty<string>();
+			bool knownScene = !string.IsNullOrWhiteSpace(backgroundId) &&
+				TryResolveBackgroundLocations(backgroundId, out backgrounds, out foregrounds);
+			if (!knownScene)
 			{
 				if (!string.IsNullOrWhiteSpace(backgroundId))
 				{
-					DLogger.Warning("Unknown session backgroundId: {0}; falling back to npcId layout.", backgroundId);
+					DLogger.Warning("Unknown scene backgroundId: {0}; falling back to npcId layout.", backgroundId);
 				}
 
 				backgrounds = ResolveSceneBackgroundLocations(npcId);
 				foregrounds = ResolveSceneForegroundLocations(npcId);
 			}
+
+			// 人物插层由场景决定：0=所有前景盖住人物（站在柜台/书桌后面），1=一半前景在人物前。
+			m_sceneCharacterLayer = knownScene
+				? ResolveSceneCharacterLayer(backgroundId)
+				: (npcId == "陈果" || npcId == "女孩" ? 1 : 0);
 			string[] layers = new string[backgrounds.Length + foregrounds.Length];
 			Array.Copy(backgrounds, 0, layers, 0, backgrounds.Length);
 			Array.Copy(foregrounds, 0, layers, backgrounds.Length, foregrounds.Length);
@@ -4364,9 +4502,27 @@ namespace GameLogic
 				return;
 			}
 
+			string previousKey = m_loadedSceneKey;
+			bool firstLoad = string.IsNullOrWhiteSpace(previousKey);
+			// 开场过场卡已经把画面盖黑：直接换图，不再叠一层颜色过渡。
+			bool coveredByTitleCard = m_titleCardRoot != null;
+			bool skipTransition = firstLoad || coveredByTitleCard;
+			// 店铺之间（旧↔新）用亮白过渡，其余场景用渐黑过渡。
+			bool useBrightness = !skipTransition && IsShopSceneKey(previousKey) && IsShopSceneKey(key);
 			m_loadedSceneKey = key;
 			SoundConfigMgr.Instance.PlaySfx(SfxNames.SceneSwitch);
 			int version = ++m_sceneBackgroundVersion;
+
+			if (!skipTransition)
+			{
+				await FadeSceneTransitionAsync(useBrightness ? Color.white : Color.black, 0f, 1f,
+					SceneTransitionDuration, version);
+				if (IsDestroyed || version != m_sceneBackgroundVersion)
+				{
+					return;
+				}
+			}
+
 			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
 			for (int i = 0; i < m_sceneLayerImages.Count; i++)
 			{
@@ -4399,11 +4555,196 @@ namespace GameLogic
 					loaded.raycastTarget = false;
 					loaded.type = Image.Type.Simple;
 					ApplySceneLayerLayout(loaded, location);
-					loaded.enabled = true;
+					loaded.enabled = loaded.sprite != null;
 				}, token);
 			}
 			PlaceSceneCharacterBetweenLayers(backgrounds.Length, layers.Length);
+
+			if (!skipTransition)
+			{
+				// 给新图一点加载时间再从纯色退回，避免淡出时露出空白。
+				await UniTask.Delay(TimeSpan.FromSeconds(SceneLayerReadyDelay), DelayType.UnscaledDeltaTime,
+					cancellationToken: token);
+				if (IsDestroyed || version != m_sceneBackgroundVersion)
+				{
+					return;
+				}
+
+				await FadeSceneTransitionAsync(useBrightness ? Color.white : Color.black, 1f, 0f,
+					SceneTransitionDuration, version);
+			}
 		}
+
+		/// <summary>场景切换过渡的单项时长（秒）。线性 alpha，不走缓动。</summary>
+		private const float SceneTransitionDuration = 0.55f;
+
+		/// <summary>换图后停留多久再从纯色退回（等贴图加载）。</summary>
+		private const float SceneLayerReadyDelay = 0.2f;
+
+		private static bool IsShopSceneKey(string key)
+		{
+			return !string.IsNullOrEmpty(key) && key.IndexOf("scene_shop_", StringComparison.Ordinal) >= 0;
+		}
+
+		/// <summary>整屏纯色过渡层，插在 BG 之后，盖住场景与角色但不盖 UI。</summary>
+		private CanvasGroup EnsureSceneTransitionLayer()
+		{
+			if (m_cgSceneTransition != null && m_imgSceneTransition != null)
+			{
+				return m_cgSceneTransition;
+			}
+
+			Transform bg = m_imgSceneRoot != null ? m_imgSceneRoot.transform : transform;
+			Transform parent = bg.parent != null ? bg.parent : transform;
+			var go = new GameObject("SceneTransition", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
+			go.transform.SetParent(parent, false);
+			RectTransform rect = go.GetComponent<RectTransform>();
+			rect.anchorMin = Vector2.zero;
+			rect.anchorMax = Vector2.one;
+			rect.offsetMin = Vector2.zero;
+			rect.offsetMax = Vector2.zero;
+			m_imgSceneTransition = go.GetComponent<Image>();
+			m_imgSceneTransition.raycastTarget = false;
+			m_sceneTransitionActive = false;
+			m_cgSceneTransition = go.GetComponent<CanvasGroup>();
+			m_cgSceneTransition.alpha = 0f;
+			m_cgSceneTransition.blocksRaycasts = false;
+			m_cgSceneTransition.interactable = false;
+			go.transform.SetSiblingIndex(Mathf.Min(bg.GetSiblingIndex() + 1, parent.childCount - 1));
+			return m_cgSceneTransition;
+		}
+
+		/// <summary>把过渡层 alpha 从 from 线性推到 to。version 变化即中止（被新一次切场景顶掉）。</summary>
+		private async UniTask FadeSceneTransitionAsync(Color tint, float from, float to, float duration, int version)
+		{
+			CanvasGroup group = EnsureSceneTransitionLayer();
+			if (group == null || m_imgSceneTransition == null)
+			{
+				return;
+			}
+
+			m_imgSceneTransition.color = new Color(tint.r, tint.g, tint.b, 1f);
+			group.alpha = from;
+			m_sceneTransitionActive = true;
+			float elapsed = 0f;
+			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
+			while (elapsed < duration)
+			{
+				if (IsDestroyed || version != m_sceneBackgroundVersion)
+				{
+					break;
+				}
+
+				elapsed += Time.unscaledDeltaTime;
+				group.alpha = Mathf.Lerp(from, to, Mathf.Clamp01(elapsed / duration));
+				await UniTask.Yield(PlayerLoopTiming.Update, token);
+			}
+
+			group.alpha = to;
+			m_sceneTransitionActive = false;
+		}
+
+		/// <summary>
+		/// 每幕开场的过场卡：整屏黑底 + 当天日期 + 地点，淡入后停在黑场。
+		/// 场景由 RefreshSceneBackgroundAsync 在黑场下换好，再调 RevealSessionTitleCardAsync 淡出。
+		/// titleDate 为空的 Session（如 S04 与 S03 同一天）不播。
+		/// </summary>
+		private async UniTask PlaySessionTitleCardAsync(NarrativeSessionConfig session)
+		{
+			if (session == null || string.IsNullOrWhiteSpace(session.TitleDate) || IsDestroyed)
+			{
+				return;
+			}
+
+			DestroySessionTitleCard();
+			var go = new GameObject("SessionTitleCard", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
+			go.transform.SetParent(transform, false);
+			go.transform.SetAsLastSibling();
+			RectTransform rect = go.GetComponent<RectTransform>();
+			rect.anchorMin = Vector2.zero;
+			rect.anchorMax = Vector2.one;
+			rect.offsetMin = Vector2.zero;
+			rect.offsetMax = Vector2.zero;
+			Image backdrop = go.GetComponent<Image>();
+			backdrop.color = Color.black;
+			backdrop.raycastTarget = true;
+			m_titleCardRoot = go;
+			m_cgTitleCard = go.GetComponent<CanvasGroup>();
+			m_cgTitleCard.alpha = 0f;
+
+			TextMeshProUGUI dateText = CreateOverlayText(go.transform, session.TitleDate, 46f,
+				new Vector2(0f, 34f), new Vector2(1400f, 84f), TextAlignmentOptions.Center);
+			dateText.enableWordWrapping = false;
+			dateText.color = new Color(0.94f, 0.90f, 0.82f, 1f);
+			if (!string.IsNullOrWhiteSpace(session.TitleLocation))
+			{
+				TextMeshProUGUI locationText = CreateOverlayText(go.transform, session.TitleLocation, 28f,
+					new Vector2(0f, -50f), new Vector2(1400f, 56f), TextAlignmentOptions.Center);
+				locationText.enableWordWrapping = false;
+				locationText.color = new Color(0.70f, 0.66f, 0.58f, 1f);
+			}
+
+			SoundConfigMgr.Instance.PlaySfx(SfxNames.SceneSwitch);
+			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
+			const float fadeIn = 0.5f;
+			float elapsed = 0f;
+			while (elapsed < fadeIn)
+			{
+				if (IsDestroyed || m_cgTitleCard == null)
+				{
+					return;
+				}
+
+				elapsed += Time.unscaledDeltaTime;
+				m_cgTitleCard.alpha = Mathf.Clamp01(elapsed / fadeIn);
+				await UniTask.Yield(PlayerLoopTiming.Update, token);
+			}
+
+			if (m_cgTitleCard != null)
+			{
+				m_cgTitleCard.alpha = 1f;
+			}
+
+			await UniTask.Delay(TimeSpan.FromSeconds(1.3f), DelayType.UnscaledDeltaTime, cancellationToken: token);
+		}
+
+		/// <summary>场景换好后淡出过场卡；没有过场卡时立即返回。</summary>
+		private async UniTask RevealSessionTitleCardAsync()
+		{
+			if (m_titleCardRoot == null || m_cgTitleCard == null)
+			{
+				return;
+			}
+
+			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
+			const float fadeOut = 0.7f;
+			float elapsed = 0f;
+			while (elapsed < fadeOut)
+			{
+				if (IsDestroyed || m_cgTitleCard == null)
+				{
+					return;
+				}
+
+				elapsed += Time.unscaledDeltaTime;
+				m_cgTitleCard.alpha = 1f - Mathf.Clamp01(elapsed / fadeOut);
+				await UniTask.Yield(PlayerLoopTiming.Update, token);
+			}
+
+			DestroySessionTitleCard();
+		}
+
+		private void DestroySessionTitleCard()
+		{
+			if (m_titleCardRoot != null)
+			{
+				UnityEngine.Object.Destroy(m_titleCardRoot);
+			}
+
+			m_titleCardRoot = null;
+			m_cgTitleCard = null;
+		}
+
 
 		private void PlaceSceneCharacterBetweenLayers(int backgroundCount, int layerCount)
 		{
@@ -4479,6 +4820,15 @@ namespace GameLogic
 				case "scene_zhou_desk": bounds = new Vector4(0f, 1840f, 3840f, 320f); break;
 				case "scene_zhou_items": bounds = new Vector4(0f, 1383f, 3840f, 777f); break;
 				case "scene_zhou_light": bounds = new Vector4(0f, 0f, 2376f, 2160f); break;
+				// 仓库：坐标来自 docs/场景搭建与配表接入.md §2.5（SIFT + 遮挡感知搜索得出，整图回归误差 0.19）
+				case "scene_warehouse_city": bounds = new Vector4(139f, 0f, 3701f, 1904f); break;
+				case "scene_warehouse_wall": bounds = new Vector4(0f, 0f, 1891f, 2160f); break;
+				case "scene_warehouse_wallclock": bounds = new Vector4(527f, 143f, 480f, 603f); break;
+				case "scene_warehouse_floorclock": bounds = new Vector4(3461f, 546f, 336f, 1107f); break;
+				case "scene_warehouse_boxes": bounds = new Vector4(3496f, 720f, 340f, 1128f); break;
+				case "scene_warehouse_chair": bounds = new Vector4(1656f, 1476f, 924f, 413f); break;
+				case "scene_warehouse_desk": bounds = new Vector4(0f, 242f, 3840f, 1918f); break;
+				case "scene_warehouse_alarmclock": bounds = new Vector4(1336f, 1467f, 373f, 482f); break;
 			}
 
 			RectTransform rect = image.rectTransform;
@@ -4505,6 +4855,8 @@ namespace GameLogic
 				Image image = go.GetComponent<Image>();
 				image.raycastTarget = false;
 				image.preserveAspect = false;
+				// 新 Image 没有 sprite 时 Unity 画的是整块白色，先关掉，等贴图回来再开
+				image.enabled = false;
 				m_sceneLayerImages.Add(image);
 			}
 		}
@@ -4537,6 +4889,14 @@ namespace GameLogic
 						"scene_shop_old_plant", "scene_shop_old_radio", "scene_shop_old_desk", "scene_shop_old_items"
 					};
 					return true;
+				// 旧店铺 + 完好收音机：收音机已修好的幕（第六幕录音段）用，避免画面里摆着坏收音机
+				case "scene_shop_old_fixed":
+					backgrounds = new[] { "scene_shop_old_window", "scene_shop_old_bg" };
+					foregrounds = new[]
+					{
+						"scene_shop_old_plant", "scene_shop_new_radio", "scene_shop_old_desk", "scene_shop_old_items"
+					};
+					return true;
 				case "scene_shop_new":
 					backgrounds = new[] { "scene_shop_new_outside", "scene_shop_new_bg" };
 					foregrounds = new[]
@@ -4559,10 +4919,46 @@ namespace GameLogic
 					backgrounds = new[] { "scene_father_bg" };
 					foregrounds = new[] { "scene_father_fg" };
 					return true;
+				// 仓库：前 6 层在人物后面，桌面与桌上闹钟盖住人物（人站在桌子后）。
+				// 对应 docs 的 characterLayerIndex=6，这里靠「6 个 background + 2 个 foreground」表达，
+				// 所以 ResolveSceneCharacterLayer 返回 0 就正好插在第 6 层之后。
+				case "scene_warehouse":
+					backgrounds = new[]
+					{
+						"scene_warehouse_city", "scene_warehouse_wall", "scene_warehouse_wallclock",
+						"scene_warehouse_floorclock", "scene_warehouse_boxes", "scene_warehouse_chair"
+					};
+					foregrounds = new[] { "scene_warehouse_desk", "scene_warehouse_alarmclock" };
+					return true;
 				default:
 					backgrounds = Array.Empty<string>();
 					foregrounds = Array.Empty<string>();
 					return false;
+			}
+		}
+
+		/// <summary>
+		/// 人物在场景里的插入位置：
+		/// 0 = 所有前景都在人物前面（人站在柜台 / 书桌后面，腿被挡住）；
+		/// 1 = 一半前景在人物前面（陈果房间：椅子在身后，书桌和猫在身前）；
+		/// 2 = 人物压在所有前景上面（一般不用）。
+		/// </summary>
+		private static int ResolveSceneCharacterLayer(string backgroundId)
+		{
+			switch (backgroundId)
+			{
+				case "scene_chenguo":
+					return 1;
+				case "scene_shop_old":
+				case "scene_shop_old_fixed":
+				case "scene_shop_new":
+				case "scene_zhou":
+				case "scene_father":
+				// 仓库把「人物之前」的 6 层都放进了 backgrounds，这里 0 就等价于「插在第 6 层之后」。
+				case "scene_warehouse":
+					return 0;
+				default:
+					return 0;
 			}
 		}
 
@@ -4705,11 +5101,6 @@ namespace GameLogic
 				m_btnItemCollection.transform.SetAsLastSibling();
 			}
 
-			if (m_btnRestart != null)
-			{
-				m_btnRestart.transform.SetAsLastSibling();
-			}
-
 			if (m_btnLayoutEdit != null)
 			{
 				m_btnLayoutEdit.transform.SetAsLastSibling();
@@ -4733,7 +5124,8 @@ namespace GameLogic
 
 		private void OnClickDialogueAdvance()
 		{
-			if (m_cutscenePlaying || (m_overlay != null && m_overlay.activeInHierarchy))
+			if (m_cutscenePlaying || m_sceneTransitionActive ||
+				(m_overlay != null && m_overlay.activeInHierarchy))
 			{
 				return;
 			}
@@ -4752,35 +5144,6 @@ namespace GameLogic
 			return true;
 		}
 
-		private void EnsureRestartButton()
-		{
-			if (m_btnRestart != null)
-			{
-				return;
-			}
-
-			var go = new GameObject("m_btnRestart", typeof(RectTransform), typeof(Image), typeof(Button));
-			go.transform.SetParent(transform, false);
-			m_btnRestart = go.GetComponent<Button>();
-			PlaceCornerButton(m_btnRestart, new Vector2(0f, 1f),
-				ReadLayoutPosition("Restart", new Vector2(210f, -28f)), new Vector2(200f, 56f));
-			Image image = go.GetComponent<Image>();
-			image.color = HudPaperButton;
-			image.raycastTarget = true;
-			ApplyHudSprite(image, "setting_save_popup_bg", false, gameObject.GetCancellationTokenOnDestroy(), true);
-			TextMeshProUGUI label = CreateOverlayText(go.transform, "从头开始", 22, Vector2.zero,
-				new Vector2(180f, 48f), TextAlignmentOptions.Center);
-			label.overflowMode = TextOverflowModes.Ellipsis;
-			label.enableWordWrapping = false;
-			RectTransform labelRect = label.rectTransform;
-			labelRect.anchorMin = Vector2.zero;
-			labelRect.anchorMax = Vector2.one;
-			labelRect.offsetMin = new Vector2(8f, 4f);
-			labelRect.offsetMax = new Vector2(-8f, -4f);
-			m_btnRestart.onClick.AddListener(ConfirmRestartFromBeginning);
-			go.transform.SetAsLastSibling();
-		}
-
 		private void ConfirmRestartFromBeginning()
 		{
 			ShowOverlay("从头开始", "将清除当前进度，从第一天重新开始。确定吗？", new[]
@@ -4793,6 +5156,9 @@ namespace GameLogic
 		private void RestartFromBeginning()
 		{
 			m_pendingRestart = false;
+			// 重开时如果正卡在场景探索里，这一步是唯一能把那层轮询 await 收掉的地方；
+			// 不写的话热点根节点会一直压在最上层，新一局点什么都被它吃掉。
+			AbortSceneSearch();
 			m_dialoguePresentVersion++;
 			m_hasReplied = false;
 			m_selectedReply = null;

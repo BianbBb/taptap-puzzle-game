@@ -23,7 +23,7 @@
     "dayMonologue": "2026年10月6日，第24次启动。\n今日检测物品：老式座钟×1\n检测结果：达到【低效物】标准，但物主对其有强烈【情感】寄托，不建议直接按【低效物】处理标准处理，交由物主本人判断。\n钟里……有很多以前的故事，明明隔了那么久，却感觉还是那么鲜活。",
     "isFormalEnding": false,
     "npcSet": "老周",
-    "backgroundId": "scene_zhou",
+    "backgroundId": "scene_warehouse",
     "titleDate": "2026年10月6日",
     "titleLocation": "仓库"
   },

@@ -395,6 +395,27 @@ namespace GameProto
                 m_TbEmotionMemoryRuleConfig.ResolveRef(this);
             }
         }
+        /// <summary>
+        /// 场景交互点配置表
+        /// </summary>
+        private TbSceneHotspotConfig m_TbSceneHotspotConfig;
+        public TbSceneHotspotConfig TbSceneHotspotConfig 
+        {
+            get
+            {
+                if (m_TbSceneHotspotConfig == null)
+                {
+                    m_TbSceneHotspotConfig = new TbSceneHotspotConfig(m_defaultLoader("tbscenehotspotconfig"));
+                    m_TbSceneHotspotConfig.ResolveRef(this);
+                }
+                return m_TbSceneHotspotConfig;
+            }
+            set
+            {
+                m_TbSceneHotspotConfig = value;
+                m_TbSceneHotspotConfig.ResolveRef(this);
+            }
+        }
 
         #endregion
 
@@ -430,6 +451,7 @@ namespace GameProto
             m_TbNarrativeItemConfig = null;
             m_TbNarrativeItemPartConfig = null;
             m_TbEmotionMemoryRuleConfig = null;
+            m_TbSceneHotspotConfig = null;
         }
 
         public void Init(){}

@@ -653,7 +653,7 @@
     "replies": [],
     "branches": [],
     "isSessionEnd": false,
-    "defaultNextNodeId": "T0204",
+    "defaultNextNodeId": "T0215",
     "minAffection": 0,
     "turnType": "PlayerDialogue",
     "animationAsset": "sad",
@@ -677,9 +677,7 @@
     "minAffection": 0,
     "turnType": "PlayerDialogue",
     "animationAsset": "",
-    "onEnterActionIds": [
-      "ADD_CLOCK"
-    ],
+    "onEnterActionIds": [],
     "onExitActionIds": [
       "REMOVE_CLOCK"
     ],
@@ -834,6 +832,23 @@
     "minAffection": 0,
     "turnType": "PlayerDialogue",
     "animationAsset": "sad",
+    "onEnterActionIds": [],
+    "onExitActionIds": [],
+    "extraNextNodeIds": [],
+    "priority": 1,
+    "backgroundId": ""
+  },
+  {
+    "id": "T0215",
+    "npcId": "老周",
+    "npcText": "",
+    "replies": [],
+    "branches": [],
+    "isSessionEnd": false,
+    "defaultNextNodeId": "T0204",
+    "minAffection": 0,
+    "turnType": "SceneSearch",
+    "animationAsset": "",
     "onEnterActionIds": [],
     "onExitActionIds": [],
     "extraNextNodeIds": [],

@@ -65,5 +65,19 @@
       "TAPE_PART_01",
       "TAPE_PART_02"
     ]
+  },
+  {
+    "id": "WH_CLOCK_WALL",
+    "itemName": "机械挂钟",
+    "description": "嘀嗒，嘀嗒，声音很小，但很精准，似乎并不是你要找的东西。",
+    "imageId": "placeholder",
+    "partIds": []
+  },
+  {
+    "id": "WH_CLOCK_ALARM",
+    "itemName": "小闹钟",
+    "description": "放在桌子上的小小时钟，似乎还内置了闹铃的功能，应该不是老周想要的东西。",
+    "imageId": "placeholder",
+    "partIds": []
   }
 ]

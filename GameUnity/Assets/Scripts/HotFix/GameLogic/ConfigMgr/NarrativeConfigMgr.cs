@@ -79,6 +79,30 @@ namespace GameLogic
 
         public IReadOnlyList<EmotionMemoryRuleConfig> AllEmotionMemoryRules => Tables.TbEmotionMemoryRuleConfig.dataList;
 
+        public IReadOnlyList<SceneHotspotConfig> AllSceneHotspots => Tables.TbSceneHotspotConfig.dataList;
+
+        /// <summary>某个场景的全部可点击交互点（按配表行序，绘制与命中都按这个顺序）。</summary>
+        public System.Collections.Generic.List<SceneHotspotConfig> GetSceneHotspots(string backgroundId)
+        {
+            var result = new System.Collections.Generic.List<SceneHotspotConfig>();
+            if (string.IsNullOrWhiteSpace(backgroundId))
+            {
+                return result;
+            }
+
+            IReadOnlyList<SceneHotspotConfig> all = AllSceneHotspots;
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (all[i] != null &&
+                    string.Equals(all[i].BackgroundId, backgroundId, System.StringComparison.Ordinal))
+                {
+                    result.Add(all[i]);
+                }
+            }
+
+            return result;
+        }
+
         public int EmotionCount => Tables.TbEmotionConfig.dataList.Count;
 
         public int MemoryCount => Tables.TbMemoryConfig.dataList.Count;
