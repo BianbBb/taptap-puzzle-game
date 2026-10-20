@@ -15,6 +15,14 @@ namespace GameLogic
 		public bool IsNone { get; private set; }
 		public bool IsLocked { get; private set; }
 
+		/// <summary>图鉴里的圆只有 40~100 直径，字号需要比对话条小。</summary>
+		private bool m_compactLabel;
+
+		private const float NormalFontSizeMin = 16f;
+		private const float NormalFontSizeMax = 28f;
+		private const float CompactFontSizeMin = 11f;
+		private const float CompactFontSizeMax = 18f;
+
 		public void SetData(EmotionConfig emotion, bool locked = false)
 		{
 			Emotion = emotion;
@@ -22,7 +30,24 @@ namespace GameLogic
 			IsLocked = locked;
 			SetNameLabel(emotion == null ? string.Empty :
 				locked ? emotion.EmotionName + "\n未解锁" : emotion.EmotionName);
-			ApplyCircleArt(locked, ResolveEmotionColor(emotion));
+			ApplyCircleArt(locked, EmotionVisual.ResolveColor(emotion, locked));
+		}
+
+		/// <summary>未获得的占位圆：灰底、不写字（小圆里放不下"未解锁"）。</summary>
+		public void SetPlaceholder(EmotionConfig emotion)
+		{
+			Emotion = emotion;
+			IsNone = false;
+			IsLocked = true;
+			SetNameLabel(string.Empty);
+			ApplyCircleArt(true, EmotionVisual.LockedColor);
+		}
+
+		/// <summary>切到图鉴用的小字号；与 SetData 的调用先后无关。</summary>
+		public void SetCompactLabel()
+		{
+			m_compactLabel = true;
+			ApplyFontSize();
 		}
 
 		public void SetNoneData()
@@ -31,7 +56,7 @@ namespace GameLogic
 			IsNone = true;
 			IsLocked = false;
 			SetNameLabel("无");
-			ApplyCircleArt(false, new Color(0.78f, 0.78f, 0.8f, 1f));
+			ApplyCircleArt(false, EmotionVisual.NoneColor);
 		}
 
 		private void SetNameLabel(string value)
@@ -46,10 +71,20 @@ namespace GameLogic
 			m_tmpName.enableWordWrapping = false;
 			m_tmpName.overflowMode = TextOverflowModes.Ellipsis;
 			m_tmpName.enableAutoSizing = true;
-			m_tmpName.fontSizeMin = 16f;
-			m_tmpName.fontSizeMax = 28f;
+			ApplyFontSize();
 			m_tmpName.alignment = TextAlignmentOptions.Center;
 			m_tmpName.raycastTarget = false;
+		}
+
+		private void ApplyFontSize()
+		{
+			if (m_tmpName == null)
+			{
+				return;
+			}
+
+			m_tmpName.fontSizeMin = m_compactLabel ? CompactFontSizeMin : NormalFontSizeMin;
+			m_tmpName.fontSizeMax = m_compactLabel ? CompactFontSizeMax : NormalFontSizeMax;
 		}
 
 		private void ApplyCircleArt(bool locked, Color tint)
@@ -61,7 +96,7 @@ namespace GameLogic
 
 			if (locked)
 			{
-				tint = new Color(0.72f, 0.72f, 0.72f, 1f);
+				tint = EmotionVisual.LockedColor;
 			}
 			m_imgBg.color = tint;
 			m_imgBg.raycastTarget = true;
@@ -77,29 +112,6 @@ namespace GameLogic
 				image.preserveAspect = true;
 				image.raycastTarget = true;
 			}, gameObject.GetCancellationTokenOnDestroy());
-		}
-
-		private static Color ResolveEmotionColor(EmotionConfig emotion)
-		{
-			if (emotion != null && !string.IsNullOrEmpty(emotion.DisplayColor) &&
-				ColorUtility.TryParseHtmlString(emotion.DisplayColor, out Color parsed))
-			{
-				parsed.a = 1f;
-				return parsed;
-			}
-
-			string key = emotion == null ? string.Empty : emotion.Id + emotion.EmotionName;
-			int hash = 0;
-			for (int i = 0; i < key.Length; i++)
-			{
-				hash = (hash * 31) + key[i];
-			}
-
-			int index = (hash & int.MaxValue) % 4;
-			if (index == 0) return Color.white;
-			if (index == 1) return new Color(0.95f, 0.84f, 0.42f, 1f);
-			if (index == 2) return new Color(0.49f, 0.78f, 0.78f, 1f);
-			return new Color(0.91f, 0.63f, 0.66f, 1f);
 		}
 
 		#region 事件

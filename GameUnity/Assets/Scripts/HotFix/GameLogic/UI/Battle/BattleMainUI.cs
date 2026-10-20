@@ -1850,7 +1850,7 @@ namespace GameLogic
 		private void ShowCollectionPage(bool emotions)
 		{
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
-			ShowOverlay("图鉴", emotions ? "已获得的情绪" : "已获得的记忆", new[]
+			ShowOverlay("图鉴", emotions ? "圆越大，这份情绪被表达得越多。" : "已获得的记忆", new[]
 			{
 				("记忆", (Action)(() => ShowCollectionPage(false))),
 				("情绪", (Action)(() => ShowCollectionPage(true))),
@@ -1859,18 +1859,7 @@ namespace GameLogic
 			if (m_overlayBodyContent == null) return;
 			if (emotions)
 			{
-				IReadOnlyList<EmotionConfig> entries = NarrativeConfigMgr.Instance.AllEmotions;
-				AddCollectionCards(entries.Count, index =>
-				{
-					EmotionConfig entry = entries[index];
-					bool owned = saveData.HasEmotion(entry.Id);
-					return (owned ? entry.EmotionName : "未解锁", (Action)(() =>
-					{
-						ShowOverlay(owned ? entry.EmotionName : "未解锁",
-							owned ? "这份情绪已被记住。" : "继续推进剧情可发现这份情绪。",
-							new[] { ("返回图鉴", (Action)(() => ShowCollectionPage(true))) });
-					}));
-				});
+				BuildEmotionRowAsync().Forget();
 			}
 			else
 			{
@@ -1903,6 +1892,106 @@ namespace GameLogic
 					new Vector2(-216f + column * 144f, -76f - row * 120f),
 					new Vector2(132f, 108f), action, true);
 			}
+		}
+
+		// 图鉴情绪页：一行固定展示全部情绪，圆直径随「被表达次数」增长。
+		private const float EmotionCircleSpacing = 16f;
+		private const float EmotionCircleMinDiameter = 40f;
+		private const float EmotionCircleMaxDiameterCap = 100f;
+		// 表达满这个次数后直径封顶；调它可以改"长大"的手感。
+		private const float EmotionCircleFullCount = 9f;
+		// overlay body 的实际可用宽度（panel 780 - 左右各 64 padding）。
+		private const float EmotionCircleRowWidth = 600f;
+
+		private async UniTaskVoid BuildEmotionRowAsync()
+		{
+			RectTransform host = m_overlayBodyContent;
+			if (host == null) return;
+
+			IReadOnlyList<EmotionConfig> all = NarrativeConfigMgr.Instance.AllEmotions;
+			var entries = new List<EmotionConfig>(all.Count);
+			for (int i = 0; i < all.Count; i++)
+			{
+				EmotionConfig entry = all[i];
+				if (entry == null || IsNoneEmotionConfig(entry.Id)) continue;
+				entries.Add(entry);
+			}
+
+			if (entries.Count == 0) return;
+
+			NarrativeSaveData saveData = NarrativeSaveData.Get;
+			// 情绪数量变化时自动收缩上限，保证一排始终塞得进面板。
+			float maxDiameter = Mathf.Max(EmotionCircleMinDiameter,
+				Mathf.Min(EmotionCircleMaxDiameterCap,
+					(EmotionCircleRowWidth - (entries.Count - 1) * EmotionCircleSpacing) / entries.Count));
+
+			// 让开 ShowOverlay 生成的那行正文，它是 host 的第一个子物体。
+			float topOffset = 48f;
+			if (host.childCount > 0 && host.GetChild(0).GetComponent<TextMeshProUGUI>() is TextMeshProUGUI label)
+			{
+				topOffset = Mathf.Max(label.preferredHeight, 32f) + 16f;
+			}
+
+			var row = new GameObject("EmotionRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+			row.transform.SetParent(host, false);
+			RectTransform rowRect = row.GetComponent<RectTransform>();
+			rowRect.anchorMin = rowRect.anchorMax = new Vector2(0.5f, 1f);
+			rowRect.pivot = new Vector2(0.5f, 1f);
+			rowRect.anchoredPosition = new Vector2(0f, -topOffset);
+			rowRect.sizeDelta = new Vector2(EmotionCircleRowWidth, maxDiameter);
+
+			// 与对话里的情绪条同一套布局参数（childControlWidth=false 时尺寸由子物体自身决定）。
+			HorizontalLayoutGroup layout = row.GetComponent<HorizontalLayoutGroup>();
+			layout.childAlignment = TextAnchor.MiddleCenter;
+			layout.spacing = EmotionCircleSpacing;
+			layout.childControlWidth = false;
+			layout.childControlHeight = false;
+			layout.childForceExpandWidth = false;
+			layout.childForceExpandHeight = false;
+
+			for (int i = 0; i < entries.Count; i++)
+			{
+				EmotionConfig emotion = entries[i];
+				ReplayEmoItem item = await CreateWidgetByTypeAsync<ReplayEmoItem>(rowRect, false);
+				// 等待期间 overlay 可能被关掉或换了内容，此时丢弃本次构建。
+				if (IsDestroyed || item == null || m_overlayBodyContent != host) return;
+
+				bool owned = saveData.HasEmotion(emotion.Id);
+				item.SetCompactLabel();
+				if (owned)
+				{
+					item.SetData(emotion);
+				}
+				else
+				{
+					item.SetPlaceholder(emotion);
+				}
+
+				float diameter = Mathf.Lerp(EmotionCircleMinDiameter, maxDiameter,
+					Mathf.Clamp01(saveData.GetEmotionUseCount(emotion.Id) / EmotionCircleFullCount));
+				item.rectTransform.sizeDelta = new Vector2(diameter, diameter);
+
+				EmotionConfig captured = emotion;
+				bool capturedOwned = owned;
+				item.BindClickEvent(_ => ShowEmotionDetail(captured, capturedOwned), needEmptyImg: true);
+				item.Show(true);
+			}
+
+			host.sizeDelta = new Vector2(0f, topOffset + maxDiameter + 24f);
+		}
+
+		private static bool IsNoneEmotionConfig(string emotionId)
+			=> string.Equals(emotionId, NarrativeRules.NoneEmotionId, StringComparison.OrdinalIgnoreCase) ||
+			   string.Equals(emotionId, NarrativeRules.NoneEmotionConfigId, StringComparison.OrdinalIgnoreCase);
+
+		private void ShowEmotionDetail(EmotionConfig entry, bool owned)
+		{
+			int useCount = NarrativeSaveData.Get.GetEmotionUseCount(entry.Id);
+			string body = owned
+				? (useCount > 0 ? $"这份情绪已被记住。\n表达过 {useCount} 次。" : "这份情绪已被记住。")
+				: "继续推进剧情可发现这份情绪。";
+			ShowOverlay(owned ? entry.EmotionName : "未解锁", body,
+				new[] { ("返回图鉴", (Action)(() => ShowCollectionPage(true))) });
 		}
 
 		private void ShowNarrativeItem(string itemId)

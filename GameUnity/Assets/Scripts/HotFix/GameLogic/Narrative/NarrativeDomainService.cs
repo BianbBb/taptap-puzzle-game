@@ -88,7 +88,7 @@ namespace GameLogic
         private static bool IsNoneEmotionId(string emotionId)
         {
             return string.Equals(emotionId, NarrativeRules.NoneEmotionId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(emotionId, "E00", StringComparison.OrdinalIgnoreCase);
+                string.Equals(emotionId, NarrativeRules.NoneEmotionConfigId, StringComparison.OrdinalIgnoreCase);
         }
 
         public string GetDefaultEmotion(ReplyOptionConfig reply, NarrativeSaveData saveData = null)
@@ -170,6 +170,12 @@ namespace GameLogic
             List<string> addedMemories = saveData.AddMemoriesWithoutSaving(reply.RewardMemory);
             List<string> emergedEmotions = FindEmergentEmotions(saveData);
             saveData.AddEmotionsWithoutSaving(emergedEmotions);
+
+            // 图鉴情绪圆的直径取这个计数，必须在 ApplyTurnState（唯一落盘点）之前累加。
+            if (!IsNoneEmotionId(emotionId))
+            {
+                saveData.AddEmotionUseWithoutSaving(emotionId);
+            }
 
             saveData.ApplyTurnState(node.NpcId, affectionAfter, nextNodeId, turnKey,
                 sessionEnded, null);

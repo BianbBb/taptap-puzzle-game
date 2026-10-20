@@ -19,6 +19,9 @@ namespace GameLogic
         [JsonProperty("OwnedEmotionIds")]
         private HashSet<string> m_ownedEmotionIds = new HashSet<string>();
 
+        [JsonProperty("EmotionUseCounts")]
+        private Dictionary<string, int> m_emotionUseCounts = new Dictionary<string, int>();
+
         [JsonProperty("NpcAffection")]
         private Dictionary<string, float> m_npcAffection = new Dictionary<string, float>();
 
@@ -62,7 +65,7 @@ namespace GameLogic
         [JsonProperty("LastCommittedTurnKey")]
         private string m_lastCommittedTurnKey = string.Empty;
 
-        protected override int CurrentSaveDataVersion => 6;
+        protected override int CurrentSaveDataVersion => 7;
 
         public static NarrativeSaveData Get => BaseClientSaveData.Get<NarrativeSaveData>();
 
@@ -112,6 +115,13 @@ namespace GameLogic
 
         public bool HasEmotion(string emotionId)
             => !string.IsNullOrWhiteSpace(emotionId) && m_ownedEmotionIds.Contains(emotionId);
+
+        /// <summary>该情绪被玩家在对话中表达过的累计次数，用于图鉴圆圈的直径。</summary>
+        public int GetEmotionUseCount(string emotionId)
+            => !string.IsNullOrWhiteSpace(emotionId) &&
+               m_emotionUseCounts.TryGetValue(emotionId, out int count)
+                ? count
+                : 0;
 
         [JsonIgnore]
         public IReadOnlyCollection<string> OwnedMemoryIds => m_ownedMemoryIds;
@@ -213,6 +223,7 @@ namespace GameLogic
             m_ownedMemoryIds.Clear();
             m_ownedMemoryOrder.Clear();
             m_ownedEmotionIds.Clear();
+            m_emotionUseCounts.Clear();
             m_npcAffection.Clear();
             m_storyFlags.Clear();
             m_completedSessionIds.Clear();
@@ -455,6 +466,7 @@ namespace GameLogic
                 TurnIndex = m_turnIndex,
                 OwnedMemoryIds = GetMemoryIdsInStableOrder(),
                 OwnedEmotionIds = GetEmotionIdsInStableOrder(),
+                EmotionUseCounts = m_emotionUseCounts,
                 OwnedNarrativeItemIds = GetNarrativeItemIdsInStableOrder(),
                 NpcAffection = m_npcAffection,
                 StoryFlags = m_storyFlags.OrderBy(flag => flag, System.StringComparer.Ordinal).ToList(),
@@ -584,6 +596,17 @@ namespace GameLogic
             return added;
         }
 
+        internal void AddEmotionUseWithoutSaving(string emotionId)
+        {
+            if (string.IsNullOrWhiteSpace(emotionId))
+            {
+                return;
+            }
+
+            m_emotionUseCounts.TryGetValue(emotionId, out int count);
+            m_emotionUseCounts[emotionId] = count + 1;
+        }
+
         internal void ApplyTurnState(string npcId, float affection, string nextNodeId,
             string turnKey, bool sessionEnded, IEnumerable<string> addedFlags)
         {
@@ -633,6 +656,7 @@ namespace GameLogic
             m_ownedMemoryIds = m_ownedMemoryIds ?? new HashSet<string>();
             m_ownedMemoryOrder = GetMemoryIdsInAcquisitionOrder().ToList();
             m_ownedEmotionIds = m_ownedEmotionIds ?? new HashSet<string>();
+            m_emotionUseCounts = m_emotionUseCounts ?? new Dictionary<string, int>();
             m_npcAffection = m_npcAffection ?? new Dictionary<string, float>();
             m_storyFlags = m_storyFlags ?? new HashSet<string>();
             m_completedSessionIds = m_completedSessionIds ?? new HashSet<string>();

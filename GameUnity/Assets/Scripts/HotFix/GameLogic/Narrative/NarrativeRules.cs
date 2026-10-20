@@ -16,6 +16,8 @@ namespace GameLogic
     public static class NarrativeRules
     {
         public const string NoneEmotionId = "NONE";
+        /// <summary>配表里"无情绪"那一行的 ID，不参与图鉴展示与表达计数。</summary>
+        public const string NoneEmotionConfigId = "E00";
         public const string AnyReplyId = "ANY";
         public const int MemoryCapacity = 5;
         public const float MinimumAffection = 0f;
