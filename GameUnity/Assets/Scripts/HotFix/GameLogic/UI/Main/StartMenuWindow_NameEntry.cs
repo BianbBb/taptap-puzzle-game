@@ -24,7 +24,6 @@ namespace GameLogic
 		#region 配色（纸片系，与 BattleMainUI 一致）
 
 		private static readonly Color NameInk = new Color(0.282f, 0.220f, 0.157f, 1f);
-		private static readonly Color NameInkSoft = new Color(0.431f, 0.361f, 0.282f, 0.843f);
 		private static readonly Color NameInkFaint = new Color(0.573f, 0.502f, 0.416f, 0.784f);
 		private static readonly Color NameError = new Color(0.62f, 0.31f, 0.24f, 1f);
 		private static readonly Color NameChipPaper = new Color(0.980f, 0.957f, 0.910f, 1f);
@@ -78,8 +77,6 @@ namespace GameLogic
 			public Vector2 DiceSize;
 			public float DiceDx;
 			public float DiceDy;
-			public string DiceHint;
-			public float DiceHintDy;
 
 			public string ChipBack;
 			public string ChipSprite;
@@ -119,7 +116,6 @@ namespace GameLogic
 				FieldDy = 52f, FieldTextSize = 28f,
 				FieldUnderline = true, UnderlineWidth = 440f, UnderlineDy = 4f,
 				DiceSize = new Vector2(84f, 84f), DiceDx = 286f, DiceDy = 56f,
-				DiceHint = "换一个", DiceHintDy = -62f,
 				ChipBack = "collection_card_image_slot", ChipSprite = "setting_save_slot_border",
 				ChipSize = new Vector2(196f, 66f), ChipTint = NameChipPaper,
 				ChipVertical = false, ChipStartDy = -58f, ChipPitch = 224f, ChipTextSize = 25f,
@@ -142,7 +138,6 @@ namespace GameLogic
 				FieldDy = 99f, FieldTextSize = 27f,
 				FieldUnderline = false, UnderlineWidth = 0f, UnderlineDy = 0f,
 				DiceSize = new Vector2(70f, 70f), DiceDx = 175f, DiceDy = 215f,
-				DiceHint = null, DiceHintDy = 0f,
 				ChipBack = null, ChipSprite = "dialogue_reply_bubble_01",
 				ChipSize = new Vector2(500f, 60f), ChipTint = Color.white,
 				ChipVertical = true, ChipStartDy = 15f, ChipPitch = 66f, ChipTextSize = 24f,
@@ -165,7 +160,6 @@ namespace GameLogic
 				FieldDy = 74f, FieldTextSize = 38f,
 				FieldUnderline = true, UnderlineWidth = 400f, UnderlineDy = 38f,
 				DiceSize = new Vector2(62f, 62f), DiceDx = 250f, DiceDy = 72f,
-				DiceHint = "随机", DiceHintDy = 18f,
 				ChipBack = null, ChipSprite = "collection_card_image_slot",
 				ChipSize = new Vector2(190f, 56f), ChipTint = new Color(0.969f, 0.945f, 0.898f, 1f),
 				ChipVertical = false, ChipStartDy = -60f, ChipPitch = 214f, ChipTextSize = 23f,
@@ -371,13 +365,6 @@ namespace GameLogic
 			diceButton.transition = Selectable.Transition.None;
 			diceButton.onClick.AddListener(OnClickRollName);
 			BindNameEntryHover(diceButton);
-
-			if (!string.IsNullOrEmpty(style.DiceHint))
-			{
-				CreateNameEntryText(parent, style.DiceHint, 14f, NameInkSoft,
-					new Vector2(style.ContentDx + style.DiceDx, style.DiceDy + style.DiceHintDy),
-					new Vector2(110f, 20f), TextAlignmentOptions.Center);
-			}
 		}
 
 		private void CreateNameEntryCandidates(Transform parent, NameEntryStyle style)
