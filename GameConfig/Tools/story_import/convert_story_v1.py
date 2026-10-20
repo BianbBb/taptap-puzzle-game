@@ -694,10 +694,11 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
             rep.warn("AFFECTION_MULTI_NPC",
                      f"选项 {oid} 的 AddAffection=`{raw}` 含多个 NPC，项目字段只支持单个，仅保留第一个")
 
-    rep.gap("Option.RewardMemory",
-            "源表「Option」没有「奖励记忆 / RewardMemory」列，转换后 rewardMemory 全空。"
-            "记忆只能靠【情绪记忆规则配置表】激活；规则条数不足时，带 requiredMemory 的选项仍会锁死"
-            "（见可达性报告 L2/L3）。建议策划补 Option.RewardMemory 列，或在规则表里补齐每条记忆的来源")
+    rep.note("Option.RewardMemory",
+             "源表「Option」没有「奖励记忆 / RewardMemory」列，转换后 rewardMemory 全空。"
+             "这不影响主链路 —— 记忆主要靠「获得物品 -> 检查部件」产出（ItemPart.memoryId），"
+             "这条路径在转换里是完整的。只有当某条记忆既没有部件承载、又需要作为选项条件时才要补。"
+             "用 check_story_graph.py 可以查出到底是哪几条")
 
     # ---------- 6. Session ----------
     rep.h("叙事Session配置表")

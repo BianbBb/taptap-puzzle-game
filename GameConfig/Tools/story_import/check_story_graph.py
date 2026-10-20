@@ -50,8 +50,95 @@ class StoryGraph:
         self.nodes = {}          # nid -> {npc, text, replies[], next, extras[], branches[], end, minAff}
         self.options = {}        # oid -> {req[], reward[], next, end, text, set, emo[]}
         self.rules = {}          # rid -> {emotion, threshold, required[], reward[], priority}
+        self.items = {}          # itemId -> {name, parts[]}
+        self.parts = {}          # partId -> {name, memory, item}
+        self.node_items = {}     # nid -> [itemId]  进入/离开该节点时发放的物品
         self.all_memories = set()
         self.source_label = ""
+
+    # ---- 物品 -> 记忆 ----
+
+    def memory_via_items(self, structural):
+        """
+        「获得物品 -> 检查部件 -> 得到记忆」是一条独立的记忆来源，
+        和选项奖励、情绪规则并列。
+
+        返回 (memories, detail)：
+          memories: 结构可达节点上发到手的物品，其全部部件记忆
+          detail:   mid -> [说明]
+        """
+        granted = []
+        for nid in structural:
+            for iid in self.node_items.get(nid, []):
+                if iid not in granted:
+                    granted.append(iid)
+        memories, detail = set(), defaultdict(list)
+        for iid in granted:
+            item = self.items.get(iid)
+            if not item:
+                continue
+            for pid in item["parts"]:
+                part = self.parts.get(pid)
+                if not part or not part["memory"]:
+                    continue
+                memories.add(part["memory"])
+                detail[part["memory"]].append(
+                    f"检查「{item['name']}」的{part['name']}（{pid}）")
+        return memories, detail
+
+    def item_grant_nodes(self, item_id):
+        """哪些节点会发放这个物品"""
+        return [nid for nid, items in self.node_items.items() if item_id in items]
+
+    def _ensure_session_index(self):
+        """
+        建立 nid -> {sid} 的反查。注意一个节点可能被多个 Session 走到（复用节点），
+        所以存集合而不是单值。
+        """
+        if getattr(self, "_node_sessions", None) is not None:
+            return
+        idx = defaultdict(set)
+        for sid, s in self.sessions.items():
+            if not s["start"]:
+                continue
+            seen, dq = {s["start"]}, deque([s["start"]])
+            while dq:
+                nid = dq.popleft()
+                if nid not in self.nodes:
+                    continue
+                idx[nid].add(sid)
+                if self.nodes[nid]["end"]:
+                    continue
+                for nxt, _ in self.node_edges(nid, None):
+                    if nxt not in seen:
+                        seen.add(nxt)
+                        dq.append(nxt)
+        self._node_sessions = idx
+
+    def forward_reach(self, start):
+        """
+        从 start 往后能走到哪些节点。
+        必须能**跨 Session**：一个 Session 结束时会跳到 nextSessionId 的起点，
+        否则「上一章的物品记忆能不能撑到下一章」这类问题全都会被误判成时序倒置。
+        """
+        self._ensure_session_index()
+        seen, dq = {start}, deque([start])
+        while dq:
+            nid = dq.popleft()
+            if nid not in self.nodes:
+                continue
+            nxts = [t for t, _ in self.node_edges(nid, None)]
+            if self.nodes[nid]["end"] or not nxts:
+                for sid in self._node_sessions.get(nid, ()):
+                    for ns in self.sessions.get(sid, {}).get("nexts", []):
+                        st = self.sessions.get(ns, {}).get("start")
+                        if st:
+                            nxts.append(st)
+            for nxt in nxts:
+                if nxt not in seen:
+                    seen.add(nxt)
+                    dq.append(nxt)
+        return seen
 
     def option_edges(self, nid):
         """该节点通过选项可以到达的节点（忽略锁定条件）"""
@@ -135,11 +222,16 @@ class StoryGraph:
 
     def memory_closure(self):
         """
-        计算"最终可能持有的记忆全集"。
-        来源有两条：
-          1. 选项 rewardMemory：所需记忆满足即可获得
-          2. 情绪记忆规则：前置记忆满足 + 情绪使用次数上限达到阈值
-        从空记忆开始反复扫描，直到不再变化。
+        计算"最终可能持有的记忆全集"。来源有三条：
+          1. 物品部件检查：走到发放物品的节点 -> 检查部件 -> 得到该部件的记忆
+             （这是主路径，游戏里记忆主要靠点物品的各个部位拿到）
+          2. 选项 rewardMemory：所需记忆满足即可获得
+          3. 情绪记忆规则：前置记忆满足 + 情绪使用次数上限达到阈值
+
+        做法是从空记忆起步，每轮用"当前已知记忆"重算一遍**条件可达**的节点集合，
+        再看这轮新开了哪些节点、能发哪些物品、能拿哪些记忆；不再变化就收敛。
+        这样「必须走到某个受记忆门槛保护的节点才能拿到物品」也能被正确判死，
+        不会像直接拿结构可达集合那样乐观放过。
         """
         satisfiable = set()
         structural, _ = self.reachable(None, stop_at_end=True)
@@ -149,7 +241,20 @@ class StoryGraph:
         while changed and guard < 64:
             guard += 1
             changed = False
-            for nid in structural:
+
+            # 先按"当前已知记忆"重算可达集合，L3 也复用这一步的结果
+            live, _ = self.reachable(frozenset(satisfiable), stop_at_end=True)
+            self._live = live
+
+            # 来源 1：走到哪、发到哪，就能检查哪件物品的哪个部件
+            item_mems, _ = self.memory_via_items(live)
+            for m in item_mems:
+                if m not in satisfiable:
+                    satisfiable.add(m)
+                    changed = True
+
+            # 来源 2：选项奖励（只在可达节点上算）
+            for nid in live:
                 for oid in self.nodes[nid]["replies"]:
                     o = self.options.get(oid)
                     if not o:
@@ -159,6 +264,8 @@ class StoryGraph:
                             if m not in satisfiable:
                                 satisfiable.add(m)
                                 changed = True
+
+            # 来源 3：情绪记忆规则
             for rid, rule in self.rules.items():
                 if not set(rule["required"]) <= satisfiable:
                     continue
@@ -168,6 +275,8 @@ class StoryGraph:
                     if m not in satisfiable:
                         satisfiable.add(m)
                         changed = True
+        if not hasattr(self, "_live"):
+            self._live = self.reachable(frozenset(satisfiable), stop_at_end=True)[0]
         return satisfiable
 
 
@@ -184,8 +293,10 @@ def _cs(v):
 
 
 def _list(v):
+    if isinstance(v, (list, tuple)):
+        return [_cs(x) for x in v if _cs(x)]
     s = _cs(v).strip("[]")
-    return [x.strip() for x in re.split(r"[,;、]", s) if x.strip()]
+    return [x.strip().strip("'\"").strip() for x in re.split(r"[,;、]", s) if x.strip(" '\"")]
 
 
 def _rows(wb, name):
@@ -220,6 +331,94 @@ def _g(vals, h, n, d=None):
     if i < 0 or i >= len(vals):
         return d
     return vals[i] if _cs(vals[i]) else d
+
+
+def _load_items_source(wb, g):
+    """
+    读策划源表的「Item」sheet。它是一张表里叠了两个子表：
+      上半：ItemID / Name / Description / ImageID / ItemPartList
+      下半（换一个 ##var）：ItemPartID / ItemPartName / ImageID / MemoryID
+    以第二段表头出现的位置为分界。
+    """
+    if "Item" not in wb.sheetnames:
+        return
+    ws = wb["Item"]
+    mode = None           # "item" / "part"
+    ih = ph = None
+    for row in ws.iter_rows(values_only=True):
+        vals = list(row)
+        if not vals or not _cs(vals[0]).startswith("##"):
+            pass
+        first_b = _cs(vals[1]) if len(vals) > 1 else ""
+        if _cs(vals[0]) == "##var":
+            if first_b == "ItemPartID":
+                mode = "part"
+                ph = [_cs(c) for c in vals]
+            else:
+                mode = "item"
+                ih = [_cs(c) for c in vals]
+            continue
+        if _cs(vals[0]).startswith("##") or not first_b:
+            continue
+        if mode == "item":
+            iid = first_b
+            g.items[iid] = {
+                "name": _cs(_g(vals, ih, "Name")),
+                "parts": _list(_g(vals, ih, "ItemPartList")),
+            }
+        elif mode == "part":
+            pid = first_b
+            g.parts[pid] = {
+                "name": _cs(_g(vals, ph, "ItemPartName")),
+                "memory": _cs(_g(vals, ph, "MemoryID")),
+                "item": "",
+            }
+    # 反向补上部件所属物品
+    for iid, item in g.items.items():
+        for pid in item["parts"]:
+            if pid in g.parts:
+                g.parts[pid]["item"] = iid
+
+
+def _load_items_luban(datas_dir, g, sheet_rows):
+    """读 Luban 三张表：叙事物品配置表 / 叙事物品部件配置表 / 叙事动作配置表"""
+    ih, ir = sheet_rows("叙事物品配置表.xlsx")
+    for r in ir:
+        iid = _cs(r[_idx(ih, "id")]) if _idx(ih, "id") >= 0 else ""
+        if not iid:
+            continue
+        g.items[iid] = {
+            "name": _cs(_g(r, ih, "itemName")),
+            "parts": _list(_g(r, ih, "partIds")),
+        }
+    ph, pr = sheet_rows("叙事物品部件配置表.xlsx")
+    for r in pr:
+        pid = _cs(r[_idx(ph, "id")]) if _idx(ph, "id") >= 0 else ""
+        if not pid:
+            continue
+        g.parts[pid] = {
+            "name": _cs(_g(r, ph, "partName")),
+            "memory": _cs(_g(r, ph, "memoryId")),
+            "item": "",
+        }
+    for iid, item in g.items.items():
+        for pid in item["parts"]:
+            if pid in g.parts:
+                g.parts[pid]["item"] = iid
+
+    ah, ar = sheet_rows("叙事动作配置表.xlsx")
+    action_item = {}
+    for r in ar:
+        aid = _cs(r[_idx(ah, "id")]) if _idx(ah, "id") >= 0 else ""
+        if not aid:
+            continue
+        if _cs(_g(r, ah, "actionType")).lower() == "grantitem":
+            action_item[aid] = _cs(_g(r, ah, "targetId"))
+    for nid, n in g.nodes.items():
+        ids = _list(n.get("_enterActions")) + _list(n.get("_exitActions"))
+        items = [action_item[a] for a in ids if a in action_item]
+        if items:
+            g.node_items[nid] = items
 
 
 def load_source(path):
@@ -278,6 +477,8 @@ def load_source(path):
             "branches": branches,
             "end": _cs(_g(r, th, "EndSession")).lower() == "true",
             "minAff": float(nums[0]) if nums and not branches else 0.0,
+            "_enterActions": _list(_g(r, th, "OnEnterActionSetID")),
+            "_exitActions": _list(_g(r, th, "OnExitActionSetID")),
         }
 
     mh, mr = _rows(wb, "Memory")
@@ -285,6 +486,23 @@ def load_source(path):
         mid = _cs(r[_idx(mh, "MemoryID")])
         if mid:
             g.all_memories.add(mid)
+
+    # ---- 物品 / 部件 / 动作（记忆的主要来源路径）----
+    _load_items_source(wb, g)
+    action_item = {}
+    if "Action" in wb.sheetnames:
+        ah, ar = _rows(wb, "Action")
+        for r in ar:
+            aid = _cs(r[_idx(ah, "ActionID")])
+            if not aid:
+                continue
+            if _cs(_g(r, ah, "ActionType")).lower() == "grantitem":
+                action_item[aid] = _cs(_g(r, ah, "TargetID"))
+    for nid, n in g.nodes.items():
+        ids = _list(n.get("_enterActions")) + _list(n.get("_exitActions"))
+        items = [action_item[a] for a in ids if a in action_item]
+        if items:
+            g.node_items[nid] = items
 
     rh, rr = _rows(wb, "EmotionMemoryRule")
     for r in rr:
@@ -376,12 +594,16 @@ def load_luban(datas_dir):
             "branches": branches,
             "end": _cs(_g(r, th, "isSessionEnd")).lower() == "true",
             "minAff": float(_g(r, th, "minAffection") or 0),
+            "_enterActions": _list(_g(r, th, "onEnterActionIds")),
+            "_exitActions": _list(_g(r, th, "onExitActionIds")),
         }
 
     for r in mr:
         mid = _cs(r[_idx(mh, "id")])
         if mid:
             g.all_memories.add(mid)
+
+    _load_items_luban(datas_dir, g, sheet_rows)
 
     rh, rr = sheet_rows("情绪记忆规则配置表.xlsx")
     for r in rr:
@@ -589,12 +811,82 @@ def analyze(g):
         for m in o["req"]:
             required_by[m].append(oid)
     source_desc = defaultdict(list)     # mid -> [来源说明]
+
+    # 来源 1：物品部件检查（主路径）
+    live = getattr(g, "_live", structural)
+    item_mems, item_detail = g.memory_via_items(live)
+    for m, descs in item_detail.items():
+        source_desc[m].extend(descs)
+    # 来源 2：选项奖励
     for oid, o in g.options.items():
         for m in o["reward"]:
             source_desc[m].append(f"选项 {oid} 奖励")
+    # 来源 3：情绪记忆规则
     for rid, rule in g.rules.items():
         for m in rule["reward"]:
             source_desc[m].append(f"规则 {rid} 激活")
+
+    # ---- 物品 -> 记忆 全链路 ---- #
+    if g.items or g.parts:
+        r.title("物品 -> 部件 -> 记忆 链路")
+        ungranted = [iid for iid in g.items if not g.item_grant_nodes(iid)]
+        blocked = [iid for iid in g.items
+                   if g.item_grant_nodes(iid) and not set(g.item_grant_nodes(iid)) & live]
+        r.text(f"\n共 {len(g.items)} 件物品、{len(g.parts)} 个部件，"
+               f"其中 {len(item_mems)} 个部件记忆可以由「记忆门槛下仍走得到」的节点拿到。\n")
+        r.text("| 物品 | 部件 | 部件记忆 | 物品获取节点 | 状态 |")
+        r.text("|---|---|---|---|---|")
+        for iid in sorted(g.items, key=lambda x: (g.items[x]["name"] or x, x)):
+            item = g.items[iid]
+            nodes = g.item_grant_nodes(iid)
+            reach_nodes = [n for n in nodes if n in live]
+            for pid in item["parts"]:
+                part = g.parts.get(pid)
+                if not part:
+                    r.text(f"| {item['name'] or iid} | {pid}（表里查不到） | — | — | ❌ 部件缺失 |")
+                    continue
+                if not nodes:
+                    state = "❌ 剧情里拿不到这件物品"
+                elif not reach_nodes:
+                    state = "❌ 发放节点被记忆门槛挡住"
+                elif not part["memory"]:
+                    state = "⚠️ 部件未绑记忆"
+                else:
+                    state = "✅"
+                mark = ",".join(reach_nodes) if reach_nodes else (",".join(nodes) or "—")
+                r.text(f"| {item['name'] or iid} | {part['name'] or pid} | "
+                       f"{part['memory'] or '—'} | {mark} | {state} |")
+        if ungranted:
+            r.bad(f"{len(ungranted)} 件物品在剧情里没有发放节点：{ungranted}")
+        elif blocked:
+            r.bad(f"{len(blocked)} 件物品的发放节点被记忆门槛挡住，部件记忆拿不到：{blocked}")
+        else:
+            r.ok("所有物品都能在剧情里拿到，部件记忆链路完整")
+
+        # 部件绑了记忆但记忆表里没有
+        dangling = sorted({p["memory"] for p in g.parts.values()
+                           if p["memory"] and p["memory"] not in g.all_memories})
+        if dangling:
+            r.bad(f"部件引用了记忆表里不存在的记忆：{dangling}")
+
+        # 有记忆却没有任何部件承载（只能靠选项奖励/规则拿）
+        part_mems = {p["memory"] for p in g.parts.values() if p["memory"]}
+        no_part = sorted(m for m in g.all_memories if m not in part_mems)
+        if no_part:
+            granted_anywhere = set()
+            for nid in live:
+                for oid in g.nodes[nid]["replies"]:
+                    o = g.options.get(oid)
+                    if o:
+                        granted_anywhere |= set(o["reward"])
+            for rule in g.rules.values():
+                granted_anywhere |= set(rule["reward"])
+            orphan = [m for m in no_part if m not in granted_anywhere]
+            if orphan:
+                r.note(f"{len(orphan)} 条记忆既没有部件承载、也没有任何奖励来源"
+                       f"（如果是开局自带，需要在代码里显式发放）：{orphan}")
+            else:
+                r.text(f"\n{len(no_part)} 条记忆没有部件承载，但都能通过奖励拿到：{no_part}")
 
     missing = {m: oids for m, oids in required_by.items() if not source_desc.get(m)}
     if missing:
@@ -609,6 +901,67 @@ def analyze(g):
               f"个选项永久锁死；需要在 Option 补 rewardMemory，或在【情绪记忆规则配置表】里补规则")
     elif required_by:
         r.ok("每个被需要的记忆都有产出途径")
+        r.text("\n各记忆的产出方式：\n")
+        r.text("| 记忆 | 被哪些选项需要 | 产出方式 |")
+        r.text("|---|---|---|")
+        for mid in sorted(required_by):
+            r.text(f"| {mid} | {', '.join(required_by[mid][:4])} | "
+                   f"{'；'.join(source_desc[mid][:2])} |")
+
+    # 情绪记忆规则的前置记忆也必须有来源，否则规则永远不触发
+    prereq_missing = {}
+    for rid, rule in g.rules.items():
+        for m in rule["required"]:
+            if not source_desc.get(m):
+                prereq_missing.setdefault(m, []).append(rid)
+    if prereq_missing:
+        r.text(f"\n**规则前置记忆无来源 {len(prereq_missing)} 个**"
+               f"（这些记忆没有产出途径，依赖它们的规则永远不会触发）\n")
+        r.text("| 记忆 | 被哪些规则当作前置 |")
+        r.text("|---|---|")
+        for mid in sorted(prereq_missing):
+            r.text(f"| {mid} | {', '.join(prereq_missing[mid])} |")
+        r.bad(f"{len(prereq_missing)} 个记忆被规则当作前置，但没有任何产出途径")
+
+    # ---------------- 记忆时序：物品得先拿到，才能检查出记忆 ----------------
+    # 物品是在某个节点的「进入动作」发放、「离开动作」移除的，
+    # 所以玩家必须在那个节点的界面里点检查，才能拿到该物品的部件记忆。
+    # 若需要这条记忆的选项出现在物品节点的**前面**（或另一条互不可达的支线上），
+    # 那这个选项在实际游玩里永远开不了 —— 结构可达看不出这个问题。
+    mem_item_node = {}          # mid -> [(itemId, [发放节点])]
+    for iid, item in g.items.items():
+        for pid in item["parts"]:
+            part = g.parts.get(pid)
+            if part and part["memory"]:
+                mem_item_node.setdefault(part["memory"], []).append(
+                    (iid, g.item_grant_nodes(iid)))
+    timing_bad = []
+    reach_cache = {}
+    for oid, o in g.options.items():
+        for m in o["req"]:
+            if m not in mem_item_node:
+                continue
+            holders = [nid for nid, n in g.nodes.items() if oid in n["replies"]]
+            ok = False
+            for iid, gnodes in mem_item_node[m]:
+                for gn in gnodes:
+                    if gn not in reach_cache:
+                        reach_cache[gn] = g.forward_reach(gn)
+                    if any(h in reach_cache[gn] for h in holders) or gn in holders:
+                        ok = True
+            if not ok and holders:
+                timing_bad.append((oid, m, holders[0]))
+    if timing_bad:
+        r.text(f"\n**记忆时序问题 {len(timing_bad)} 处**"
+               f"（选项所在节点无法从「发该记忆的物品节点」走到，说明检查来不及做）\n")
+        r.text("| Option | 需要记忆 | 选项所在节点 | 问题 |")
+        r.text("|---|---|---|---|")
+        for oid, m, nid in timing_bad:
+            item, gnodes = next((i, ns) for i, ns in mem_item_node[m] if ns)
+            r.text(f"| {oid} | {m} | {nid} | 发 {item} 的节点 {','.join(gnodes)} 走不到这里 |")
+        r.bad(f"{len(timing_bad)} 处「先要记忆、后发物品」的时序倒置，实际游玩会锁死")
+    elif mem_item_node:
+        r.ok("所有物品记忆都在需要它的选项之前就能拿到（时序无倒置）")
 
 
     no_route_options = [oid for oid, o in g.options.items() if not o["next"] and not o["end"]]

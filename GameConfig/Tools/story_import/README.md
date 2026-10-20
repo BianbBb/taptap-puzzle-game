@@ -73,10 +73,10 @@ Session 之间只能靠 `nextSessionId` 单链推进（`NarrativeStoryScheduler`
 
 | 缺口 | 影响 | 处理建议 |
 |---|---|---|
-| `Option.RewardMemory` 源表没有这一列 | 记忆只能靠情绪记忆规则激活；规则条数不足时记忆链断裂 | 补列，或在规则表里补齐每条记忆的来源 |
 | `ItemPart` 无 hotspot 坐标 | 部件热点统一填 0.5/0.5（画面正中） | **本版不处理**，后续在 prefab 里重标 |
 | `Emotion.Description` / `Memory.ImageID` | 项目表无对应字段，丢弃 | 当前无影响（配图均为 placeholder） |
 | 情绪 `E06 怀念` / `E07 自我` 源表无颜色 | 已填默认 `#E6E6E6` | 需美术补 `displayColor` 与 UI 图标 |
+| `M98` / `M99` 初始记忆没有产出途径 | 规则 `R01` 前置 `M99`，永远不触发 | 开局自带记忆要在代码里显式发放，或给它们一个部件/规则来源 |
 
 已解决的问题，转换器会自动处理，不再列为缺口：
 
@@ -169,13 +169,37 @@ sed -n '/记忆 ID 语义冲突/,/结论/p' GameConfig/Datas/_import_v1_preview/
 
 解析函数是 `parse_affection_condition()`，支持 `需要好感 5点` / `好感≥5` / `好感 5-10` / `affection >= 5`。
 
-## 记忆获得机制：选项奖励 + 情绪记忆规则
+## 记忆获得机制：物品部件检查（主）+ 选项奖励 + 情绪记忆规则
 
-记忆有两条来源，运行时都会把新记忆并入存档：
+**主路径是"检查物品部件"**，不是选项奖励。完整链路：
+
+```
+剧情节点 OnEnterActionSetID = ADD_CAMERA
+        ↓  物品进入背包
+玩家点开相机 -> 点图片上的热点
+        ↓
+InspectNarrativeItemPart(memoryId)  ->  saveData.AddMemories([memoryId])
+        ↓
+ItemPart.memoryId = M01 / M02 / M07  到手
+```
+
+对应代码：`BattleMainUI.InspectNarrativeItemPart()`；配置在
+`叙事物品部件配置表.memoryId` 和 `叙事物品配置表.partIds`。
+
+**注意物品是"临时持有"**：`ADD_XXX` 在节点的进入动作、`REMOVE_XXX` 在同一个节点的离开动作，
+所以玩家**必须在那个节点的界面里**点开物品检查，离开该节点后物品就没了，
+没检查的部件记忆这局再也拿不到。所以校验器额外做了一次**时序检查**：
+需要某条记忆的选项，必须能从"发那件物品的节点"往后走到，否则算时序倒置。
+
+另两条来源，运行时也会把新记忆并入存档：
 
 1. **选项奖励** `ReplyOptionConfig.rewardMemory`：选中该回复就直接获得。
 2. **情绪记忆规则** `EmotionMemoryRuleConfig`：情绪累计使用次数达到阈值 **且** 前置记忆全部持有时，
    激活奖励记忆。两个条件是 **AND** 关系。
+
+> ⚠️ 早期版本的校验器只算了 1 和 2，漏了物品部件这条主路径，
+> 于是误判"10 条记忆无来源、14 个选项永久锁死"。现在三条都算，
+> 并且用固定点迭代（每轮用已知记忆重算条件可达集），结论才可信。
 
 规则表字段：
 
