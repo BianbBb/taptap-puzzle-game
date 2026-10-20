@@ -47,7 +47,7 @@
     "id": "RADIO",
     "itemName": "收录机",
     "description": "一个旧收音机，磁带仓盖卡死，无法打开。",
-    "imageId": "placeholder",
+    "imageId": "narrative_radio",
     "partIds": [
       "RADIO_PART_01",
       "RADIO_PART_02",

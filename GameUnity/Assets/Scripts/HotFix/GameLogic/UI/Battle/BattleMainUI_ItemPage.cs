@@ -101,6 +101,8 @@ namespace GameLogic
 			{"narrative_clock", new Rect(0.3662f, 0.0596f, 0.2676f, 0.8809f)},
 			{"narrative_camera", new Rect(0.1514f, 0.2334f, 0.6973f, 0.5303f)},
 			{"narrative_glasses", new Rect(0.1484f, 0.3633f, 0.7031f, 0.2734f)},
+			// 收录机 2026-10-21 换新图（1024² 画布，内容 940×470 居中）。
+			{"narrative_radio", new Rect(0.0410f, 0.2705f, 0.9180f, 0.4590f)},
 		};
 
 		/// <summary>
