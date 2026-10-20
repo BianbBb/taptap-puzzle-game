@@ -21,6 +21,7 @@ namespace GameLogic
 	public partial class BattleMainUI
 	{
 		private const string NpcSubtitleRootName = "NpcSubtitlePanel";
+		private const string NpcSpeakerLabelPrefix = "SpeakerLabel";
 		private const int TYPEWRITER_MS_PER_CHAR = 100;
 		private const int TYPEWRITER_PUNCTUATION_EXTRA_MS = 220;
 		/// <summary>打字机每 N 个字播一次音，避免长句变成机关枪。</summary>
@@ -49,7 +50,21 @@ namespace GameLogic
 		private const float ReflectionBodyLineSpacing = 34f;
 		private const float ReflectionContinueRight = 118f;
 		private const float ReflectionContinueBottom = 96f;
+		private const float ReflectionFadeInSeconds = 0.55f;
+		private const float ReflectionContinueFadeSeconds = 0.2f;
 		private static readonly Color ReflectionIconColor = new Color(0.28f, 0.22f, 0.16f, 0.8f);
+
+		// 反思页的输入/打字机状态：整屏点击或回车 = 跳过打字 → 再按一次继续。
+		private bool m_reflectionOverlayActive;
+		private bool m_reflectionTyping;
+		private bool m_reflectionAdvanceLocked;
+		private int m_reflectionInputFrame = -1;
+		private int m_reflectionPresentVersion;
+		private Action m_reflectionContinue;
+		private GameObject m_reflectionOverlayRoot;
+		private TextMeshProUGUI m_reflectionBody;
+		private CanvasGroup m_reflectionContinueGroup;
+		private CanvasGroup m_reflectionCoverGroup;
 		private readonly List<ReplayMessageItem> m_replyItems = new List<ReplayMessageItem>();
 		private readonly List<ReplayEmoItem> m_emotionItems = new List<ReplayEmoItem>();
 		private readonly List<(bool IsPlayer, string Text)> m_messages = new List<(bool, string)>();
@@ -117,7 +132,7 @@ namespace GameLogic
 		private GameObject m_dialoguePanel;
 		private RectTransform m_rtNpcSubtitle;
 		private TextMeshProUGUI m_tmpNpcSubtitle;
-		private TextMeshProUGUI m_tmpNpcSpeaker;
+		private readonly List<TextMeshProUGUI> m_npcSpeakerLabels = new List<TextMeshProUGUI>();
 		private CanvasGroup m_cgNpcContinueHint;
 		private float m_subtitleBodyTopInset;
 		private float m_subtitleBodyBottomInset;
@@ -259,7 +274,7 @@ namespace GameLogic
 			m_dialoguePanel = null;
 			m_rtNpcSubtitle = null;
 			m_tmpNpcSubtitle = null;
-			m_tmpNpcSpeaker = null;
+			m_npcSpeakerLabels.Clear();
 			m_cgNpcContinueHint = null;
 			m_btnRestart = null;
 			m_btnLayoutEdit = null;
@@ -1630,7 +1645,7 @@ namespace GameLogic
 				m_rtNpcSubtitle.anchoredPosition = ReadLayoutPosition("NpcSubtitle", new Vector2(0f, 100f));
 			}
 
-			m_tmpNpcSpeaker = FindSubtitleText(root, "SpeakerLabel");
+			CollectSpeakerLabels(root);
 			m_tmpNpcSubtitle = FindSubtitleText(root, "Frame/BodyText");
 			if (m_tmpNpcSubtitle != null)
 			{
@@ -1661,12 +1676,41 @@ namespace GameLogic
 			return target == null ? null : target.GetComponent<TextMeshProUGUI>();
 		}
 
+		/// <summary>
+		/// 名字可能有多层（阴影、描边副本），全部按 SpeakerLabel 前缀收集，写入时一起同步，
+		/// 在 prefab 里再加 SpeakerLabelShadow2 之类不用改代码。
+		/// </summary>
+		private void CollectSpeakerLabels(Transform root)
+		{
+			m_npcSpeakerLabels.Clear();
+			TextMeshProUGUI[] candidates = root.GetComponentsInChildren<TextMeshProUGUI>(true);
+			for (int i = 0; i < candidates.Length; i++)
+			{
+				TextMeshProUGUI candidate = candidates[i];
+				if (candidate == null)
+				{
+					continue;
+				}
+
+				if (candidate.gameObject.name.StartsWith(NpcSpeakerLabelPrefix, StringComparison.Ordinal))
+				{
+					m_npcSpeakerLabels.Add(candidate);
+				}
+			}
+		}
+
+		private void SetNpcSpeaker(string speaker)
+		{
+			speaker = speaker ?? string.Empty;
+			for (int i = 0; i < m_npcSpeakerLabels.Count; i++)
+			{
+				m_npcSpeakerLabels[i].text = speaker;
+			}
+		}
+
 		private void ClearNpcSubtitle()
 		{
-			if (m_tmpNpcSpeaker != null)
-			{
-				m_tmpNpcSpeaker.text = string.Empty;
-			}
+			SetNpcSpeaker(string.Empty);
 
 			if (m_tmpNpcSubtitle != null)
 			{
@@ -1719,10 +1763,7 @@ namespace GameLogic
 			m_rtNpcSubtitle.gameObject.SetActive(true);
 			SetContinueHintVisible(false, true);
 
-			if (m_tmpNpcSpeaker != null)
-			{
-				m_tmpNpcSpeaker.text = speaker;
-			}
+			SetNpcSpeaker(speaker);
 
 			if (string.IsNullOrEmpty(body))
 			{
@@ -2121,7 +2162,7 @@ namespace GameLogic
 			if (m_scrollMemoryList != null) m_scrollMemoryList.gameObject.SetActive(true);
 			if (m_rtNpcSubtitle != null && m_tmpNpcSubtitle != null)
 			{
-				if (m_tmpNpcSpeaker != null) m_tmpNpcSpeaker.text = string.Empty;
+				SetNpcSpeaker(string.Empty);
 				m_tmpNpcSubtitle.text = $"记忆已满，请点击记忆卡片右上角的删除按钮，保留 {NarrativeRules.MemoryCapacity} 段记忆。";
 				m_tmpNpcSubtitle.maxVisibleCharacters = int.MaxValue;
 				m_tmpNpcSubtitle.ForceMeshUpdate();
@@ -2157,297 +2198,6 @@ namespace GameLogic
 		private void ShowCollection()
 		{
 			GameModule.UIModule.ShowWindowAsync<CollectionWindow>();
-		}
-
-		private void ShowCollectionPage(bool emotions, bool fromTab = false)
-		{
-			if (fromTab) SoundConfigMgr.Instance.PlaySfx(SfxNames.UiTabSwitch, DGame.AudioType.UISound);
-			ShowOverlay("图鉴", emotions ? "圆越大，这份情绪被表达得越多。" : "已获得的记忆", new[]
-			{
-				("记忆", (Action)(() => ShowCollectionPage(false, true))),
-				("情绪", (Action)(() => ShowCollectionPage(true, true))),
-				("关闭", (Action)(() => CloseOverlayAnimated()))
-			}, playSound: !fromTab);
-			if (m_overlayBodyContent == null) return;
-			if (emotions)
-			{
-				BuildEmotionRowAsync().Forget();
-			}
-			else
-			{
-				AddMemoryCollectionCards(NarrativeConfigMgr.Instance.AllMemories);
-			}
-		}
-
-		// 图鉴记忆页卡片尺寸：图片位 175×169（美术切图原尺寸）+ 底部 36px 名字条。
-		private const float MemoryCardWidth = 175f;
-		private const float MemoryCardHeight = 205f;
-		private const float MemoryCardGapX = 11f;
-		private const float MemoryCardGapY = 11f;
-		// body 可用宽度 652（panel 780 - 左右各 64），3 列刚好放下。
-		private const int MemoryCardColumns = 3;
-
-		private void AddMemoryCollectionCards(IReadOnlyList<MemoryConfig> entries)
-		{
-			if (m_overlayBodyContent == null || entries == null) return;
-			NarrativeSaveData saveData = NarrativeSaveData.Get;
-			int rows = (entries.Count + MemoryCardColumns - 1) / MemoryCardColumns;
-			m_overlayBodyContent.sizeDelta = new Vector2(0f,
-				Mathf.Max(120f, 8f + rows * (MemoryCardHeight + MemoryCardGapY)));
-			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
-			for (int i = 0; i < entries.Count; i++)
-			{
-				MemoryConfig entry = entries[i];
-				if (entry == null) continue;
-				int column = i % MemoryCardColumns;
-				int row = i / MemoryCardColumns;
-				Vector2 position = new Vector2(
-					-186f + column * (MemoryCardWidth + MemoryCardGapX),
-					-8f - row * (MemoryCardHeight + MemoryCardGapY));
-				CreateMemoryCard(entry, saveData.HasMemory(entry.Id), position, token);
-			}
-		}
-
-		private void CreateMemoryCard(MemoryConfig entry, bool owned, Vector2 position, CancellationToken token)
-		{
-			var go = new GameObject("MemoryCard_" + entry.Id, typeof(RectTransform), typeof(Image), typeof(Button));
-			go.transform.SetParent(m_overlayBodyContent, false);
-			RectTransform rect = go.GetComponent<RectTransform>();
-			rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
-			rect.pivot = new Vector2(0.5f, 1f);
-			rect.anchoredPosition = position;
-			rect.sizeDelta = new Vector2(MemoryCardWidth, MemoryCardHeight);
-
-			Image hit = go.GetComponent<Image>();
-			hit.color = Color.clear;
-			hit.raycastTarget = true;
-			Button button = go.GetComponent<Button>();
-			button.transition = Selectable.Transition.ColorTint;
-			button.targetGraphic = hit;
-			ColorBlock colors = button.colors;
-			colors.normalColor = Color.white;
-			colors.highlightedColor = new Color(1f, 0.96f, 0.84f, 1f);
-			colors.pressedColor = new Color(0.94f, 0.85f, 0.66f, 1f);
-			colors.selectedColor = colors.highlightedColor;
-			button.colors = colors;
-			button.onClick.AddListener(() =>
-			{
-				if (!button.interactable) return;
-				button.interactable = false;
-				DOTween.Sequence().Append(rect.DOScale(0.94f, 0.08f))
-					.Append(rect.DOScale(1f, 0.12f)).SetUpdate(true).SetLink(go)
-					.OnComplete(() => ShowMemoryCollectionDetail(entry));
-			});
-
-			// 图片位：已解锁用 collection_card_image_slot，未解锁用 collection_card_unable。
-			var frameGo = new GameObject("Frame", typeof(RectTransform), typeof(Image));
-			frameGo.transform.SetParent(go.transform, false);
-			RectTransform frameRect = frameGo.GetComponent<RectTransform>();
-			frameRect.anchorMin = frameRect.anchorMax = new Vector2(0.5f, 1f);
-			frameRect.pivot = new Vector2(0.5f, 1f);
-			frameRect.anchoredPosition = Vector2.zero;
-			frameRect.sizeDelta = new Vector2(175f, 169f);
-			Image frameImage = frameGo.GetComponent<Image>();
-			frameImage.raycastTarget = false;
-			ApplyHudSprite(frameImage, owned ? "collection_card_image_slot" : "collection_card_unable",
-				false, token);
-			// 用图片位当按钮的高亮目标，hover 时有可见反馈（根节点的透明图只负责吃点击）。
-			button.targetGraphic = frameImage;
-
-			string imageId = owned ? entry.ImageId : null;
-			if (!string.IsNullOrWhiteSpace(imageId) && GameModule.ResourceModule.CheckLocationValid(imageId))
-			{
-				var imageGo = new GameObject("Image", typeof(RectTransform), typeof(Image));
-				imageGo.transform.SetParent(frameGo.transform, false);
-				RectTransform imageRect = imageGo.GetComponent<RectTransform>();
-				imageRect.anchorMin = Vector2.zero;
-				imageRect.anchorMax = Vector2.one;
-				imageRect.offsetMin = new Vector2(8f, 8f);
-				imageRect.offsetMax = new Vector2(-8f, -8f);
-				Image image = imageGo.GetComponent<Image>();
-				image.raycastTarget = false;
-				image.preserveAspect = true;
-				image.enabled = false;
-				image.SetSprite(imageId, false, loaded =>
-				{
-					if (IsDestroyed || loaded == null || loaded.sprite == null) return;
-					loaded.enabled = true;
-					loaded.preserveAspect = true;
-					loaded.raycastTarget = false;
-				}, token);
-			}
-
-			TextMeshProUGUI text = CreateOverlayText(go.transform,
-				owned ? entry.MemoryName : "未解锁", 15f,
-				new Vector2(0f, -172f), new Vector2(165f, 30f), TextAlignmentOptions.Center);
-			text.rectTransform.anchorMin = text.rectTransform.anchorMax = new Vector2(0.5f, 1f);
-			text.rectTransform.pivot = new Vector2(0.5f, 1f);
-			text.overflowMode = TextOverflowModes.Ellipsis;
-			text.enableWordWrapping = true;
-			text.enableAutoSizing = true;
-			text.fontSizeMin = 10f;
-			text.fontSizeMax = 15f;
-			text.color = owned ? HudPaperText : new Color(0.55f, 0.5f, 0.44f, 0.9f);
-		}
-
-		private void ShowMemoryCollectionDetail(MemoryConfig entry)
-		{
-			bool owned = entry != null && NarrativeSaveData.Get.HasMemory(entry.Id);
-			ShowOverlay(owned ? entry.MemoryName : "未解锁",
-				owned ? entry.Description : "检查物品上的线索可发现这段记忆。",
-				new[] { ("返回图鉴", (Action)(() => ShowCollectionPage(false))) });
-			if (!owned || entry == null) return;
-			ShowMemoryDetailImage(entry.ImageId);
-		}
-
-		// 图鉴详情大图：collection_image_slot(583×352) 内嵌，512 方图居中留边。
-		private void ShowMemoryDetailImage(string imageId)
-		{
-			if (string.IsNullOrWhiteSpace(imageId) || m_overlayBodyContent == null) return;
-			if (!GameModule.ResourceModule.CheckLocationValid(imageId)) return;
-			CancellationToken token = gameObject.GetCancellationTokenOnDestroy();
-
-			var frameGo = new GameObject("MemoryDetailImage", typeof(RectTransform), typeof(Image));
-			frameGo.transform.SetParent(m_overlayBodyContent, false);
-			RectTransform frameRect = frameGo.GetComponent<RectTransform>();
-			frameRect.anchorMin = frameRect.anchorMax = new Vector2(0.5f, 1f);
-			frameRect.pivot = new Vector2(0.5f, 1f);
-			frameRect.anchoredPosition = new Vector2(0f, -8f);
-			frameRect.sizeDelta = new Vector2(583f, 352f);
-			Image frameImage = frameGo.GetComponent<Image>();
-			frameImage.raycastTarget = false;
-			ApplyHudSprite(frameImage, "collection_image_slot", false, token);
-
-			var imageGo = new GameObject("Image", typeof(RectTransform), typeof(Image));
-			imageGo.transform.SetParent(frameGo.transform, false);
-			RectTransform imageRect = imageGo.GetComponent<RectTransform>();
-			imageRect.anchorMin = Vector2.zero;
-			imageRect.anchorMax = Vector2.one;
-			imageRect.offsetMin = new Vector2(26f, 26f);
-			imageRect.offsetMax = new Vector2(-26f, -26f);
-			Image image = imageGo.GetComponent<Image>();
-			image.raycastTarget = false;
-			image.preserveAspect = true;
-			image.enabled = false;
-			image.SetSprite(imageId, false, loaded =>
-			{
-				if (IsDestroyed || loaded == null || loaded.sprite == null) return;
-				loaded.enabled = true;
-				loaded.preserveAspect = true;
-				loaded.raycastTarget = false;
-			}, token);
-
-			// 图片占位，把正文推到图片下方（与 ShowNarrativeItemImage 同款做法）。
-			TextMeshProUGUI bodyText = m_overlayBodyContent.GetComponentInChildren<TextMeshProUGUI>(true);
-			if (bodyText == null) return;
-			bodyText.rectTransform.anchoredPosition = new Vector2(0f, -372f);
-			bodyText.rectTransform.offsetMin = new Vector2(24f, bodyText.rectTransform.offsetMin.y);
-			bodyText.rectTransform.offsetMax = new Vector2(-24f, bodyText.rectTransform.offsetMax.y);
-			Canvas.ForceUpdateCanvases();
-			bodyText.ForceMeshUpdate();
-			float textHeight = Mathf.Max(bodyText.preferredHeight + 24f, 80f);
-			bodyText.rectTransform.sizeDelta = new Vector2(bodyText.rectTransform.sizeDelta.x, textHeight);
-			m_overlayBodyContent.sizeDelta = new Vector2(0f, textHeight + 400f);
-		}
-
-		// 图鉴情绪页：一行固定展示全部情绪，圆直径随「被表达次数」增长。
-		private const float EmotionCircleSpacing = 16f;
-		private const float EmotionCircleMinDiameter = 40f;
-		private const float EmotionCircleMaxDiameterCap = 100f;
-		// 表达满这个次数后直径封顶；调它可以改"长大"的手感。
-		private const float EmotionCircleFullCount = 9f;
-		// overlay body 的实际可用宽度（panel 780 - 左右各 64 padding）。
-		private const float EmotionCircleRowWidth = 600f;
-
-		private async UniTaskVoid BuildEmotionRowAsync()
-		{
-			RectTransform host = m_overlayBodyContent;
-			if (host == null) return;
-
-			IReadOnlyList<EmotionConfig> all = NarrativeConfigMgr.Instance.AllEmotions;
-			var entries = new List<EmotionConfig>(all.Count);
-			for (int i = 0; i < all.Count; i++)
-			{
-				EmotionConfig entry = all[i];
-				if (entry == null || IsNoneEmotionConfig(entry.Id)) continue;
-				entries.Add(entry);
-			}
-
-			if (entries.Count == 0) return;
-
-			NarrativeSaveData saveData = NarrativeSaveData.Get;
-			// 情绪数量变化时自动收缩上限，保证一排始终塞得进面板。
-			float maxDiameter = Mathf.Max(EmotionCircleMinDiameter,
-				Mathf.Min(EmotionCircleMaxDiameterCap,
-					(EmotionCircleRowWidth - (entries.Count - 1) * EmotionCircleSpacing) / entries.Count));
-
-			// 让开 ShowOverlay 生成的那行正文，它是 host 的第一个子物体。
-			float topOffset = 48f;
-			if (host.childCount > 0 && host.GetChild(0).GetComponent<TextMeshProUGUI>() is TextMeshProUGUI label)
-			{
-				topOffset = Mathf.Max(label.preferredHeight, 32f) + 16f;
-			}
-
-			var row = new GameObject("EmotionRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-			row.transform.SetParent(host, false);
-			RectTransform rowRect = row.GetComponent<RectTransform>();
-			rowRect.anchorMin = rowRect.anchorMax = new Vector2(0.5f, 1f);
-			rowRect.pivot = new Vector2(0.5f, 1f);
-			rowRect.anchoredPosition = new Vector2(0f, -topOffset);
-			rowRect.sizeDelta = new Vector2(EmotionCircleRowWidth, maxDiameter);
-
-			// 与对话里的情绪条同一套布局参数（childControlWidth=false 时尺寸由子物体自身决定）。
-			HorizontalLayoutGroup layout = row.GetComponent<HorizontalLayoutGroup>();
-			layout.childAlignment = TextAnchor.MiddleCenter;
-			layout.spacing = EmotionCircleSpacing;
-			layout.childControlWidth = false;
-			layout.childControlHeight = false;
-			layout.childForceExpandWidth = false;
-			layout.childForceExpandHeight = false;
-
-			for (int i = 0; i < entries.Count; i++)
-			{
-				EmotionConfig emotion = entries[i];
-				ReplayEmoItem item = await CreateWidgetByTypeAsync<ReplayEmoItem>(rowRect, false);
-				// 等待期间 overlay 可能被关掉或换了内容，此时丢弃本次构建。
-				if (IsDestroyed || item == null || m_overlayBodyContent != host) return;
-
-				bool owned = saveData.HasEmotion(emotion.Id);
-				item.SetCompactLabel();
-				if (owned)
-				{
-					item.SetData(emotion);
-				}
-				else
-				{
-					item.SetPlaceholder(emotion);
-				}
-
-				float diameter = Mathf.Lerp(EmotionCircleMinDiameter, maxDiameter,
-					Mathf.Clamp01(saveData.GetEmotionUseCount(emotion.Id) / EmotionCircleFullCount));
-				item.rectTransform.sizeDelta = new Vector2(diameter, diameter);
-
-				EmotionConfig captured = emotion;
-				bool capturedOwned = owned;
-				item.BindClickEvent(_ => ShowEmotionDetail(captured, capturedOwned), needEmptyImg: true);
-				item.Show(true);
-			}
-
-			host.sizeDelta = new Vector2(0f, topOffset + maxDiameter + 24f);
-		}
-
-		private static bool IsNoneEmotionConfig(string emotionId)
-			=> string.Equals(emotionId, NarrativeRules.NoneEmotionId, StringComparison.OrdinalIgnoreCase) ||
-			   string.Equals(emotionId, NarrativeRules.NoneEmotionConfigId, StringComparison.OrdinalIgnoreCase);
-
-		private void ShowEmotionDetail(EmotionConfig entry, bool owned)
-		{
-			int useCount = NarrativeSaveData.Get.GetEmotionUseCount(entry.Id);
-			string body = owned
-				? (useCount > 0 ? $"这份情绪已被记住。\n表达过 {useCount} 次。" : "这份情绪已被记住。")
-				: "继续推进剧情可发现这份情绪。";
-			ShowOverlay(owned ? entry.EmotionName : "未解锁", body,
-				new[] { ("返回图鉴", (Action)(() => ShowCollectionPage(true))) });
 		}
 
 		private void ShowNarrativeItem(string itemId)
@@ -2973,7 +2723,7 @@ namespace GameLogic
 			DestroyOverlay();
 			EnsureEventSystem();
 
-			var blocker = new GameObject("NarrativeOverlay", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
+			var blocker = new GameObject("NarrativeOverlay", typeof(RectTransform), typeof(Image));
 			blocker.transform.SetParent(transform, false);
 			blocker.transform.SetAsLastSibling();
 			RectTransform blockerRect = blocker.GetComponent<RectTransform>();
@@ -2987,10 +2737,14 @@ namespace GameLogic
 			ApplyHudSprite(blockerImage, ReflectionBackgroundLocation, false,
 				gameObject.GetCancellationTokenOnDestroy());
 			m_overlay = blocker;
+			m_reflectionOverlayRoot = blocker;
+			m_reflectionPresentVersion++;
 
-			CanvasGroup group = blocker.GetComponent<CanvasGroup>();
-			group.alpha = 0f;
-			group.DOFade(1f, 0.3f).SetUpdate(true).SetLink(blocker);
+			// 整屏都可推进：点背景、点纸面、点「继续」走同一个入口。
+			Button advance = blocker.AddComponent<Button>();
+			advance.transition = Selectable.Transition.None;
+			advance.targetGraphic = blockerImage;
+			advance.onClick.AddListener(OnReflectionAdvanceInput);
 
 			// 纸面容器：锚定到底图里的纸面范围，节点名保持 Panel 以兼容外层逻辑。
 			var paperObject = new GameObject("Panel", typeof(RectTransform));
@@ -3026,13 +2780,185 @@ namespace GameLogic
 			bodyRect.pivot = new Vector2(0.5f, 0.5f);
 			bodyRect.offsetMin = new Vector2(ReflectionTextInsetLeft, ReflectionBodyBottom);
 			bodyRect.offsetMax = new Vector2(-ReflectionTextInsetRight, -ReflectionBodyTop);
+			bodyText.maxVisibleCharacters = 0;
 
-			CreateReflectionContinue(paper, onContinue);
+			m_reflectionBody = bodyText;
+			m_reflectionContinueGroup = CreateReflectionContinue(paper);
+			m_reflectionContinueGroup.alpha = 0f;
+
+			// 黑屏盖在最上层，随后渐隐露出底图；开场期间点一下可整块跳过。
+			CreateReflectionCover(blocker.transform);
+
+			m_reflectionOverlayActive = true;
+			m_reflectionTyping = true;
+			m_reflectionAdvanceLocked = false;
+			m_reflectionContinue = onContinue;
+			PlayReflectionIntroAsync(bodyText, body, m_reflectionPresentVersion).Forget();
 		}
 
-		private void CreateReflectionContinue(Transform parent, Action onContinue)
+		private void CreateReflectionCover(Transform parent)
 		{
-			var go = new GameObject("Continue", typeof(RectTransform), typeof(Image), typeof(Button));
+			var go = new GameObject("BlackCover", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
+			go.transform.SetParent(parent, false);
+			go.transform.SetAsLastSibling();
+			RectTransform rect = go.GetComponent<RectTransform>();
+			rect.anchorMin = Vector2.zero;
+			rect.anchorMax = Vector2.one;
+			rect.offsetMin = Vector2.zero;
+			rect.offsetMax = Vector2.zero;
+			Image image = go.GetComponent<Image>();
+			image.color = Color.black;
+			image.raycastTarget = false;
+			CanvasGroup group = go.GetComponent<CanvasGroup>();
+			group.alpha = 1f;
+			group.blocksRaycasts = false;
+			m_reflectionCoverGroup = group;
+		}
+
+		private void ClearReflectionCover()
+		{
+			if (m_reflectionCoverGroup == null) return;
+			GameObject cover = m_reflectionCoverGroup.gameObject;
+			m_reflectionCoverGroup.DOKill();
+			m_reflectionCoverGroup = null;
+			if (cover != null) UnityEngine.Object.Destroy(cover);
+		}
+
+		private async UniTask PlayReflectionIntroAsync(TextMeshProUGUI body, string text, int version)
+		{
+			// 1) 黑屏渐隐（这期间点击 = 直接跳过，文字与底图一起出现）
+			float elapsed = 0f;
+			while (elapsed < ReflectionFadeInSeconds)
+			{
+				if (IsDestroyed || version != m_reflectionPresentVersion) return;
+				if (!m_reflectionTyping) break;
+				elapsed += Time.unscaledDeltaTime;
+				if (m_reflectionCoverGroup != null)
+				{
+					m_reflectionCoverGroup.alpha = 1f - Mathf.Clamp01(elapsed / ReflectionFadeInSeconds);
+				}
+				await UniTask.Yield(PlayerLoopTiming.Update);
+			}
+
+			if (IsDestroyed || version != m_reflectionPresentVersion) return;
+			ClearReflectionCover();
+			if (!m_reflectionTyping) return;
+
+			// 2) 逐字打出正文
+			await RunReflectionTypewriterAsync(body, text, version);
+		}
+
+		private async UniTask RunReflectionTypewriterAsync(TextMeshProUGUI body, string text, int version)
+		{
+			if (body == null || string.IsNullOrEmpty(text))
+			{
+				m_reflectionTyping = false;
+				ShowReflectionContinueHint();
+				return;
+			}
+
+			Canvas.ForceUpdateCanvases();
+			body.ForceMeshUpdate();
+			int total = body.textInfo.characterCount;
+			for (int i = 1; i <= total; i++)
+			{
+				if (IsDestroyed || version != m_reflectionPresentVersion) return;
+				if (!m_reflectionTyping) break;
+
+				body.maxVisibleCharacters = i;
+				PlayTypewriterTick(i, text);
+				int delayMs = TYPEWRITER_MS_PER_CHAR;
+				if (i - 1 < text.Length && IsTypewriterPunctuation(text[i - 1]))
+				{
+					delayMs += TYPEWRITER_PUNCTUATION_EXTRA_MS;
+				}
+
+				float remain = delayMs / 1000f;
+				while (remain > 0f)
+				{
+					if (IsDestroyed || version != m_reflectionPresentVersion) return;
+					if (!m_reflectionTyping) break;
+					await UniTask.Yield(PlayerLoopTiming.Update);
+					remain -= Time.unscaledDeltaTime;
+				}
+			}
+
+			if (IsDestroyed || version != m_reflectionPresentVersion) return;
+			body.maxVisibleCharacters = total;
+			m_reflectionTyping = false;
+			ShowReflectionContinueHint();
+		}
+
+		/// <summary>跳过打字机：立刻出全文（若还在黑屏渐隐，也一并撤掉黑屏）。</summary>
+		private void SkipReflectionTyping()
+		{
+			m_reflectionTyping = false;
+			ClearReflectionCover();
+			if (m_reflectionBody != null)
+			{
+				m_reflectionBody.maxVisibleCharacters = int.MaxValue;
+			}
+
+			ShowReflectionContinueHint();
+		}
+
+		private void ShowReflectionContinueHint()
+		{
+			if (m_reflectionContinueGroup == null) return;
+			if (m_reflectionContinueGroup.alpha >= 1f) return;
+			m_reflectionContinueGroup.DOKill();
+			m_reflectionContinueGroup.DOFade(1f, ReflectionContinueFadeSeconds).SetUpdate(true)
+				.SetLink(m_reflectionContinueGroup.gameObject);
+		}
+
+		/// <summary>反思页唯一的推进入口：打字中 = 出全文，出完 = 继续流程。</summary>
+		private void OnReflectionAdvanceInput()
+		{
+			if (!m_reflectionOverlayActive) return;
+			if (m_overlay == null || m_overlay != m_reflectionOverlayRoot) return;
+			// 同一次按键可能同时走 EventSystem 的 Submit 和 OnUpdate 的键检测，按帧去重。
+			if (m_reflectionInputFrame == Time.frameCount) return;
+			m_reflectionInputFrame = Time.frameCount;
+			if (m_reflectionTyping)
+			{
+				SkipReflectionTyping();
+				return;
+			}
+
+			if (m_reflectionAdvanceLocked) return;
+			m_reflectionAdvanceLocked = true;
+			m_reflectionOverlayActive = false;
+			Action callback = m_reflectionContinue;
+			callback?.Invoke();
+			if (m_overlay == m_reflectionOverlayRoot)
+			{
+				// 回调没把这一屏关掉（例如当前正忙），恢复可交互，别把玩家卡住。
+				m_reflectionContinue = callback;
+				m_reflectionOverlayActive = true;
+				m_reflectionAdvanceLocked = false;
+				return;
+			}
+
+			m_reflectionContinue = null;
+		}
+
+		private static bool WasReflectionAdvanceKeyPressed()
+		{
+#if ENABLE_INPUT_SYSTEM
+			if (Keyboard.current == null) return false;
+			return Keyboard.current.enterKey.wasPressedThisFrame ||
+				Keyboard.current.numpadEnterKey.wasPressedThisFrame ||
+				Keyboard.current.spaceKey.wasPressedThisFrame;
+#else
+			return Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) ||
+				Input.GetKeyDown(KeyCode.Space);
+#endif
+		}
+
+		private CanvasGroup CreateReflectionContinue(Transform parent)
+		{
+			var go = new GameObject("Continue", typeof(RectTransform), typeof(Image), typeof(Button),
+				typeof(CanvasGroup));
 			go.transform.SetParent(parent, false);
 			RectTransform rect = go.GetComponent<RectTransform>();
 			rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
@@ -3045,12 +2971,7 @@ namespace GameLogic
 			Button button = go.GetComponent<Button>();
 			button.transition = Selectable.Transition.None;
 			button.targetGraphic = hitArea;
-			button.onClick.AddListener(() =>
-			{
-				if (!button.interactable) return;
-				button.interactable = false;
-				onContinue?.Invoke();
-			});
+			button.onClick.AddListener(OnReflectionAdvanceInput);
 
 			CreateReflectionEnterIcon(go.transform, 30f);
 
@@ -3064,6 +2985,7 @@ namespace GameLogic
 			labelRect.pivot = new Vector2(0.5f, 0.5f);
 			labelRect.offsetMin = new Vector2(44f, 0f);
 			labelRect.offsetMax = Vector2.zero;
+			return go.GetComponent<CanvasGroup>();
 		}
 
 		// 回车（↵）标识：横笔 + 右侧竖笔 + 左侧箭头，全部用空白 Image 拼，不依赖字体字形。
@@ -3283,6 +3205,17 @@ namespace GameLogic
 			m_overlay = null;
 			m_debugNodeInput = null;
 			m_overlayBodyContent = null;
+
+			// 停掉还在跑的反思开场：打字循环靠版本号自取消。
+			m_reflectionPresentVersion++;
+			m_reflectionOverlayActive = false;
+			m_reflectionTyping = false;
+			m_reflectionAdvanceLocked = false;
+			m_reflectionContinue = null;
+			m_reflectionBody = null;
+			m_reflectionContinueGroup = null;
+			m_reflectionCoverGroup = null;
+			m_reflectionOverlayRoot = null;
 		}
 
 		private bool IsPsdSettingsOverlay()
@@ -4380,6 +4313,11 @@ namespace GameLogic
 				if (m_overlay == null) ShowDebugPanel();
 				else if (IsPsdSettingsOverlay()) CloseSettingsOverlay();
 				else DestroyOverlay();
+			}
+			if (m_reflectionOverlayActive && m_reflectionOverlayRoot != null &&
+				m_overlay == m_reflectionOverlayRoot && WasReflectionAdvanceKeyPressed())
+			{
+				OnReflectionAdvanceInput();
 			}
 			base.OnUpdate();
 		}
