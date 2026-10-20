@@ -521,6 +521,22 @@ namespace GameLogic
 			SetEmotionItemsActive(false);
 			m_tfReplayEmoNode.gameObject.SetActive(false);
 			m_tfReplayMessageNode.gameObject.SetActive(false);
+
+			// 结语卡：正片最后一句不进气泡，整块画面渐暗后只在黑底上出字。
+			// HUD 不单独收，让它被黑幕一起吃掉，比先闪一下空对话面板自然。
+			if (IsEndingCardTurn(story))
+			{
+				SetDialogueAdvanceCatcherActive(false);
+				await PlayEndingCardAsync(story.NpcText);
+				if (IsDestroyed || presentVersion != m_dialoguePresentVersion)
+				{
+					return;
+				}
+
+				await AutoAdvanceStoryNodeAsync(story, presentVersion);
+				return;
+			}
+
 			bool npcDialogue = IsNpcDialogueTurn(story);
 			SetDialoguePresentationMode(npcDialogue);
 			m_advanceClickPending = false;
@@ -2348,6 +2364,20 @@ namespace GameLogic
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			if (saveData.DayPhase == NarrativeDayPhase.Active && string.IsNullOrWhiteSpace(saveData.CurrentSessionId))
 				saveData.BeginDayMonologue();
+
+			// 正式结局本来就没有「明天」：S09 没写日终独白时，反思页只会显示一句程序兜底文案，
+			// 把刚出的结尾字幕顶掉。这里直接结算到结局（记忆清理仍照常走）；
+			// 哪天把该 Session 的 dayMonologue 补上，就会自动恢复反思页。
+			NarrativeSessionConfig completedSession =
+				NarrativeConfigMgr.Instance.GetSession(saveData.LastCompletedSessionId);
+			if (saveData.DayPhase == NarrativeDayPhase.Monologue && completedSession != null &&
+				completedSession.IsFormalEnding && string.IsNullOrWhiteSpace(completedSession.DayMonologue))
+			{
+				saveData.CompleteDayMonologue(m_storyScheduler.FindNextScheduledDay(saveData));
+				AdvanceFromDayPhase(saveData);
+				return;
+			}
+
 			ShowDayMonologue();
 		}
 
