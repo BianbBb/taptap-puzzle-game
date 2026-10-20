@@ -70,6 +70,28 @@ BACKGROUND_MAP = {
     "仓库": "scene_zhou",
 }
 
+# 源表 BackGroundID -> 开场过场卡上的地点文案（Session.titleLocation）
+LOCATION_LABEL_MAP = {
+    "修理铺-收音机修复前": "老周修理铺",
+    "修理铺-收音机修复后": "老周修理铺",
+    "陈果卧室-修复前": "陈果房间",
+    "陈果卧室-修复后": "陈果房间",
+    "陈先生卧室-修复前": "父母房间",
+    "陈先生卧室-修复后": "父母房间",
+    "仓库": "仓库",
+}
+
+
+def format_cn_date(value):
+    """源表 SessionDate -> `2026年9月30日`；解析不了就原样返回。"""
+    if isinstance(value, (datetime.datetime, datetime.date)):
+        return f"{value.year}年{value.month}月{value.day}日"
+    # 源表这一列是 Excel 日期序列号（46295 -> 2026-09-30），不是 datetime
+    if isinstance(value, (int, float)) and 20000 <= value <= 80000:
+        day = datetime.date(1899, 12, 30) + datetime.timedelta(days=int(value))
+        return f"{day.year}年{day.month}月{day.day}日"
+    return cell_str(value)
+
 
 # ----------------------------------------------------------------------------
 # 基础解析工具
@@ -237,6 +259,23 @@ CORR_TO_SRC_MEMORY = {
     "M16": "M19",  # 旧事重提      -> 磁带记忆2
     "M17": "M18",  # 初见你        -> 磁带记忆1
     "M18": "M17",  # 起死回生(对话) -> 娃娃记忆4
+}
+
+
+# ----------------------------------------------------------------------------
+# 记忆配图：生产表（旧剧情）里已经做好的 9 张记忆图，按**内容**挑出能直接复用的。
+# 不能按 ID 继承 —— 两代表里 M07 以后 ID 含义就不同了（见上面 CORR_TO_SRC_MEMORY）。
+# 也不能按名字继承 —— 旧表把「报时鸟」那张图挂在「钟表记忆3」名下，而 V1.0 的
+# 钟表记忆3 讲的是上弦孔生锈，硬套会把图配错。
+# 左 = V1.0 记忆ID，右 = 生产表已存在的 imageId。
+# ----------------------------------------------------------------------------
+MEMORY_ART_CARRY = {
+    "M01": "mem_camera_dead",     # 相机记忆1：弹簧老化、快门卡死
+    "M02": "mem_camera_lens",     # 相机记忆2：镜头起雾
+    "M03": "mem_glasses_frame",   # 眼镜记忆1：镜架
+    "M04": "mem_glasses_temple",  # 眼镜记忆2：镜腿
+    "M05": "mem_glasses_lens",    # 眼镜记忆3：镜片
+    "M08": "mem_clock_bird",      # 钟表记忆1：布谷鸟整点报时（旧表误挂在「钟表记忆3」名下）
 }
 
 
@@ -527,6 +566,7 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
     # ---------- 2. 记忆表 ----------
     rep.h("记忆配置表")
     mem_out = []
+    mem_art_inherited = []
     for r in mem_rows:
         mid = cell_str(r[col(mem_h, "MemoryID")])
         name = cell_str(r[col(mem_h, "Name")])
@@ -534,7 +574,21 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
         emos = parse_list(get(r, mem_h, "EmotionTagIDs"))
         # 生产表已有 imageId 列（策划手工加），源表 ImageID 目前都是 placeholder
         img = cell_str(get(r, mem_h, "ImageID"))
+        if not img or img == "placeholder":
+            img = MEMORY_ART_CARRY.get(mid, "")
+            if img:
+                mem_art_inherited.append((mid, img))
         mem_out.append([mid, name, desc, "" if img == "placeholder" else img, ",".join(emos)])
+    if mem_art_inherited:
+        rep.note("MEMORY_ART_INHERITED",
+                 f"按内容复用生产表已有记忆图 {mem_art_inherited}；"
+                 f"其余记忆 imageId 为空（源表就是 placeholder），运行时只显示记忆名不留白块")
+    mem_art_missing = [row[0] for row in mem_out if not row[3]]
+    if mem_art_missing:
+        rep.warn("MEMORY_ART_MISSING",
+                 f"{len(mem_art_missing)} 条记忆没有配图：{mem_art_missing}。"
+                 f"生产表还有没被复用的旧图可参考：mem_doll_repair / mem_doll_words / mem_doll_token"
+                 f"（对应 娃娃记忆 系列，需策划确认归属）")
     # ---------- 记忆 ID 语义一致性检查（源表 vs 生产表）----------
     prod_mem = DATAS_DIR / "记忆配置表.xlsx"
     mem_conflicts = []
@@ -600,19 +654,63 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
     # ---------- 3. 物品 / 部件 ----------
     rep.h("叙事物品配置表 / 叙事物品部件配置表")
     item_out = []
+    part_out = []
+
+    # 生产表里 GLASS / CAMERA / CLOCK / DOLL 以及 GLASS_PART_01.. 等部件**已经有真实配图与热点**，
+    # 而源表这一版统一写的是 placeholder。直接覆盖会把已做好的美术冲掉，
+    # 所以按**同 ID**继承生产表的 imageId / hotspot；源表真要改图时填了非 placeholder 就以源表为准。
+    prod_item_art = {}      # itemId -> imageId
+    prod_item_path = DATAS_DIR / "叙事物品配置表.xlsx"
+    if prod_item_path.exists():
+        pws = openpyxl.load_workbook(prod_item_path, data_only=True).worksheets[0]
+        ph = [cell_str(c.value) for c in pws[1]]
+        if "id" in ph and "imageId" in ph:
+            ii, ni = ph.index("id"), ph.index("imageId")
+            for row in pws.iter_rows(min_row=5, values_only=True):
+                if ii < len(row) and row[ii]:
+                    img = cell_str(row[ni]) if ni < len(row) else ""
+                    if img and img != "placeholder":
+                        prod_item_art[cell_str(row[ii])] = img
+
+    prod_part_art = {}      # partId -> (imageId, hotspotX, hotspotY)
+    prod_part_path = DATAS_DIR / "叙事物品部件配置表.xlsx"
+    if prod_part_path.exists():
+        pws = openpyxl.load_workbook(prod_part_path, data_only=True).worksheets[0]
+        ph = [cell_str(c.value) for c in pws[1]]
+        if "id" in ph and "imageId" in ph:
+            pi, im = ph.index("id"), ph.index("imageId")
+            xi = ph.index("hotspotX") if "hotspotX" in ph else -1
+            yi = ph.index("hotspotY") if "hotspotY" in ph else -1
+            for row in pws.iter_rows(min_row=5, values_only=True):
+                if pi >= len(row) or not row[pi]:
+                    continue
+                img = cell_str(row[im]) if im < len(row) else ""
+                try:
+                    hx = float(row[xi]) if xi >= 0 and row[xi] is not None else 0.5
+                    hy = float(row[yi]) if yi >= 0 and row[yi] is not None else 0.5
+                except (TypeError, ValueError):
+                    hx, hy = 0.5, 0.5
+                if img and img != "placeholder":
+                    prod_part_art[cell_str(row[pi])] = (img, hx, hy)
+
+    inherited_items, inherited_parts = [], []
     for r in item_rows:
         iid = cell_str(r[col(item_h, "ItemID")])
         if not iid:
             continue
+        img = cell_str(r[col(item_h, "ImageID")])
+        if not img or img == "placeholder":
+            img = prod_item_art.get(iid, "placeholder")
+            if img != "placeholder":
+                inherited_items.append((iid, img))
         item_out.append([
             iid,
             cell_str(r[col(item_h, "Name")]),
             cell_str(r[col(item_h, "Description")]),
-            cell_str(r[col(item_h, "ImageID")]) or "placeholder",
+            img,
             ",".join(parse_list(get(r, item_h, "ItemPartList"))),
         ])
 
-    part_out = []
     if part_h is None:
         rep.gap("ItemPart", "源文件找不到 ItemPart 子表，项目部件表将无数据")
     else:
@@ -620,16 +718,50 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
             pid = cell_str(r[col(part_h, "ItemPartID")])
             if not pid:
                 continue
+            img, hx, hy = "placeholder", 0.5, 0.5
+            hit = prod_part_art.get(pid)
+            if hit:
+                img, hx, hy = hit
+                inherited_parts.append((pid, img))
             part_out.append([
                 pid,
                 cell_str(r[col(part_h, "ItemPartName")]),
-                "placeholder",                       # 部件图源表未给
+                img,
                 cell_str(r[col(part_h, "MemoryID")]),
-                0.5, 0.5,                            # 源表无热点坐标，填画面中心
+                hx, hy,
             ])
-        rep.warn("ItemPart.HotspotPlaceholder",
-                 "源表 ItemPart 无热点坐标，本版统一填 0.5/0.5（画面正中）占位；"
-                 "热点位置后续在 prefab 里重标，本期不处理")
+
+        if inherited_items or inherited_parts:
+            rep.note("ART_INHERITED",
+                     f"按同 ID 继承生产表配图：物品 {inherited_items or '无'}，"
+                     f"部件 {inherited_parts or '无'}（源表这一版写的是 placeholder，"
+                     f"直接覆盖会冲掉已有美术）")
+
+        # 没继承到真实热点的部件不能都堆在 (0.5,0.5)：物品有图时运行时会按热点生成点击区，
+        # 全部重叠就等于只有最上面那个能点，其余部件对应的记忆永远拿不到（剧情被锁死）。
+        # 这里按 8 宫格均匀铺开当占位，保证每个部件都可点；美术补图后重标即可。
+        presets = [(0.30, 0.30), (0.70, 0.30), (0.30, 0.70), (0.70, 0.70),
+                   (0.50, 0.20), (0.50, 0.80), (0.20, 0.50), (0.80, 0.50)]
+        by_part_id = {p[0]: p for p in part_out}
+        preset_assigned = []
+        for item in item_out:
+            index = 0
+            for pid in (item[4].split(",") if item[4] else []):
+                pid = pid.strip()
+                part = by_part_id.get(pid)
+                if part is None or pid in prod_part_art:
+                    continue
+                if index < len(presets):
+                    part[4], part[5] = presets[index]
+                    preset_assigned.append(pid)
+                index += 1
+
+        if preset_assigned:
+            rep.warn("ItemPart.HotspotPreset",
+                     f"{len(preset_assigned)} 个部件没有真实热点，已按 8 宫格均匀铺开占位"
+                     f"（保证每个部件都能点到）：{preset_assigned}。"
+                     f"物品图若是 placeholder，运行时会退回「检查部件」按钮列表，热点不生效；"
+                     f"美术补图后请重标这些坐标")
 
     # ---------- 4. 动作表 ----------
     rep.h("叙事动作配置表")
@@ -730,6 +862,7 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
     else:
         day_values = list(range(1, len(ses_rows) + 1))
 
+    prev_title_date = ""
     for idx, r in enumerate(ses_rows):
         sid = cell_str(r[col(ses_h, "SessionID")])
         if not sid:
@@ -746,6 +879,14 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
         if bg_raw and not bg_id:
             rep.warn("BACKGROUND_UNMAPPED",
                      f"Session {sid} 的场景名 `{bg_raw}` 不在 BACKGROUND_MAP 里，backgroundId 留空（会回退按 npcId 选图）")
+        # 同一天连续的几幕只在第一幕前播过场卡（如第三幕拆成 S03 陈果房间 / S04 修理铺）
+        title_date = format_cn_date(get(r, ses_h, "SessionDate"))
+        title_location = LOCATION_LABEL_MAP.get(bg_raw, "")
+        if title_date and title_date == prev_title_date:
+            title_date = ""
+            title_location = ""
+        if title_date:
+            prev_title_date = title_date
         ses_out.append([
             sid,
             cell_str(r[col(ses_h, "Name")]),
@@ -757,6 +898,8 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
             "True" if (not nexts and idx == len(ses_rows) - 1) else "False",
             ",".join(npcs),
             bg_id,
+            title_date,
+            title_location,
         ])
 
     rep.p(f"- 场景背景：源表 `BackGroundID` 已映射到现有场景占位（{len(BACKGROUND_MAP)} 个映射），"
@@ -814,6 +957,7 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
             ",".join(parse_list(get(r, turn_h, "OnExitActionSetID"))),
             ",".join(extra),
             parse_int(get(r, turn_h, "Priority"), 1),
+            "",
         ])
 
     if aff_conversions:
@@ -866,7 +1010,9 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
           ("dayMonologue", "string", "该Session结束后的AI日终独白"),
           ("isFormalEnding", "bool", "是否在日终后进入正式结局"),
           ("npcSet", "string", "按剧情配表 Session.NPCSet 的顺序填写 NPC 名，逗号分隔；用于 NPC 对话左右站位"),
-          ("backgroundId", "string", "场景背景 ID；为空时回退到按 npcId 选择（旧逻辑）")],
+          ("backgroundId", "string", "场景背景 ID；为空时回退到按 npcId 选择（旧逻辑）"),
+          ("titleDate", "string", "开场过场卡日期，如 2026年9月30日；为空则本幕不播过场"),
+          ("titleLocation", "string", "开场过场卡地点，如 老周修理铺；为空则本幕不播过场")],
          ses_out),
         ("剧情节点配置表.xlsx", "剧情节点配置表",
          [("id", "string", "节点ID"), ("npcId", "string", "NPC ID"), ("npcText", "string", "NPC文本"),
@@ -878,7 +1024,8 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
           ("onEnterActionIds", "(list#sep=,),string", "进入动作"),
           ("onExitActionIds", "(list#sep=,),string", "离开动作"),
           ("extraNextNodeIds", "(list#sep=,),string", "额外后继候选"),
-          ("priority", "int", "节点优先级")],
+          ("priority", "int", "节点优先级"),
+          ("backgroundId", "string", "本节点起切换到的场景 ID；为空表示沿用所属 Session 的 backgroundId")],
          node_out),
         ("回复选项配置表.xlsx", "回复选项配置表",
          [("id", "string", "回复ID"), ("replyText", "string", "正常回复"),

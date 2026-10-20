@@ -42,21 +42,39 @@
     "inputValue": ""
   },
   {
-    "id": "ADD_RADIO_DAD",
-    "actionType": "GrantItem",
-    "targetId": "RADIO_DAD",
+    "id": "REMOVE_DOLL",
+    "actionType": "RemoveItem",
+    "targetId": "DOLL",
     "inputValue": ""
   },
   {
-    "id": "ADD_RADIO_ZHOU",
+    "id": "ADD_RADIO",
     "actionType": "GrantItem",
-    "targetId": "RADIO_ZHOU",
+    "targetId": "RADIO",
     "inputValue": ""
   },
   {
-    "id": "ADD_RADIO_REPAIRED",
+    "id": "REMOVE_RADIO",
+    "actionType": "RemoveItem",
+    "targetId": "RADIO",
+    "inputValue": ""
+  },
+  {
+    "id": "ADD_TAPE",
     "actionType": "GrantItem",
-    "targetId": "RADIO_REPAIRED",
+    "targetId": "TAPE",
+    "inputValue": ""
+  },
+  {
+    "id": "REMOVE_TAPE",
+    "actionType": "RemoveItem",
+    "targetId": "TAPE",
+    "inputValue": ""
+  },
+  {
+    "id": "GRANT_EMOTION_SELF",
+    "actionType": "GrantEmotion",
+    "targetId": "E07",
     "inputValue": ""
   }
 ]

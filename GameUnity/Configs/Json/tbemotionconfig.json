@@ -1,10 +1,5 @@
 [
   {
-    "id": "E01",
-    "emotionName": "理解",
-    "displayColor": "#F5C6CB"
-  },
-  {
     "id": "E02",
     "emotionName": "喜悦",
     "displayColor": "#CDE7F0"
@@ -25,8 +20,13 @@
     "displayColor": "#E6E6E6"
   },
   {
-    "id": "E05",
-    "emotionName": "珍惜",
+    "id": "E06",
+    "emotionName": "怀念",
     "displayColor": "#FCE5CD"
+  },
+  {
+    "id": "E07",
+    "emotionName": "自我",
+    "displayColor": "#EDE0D4"
   }
 ]

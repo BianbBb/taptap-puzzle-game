@@ -32,6 +32,7 @@ public sealed partial class StoryNodeConfig : Luban.BeanBase
         {int n0 = _buf.ReadSize(); OnExitActionIds = new System.Collections.Generic.List<string>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { string _e0;  _e0 = _buf.ReadString(); OnExitActionIds.Add(_e0);}}
         {int n0 = _buf.ReadSize(); ExtraNextNodeIds = new System.Collections.Generic.List<string>(n0);for(var i0 = 0 ; i0 < n0 ; i0++) { string _e0;  _e0 = _buf.ReadString(); ExtraNextNodeIds.Add(_e0);}}
         Priority = _buf.ReadInt();
+        BackgroundId = _buf.ReadString();
     }
 
     public static StoryNodeConfig DeserializeStoryNodeConfig(ByteBuf _buf)
@@ -95,6 +96,10 @@ public sealed partial class StoryNodeConfig : Luban.BeanBase
     /// 节点优先级
     /// </summary>
     public int Priority;
+    /// <summary>
+    /// 本节点起切换到的场景 ID（见 Scene 键）；为空表示沿用所属 Session 的 backgroundId
+    /// </summary>
+    public string BackgroundId;
 
     public const int __ID__ = 1445114521;
     public override int GetTypeId() => __ID__;
@@ -125,6 +130,7 @@ public sealed partial class StoryNodeConfig : Luban.BeanBase
         other.OnExitActionIds = OnExitActionIds == null ? null : new System.Collections.Generic.List<string>(OnExitActionIds);
         other.ExtraNextNodeIds = ExtraNextNodeIds == null ? null : new System.Collections.Generic.List<string>(ExtraNextNodeIds);
         other.Priority = Priority;
+        other.BackgroundId = BackgroundId;
     }
 
     public StoryNodeConfig DeepCopy()
@@ -151,6 +157,7 @@ public sealed partial class StoryNodeConfig : Luban.BeanBase
         + "onExitActionIds:" + Luban.StringUtil.CollectionToString(OnExitActionIds) + ","
         + "extraNextNodeIds:" + Luban.StringUtil.CollectionToString(ExtraNextNodeIds) + ","
         + "priority:" + Priority + ","
+        + "backgroundId:" + BackgroundId + ","
         + "}";
     }
 }

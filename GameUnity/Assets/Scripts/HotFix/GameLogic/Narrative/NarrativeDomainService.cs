@@ -87,8 +87,7 @@ namespace GameLogic
 
         private static bool IsNoneEmotionId(string emotionId)
         {
-            return string.Equals(emotionId, NarrativeRules.NoneEmotionId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(emotionId, NarrativeRules.NoneEmotionConfigId, StringComparison.OrdinalIgnoreCase);
+            return NarrativeRules.IsNoneEmotion(emotionId);
         }
 
         public string GetDefaultEmotion(ReplyOptionConfig reply, NarrativeSaveData saveData = null)

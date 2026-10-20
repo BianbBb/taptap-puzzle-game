@@ -1,7 +1,7 @@
 [
   {
     "id": "O011101",
-    "replyText": "这件目前状态不乐观，至少得14天",
+    "replyText": "评估完毕，一件至少需要14天。",
     "lockedText": "",
     "requiredMemory": [
       "M01"
@@ -9,9 +9,9 @@
     "allowedEmotion": [],
     "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0112",
+    "nextNodeId": "T0136",
     "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
+    "affectionNpcId": "老周",
     "affectionDelta": 2,
     "optionSetId": "O01110",
     "displayOrder": 1,
@@ -19,7 +19,7 @@
   },
   {
     "id": "O011102",
-    "replyText": "换件、装配、调试、翻新，保守需要两周",
+    "replyText": "换件、装配、调试、翻新，保守需要两周。",
     "lockedText": "",
     "requiredMemory": [
       "M02"
@@ -27,9 +27,9 @@
     "allowedEmotion": [],
     "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0113",
+    "nextNodeId": "T0136",
     "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
+    "affectionNpcId": "老周",
     "affectionDelta": 2,
     "optionSetId": "O01110",
     "displayOrder": 2,
@@ -53,20 +53,19 @@
   },
   {
     "id": "O013302",
-    "replyText": "该物为全框老花镜，经过多次修缮，尚且可用，但功能大打折扣，判定为【低效品】，受不知名不可量化“情感”因素影响，升为【中等价值物品】，建议物主自行判定。",
+    "replyText": "该物为全框老花镜，经过多次修缮，尚且可用，但功能大打折扣，判定为【低效品】，受不知名不可量化“情感”因素影响，升为【中等价值物品】，建议由物主自行判定。",
     "lockedText": "",
     "requiredMemory": [
       "M03"
     ],
     "allowedEmotion": [
-      "E01",
       "E02"
     ],
     "rewardMemory": [],
     "affectionRules": [],
     "nextNodeId": "",
     "isSessionEnd": true,
-    "affectionNpcId": "陈先生",
+    "affectionNpcId": "老周",
     "affectionDelta": 5,
     "optionSetId": "O01330",
     "displayOrder": 2,
@@ -74,7 +73,7 @@
   },
   {
     "id": "O020101",
-    "replyText": "我还内置了物品找寻功能，你现在有什么需要帮助的？",
+    "replyText": "$PlayerName已内置物品找寻功能，请吩咐。",
     "lockedText": "",
     "requiredMemory": [],
     "allowedEmotion": [],
@@ -109,7 +108,7 @@
     "replyText": "物品寻找并估值完毕，任务完成，结论：无法使用。你为何留下它？",
     "lockedText": "",
     "requiredMemory": [
-      "M06"
+      "M02"
     ],
     "allowedEmotion": [
       "E04"
@@ -125,665 +124,376 @@
     "actionIds": []
   },
   {
-    "id": "O030201",
-    "replyText": "物品能否替代，不该只由维修成本决定。",
-    "lockedText": "你想起了布偶被抱在怀里的样子……",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E01",
-      "E04"
-    ],
-    "rewardMemory": [
-      "M09"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0303",
-    "isSessionEnd": false,
-    "affectionNpcId": "陈果",
-    "affectionDelta": 2,
-    "optionSetId": "O03020",
-    "displayOrder": 1,
-    "actionIds": []
-  },
-  {
-    "id": "O030202",
-    "replyText": "从成本和状态看，更换是风险更低的方案。",
+    "id": "O031501",
+    "replyText": "娃娃崭新度13%，强拆大概率导致永久损毁，建议封存记忆，永不查看。",
     "lockedText": "",
     "requiredMemory": [],
     "allowedEmotion": [],
     "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0304",
+    "nextNodeId": "T0316",
     "isSessionEnd": false,
-    "affectionNpcId": "陈果",
-    "affectionDelta": -1,
-    "optionSetId": "O03020",
-    "displayOrder": 2,
-    "actionIds": []
-  },
-  {
-    "id": "O030501",
-    "replyText": "里面有小满留下的纸条。",
-    "lockedText": "也许布偶里还藏着一段和小满有关的记忆。",
-    "requiredMemory": [
-      "M08"
-    ],
-    "allowedEmotion": [
-      "E03",
-      "E04"
-    ],
-    "rewardMemory": [],
-    "affectionRules": [],
-    "nextNodeId": "T0306",
-    "isSessionEnd": false,
-    "affectionNpcId": "陈果",
-    "affectionDelta": 3,
-    "optionSetId": "O03050",
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O03150",
     "displayOrder": 1,
     "actionIds": []
   },
   {
-    "id": "O030502",
-    "replyText": "先把破口补好，让它继续陪着你。",
+    "id": "O031502",
+    "replyText": "回忆是珍贵的，已检测到不可量化情感浓度，建议打开查看，若无法修复，可寻修理铺修理。",
     "lockedText": "",
     "requiredMemory": [],
-    "allowedEmotion": [
-      "E01"
-    ],
+    "allowedEmotion": [],
     "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0307",
+    "nextNodeId": "T0319",
     "isSessionEnd": false,
-    "affectionNpcId": "陈果",
-    "affectionDelta": 1,
-    "optionSetId": "O03050",
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O03150",
     "displayOrder": 2,
     "actionIds": []
   },
   {
-    "id": "O040201",
-    "replyText": "先分别记录读取模块和存储部分的状态。",
-    "lockedText": "收音机的存储部分也许还保存着重要内容。",
+    "id": "O032901",
+    "replyText": "直接翻新，大面积拆线换棉，清洗内衬布料，加固所都受力缝合处，完全重新缝合，修复后手感和外观都接近新娃娃。",
+    "lockedText": "",
     "requiredMemory": [],
-    "allowedEmotion": [
-      "E04"
-    ],
-    "rewardMemory": [
+    "allowedEmotion": [],
+    "rewardMemory": [],
+    "affectionRules": [],
+    "nextNodeId": "T0330",
+    "isSessionEnd": false,
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O03290",
+    "displayOrder": 1,
+    "actionIds": []
+  },
+  {
+    "id": "O032902",
+    "replyText": "可以做局部清洁、用纺织颜料补色，保持玩偶原先的样式，就像小满把它送给你时一样。",
+    "lockedText": "",
+    "requiredMemory": [
       "M12"
     ],
-    "affectionRules": [],
-    "nextNodeId": "T0403",
-    "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
-    "affectionDelta": 1,
-    "optionSetId": "O04020",
-    "displayOrder": 1,
-    "actionIds": []
-  },
-  {
-    "id": "O040202",
-    "replyText": "先尝试接通读取模块，确认能否读取。",
-    "lockedText": "你已经检查过收音机的内部结构。",
-    "requiredMemory": [
-      "M10"
-    ],
-    "allowedEmotion": [
-      "E04"
-    ],
+    "allowedEmotion": [],
     "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0404",
+    "nextNodeId": "T0331",
     "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
+    "affectionNpcId": "",
     "affectionDelta": 0,
-    "optionSetId": "O04020",
+    "optionSetId": "O03290",
     "displayOrder": 2,
     "actionIds": []
   },
   {
-    "id": "O040501",
-    "replyText": "停下维修，保护仍完好的存储部分。",
+    "id": "O040901",
+    "replyText": "无法启动，能效低于基线，功能可替代，判定为低效物。建议丢弃。",
     "lockedText": "",
     "requiredMemory": [],
-    "allowedEmotion": [
-      "E01"
-    ],
-    "rewardMemory": [
-      "M13"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0406",
-    "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
-    "affectionDelta": 1,
-    "optionSetId": "O04050",
-    "displayOrder": 1,
-    "actionIds": []
-  },
-  {
-    "id": "O040502",
-    "replyText": "再试一次，但先记录可能造成的风险。",
-    "lockedText": "你记得读取模块的线路并不稳定。",
-    "requiredMemory": [
-      "M11"
-    ],
-    "allowedEmotion": [
-      "E04"
-    ],
-    "rewardMemory": [
-      "M13"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0407",
-    "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
-    "affectionDelta": 0,
-    "optionSetId": "O04050",
-    "displayOrder": 2,
-    "actionIds": []
-  },
-  {
-    "id": "O050201",
-    "replyText": "问她，录音里保存的是什么。",
-    "lockedText": "收音机的存储部分似乎还完好。",
-    "requiredMemory": [
-      "M11"
-    ],
-    "allowedEmotion": [
-      "E04"
-    ],
-    "rewardMemory": [
-      "M14"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0503",
-    "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
-    "affectionDelta": 1,
-    "optionSetId": "O05020",
-    "displayOrder": 1,
-    "actionIds": []
-  },
-  {
-    "id": "O050202",
-    "replyText": "告诉她你愿意听，但不必现在说出来。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E01"
-    ],
+    "allowedEmotion": [],
     "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0504",
+    "nextNodeId": "T0410",
     "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
-    "affectionDelta": 2,
-    "optionSetId": "O05020",
-    "displayOrder": 2,
-    "actionIds": []
-  },
-  {
-    "id": "O050501",
-    "replyText": "它已经成了你们全家共同期待的一件事。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E01",
-      "E02"
-    ],
-    "rewardMemory": [
-      "M15"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0506",
-    "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
-    "affectionDelta": 2,
-    "optionSetId": "O05050",
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O04090",
     "displayOrder": 1,
     "actionIds": []
   },
   {
-    "id": "O050502",
-    "replyText": "先完成眼前能做的维修，再决定下一步。",
+    "id": "O040902",
+    "replyText": "检测到磁带内有不可量化情感浓度，建议物主自行决定，必要时可强拆收音机仅留磁带。",
     "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E00"
-    ],
-    "rewardMemory": [
-      "M15"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0507",
-    "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
-    "affectionDelta": 0,
-    "optionSetId": "O05050",
-    "displayOrder": 2,
-    "actionIds": []
-  },
-  {
-    "id": "O060201",
-    "replyText": "先告诉我，那段声音为什么对你重要。",
-    "lockedText": "老周的收音机里还留有一段声音。",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E04"
-    ],
-    "rewardMemory": [
+    "requiredMemory": [
       "M16"
     ],
-    "affectionRules": [],
-    "nextNodeId": "T0603",
-    "isSessionEnd": false,
-    "affectionNpcId": "老周",
-    "affectionDelta": 1,
-    "optionSetId": "O06020",
-    "displayOrder": 1,
-    "actionIds": []
-  },
-  {
-    "id": "O060202",
-    "replyText": "先检查它还能否在拆件后继续播放。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E04"
-    ],
+    "allowedEmotion": [],
     "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0604",
+    "nextNodeId": "T0417",
     "isSessionEnd": false,
-    "affectionNpcId": "老周",
+    "affectionNpcId": "",
     "affectionDelta": 0,
-    "optionSetId": "O06020",
+    "optionSetId": "O04090",
     "displayOrder": 2,
     "actionIds": []
   },
   {
-    "id": "O060501",
-    "replyText": "如果你已经想好了，我会帮你记录这次选择。",
-    "lockedText": "你知道这段声音一直被老周留着。",
+    "id": "O043001",
+    "replyText": "若无更佳替代方案，磁带仓无法打开，磁带无法取出。",
+    "lockedText": "",
+    "requiredMemory": [],
+    "allowedEmotion": [],
+    "rewardMemory": [],
+    "affectionRules": [],
+    "nextNodeId": "T0431",
+    "isSessionEnd": false,
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O04300",
+    "displayOrder": 1,
+    "actionIds": []
+  },
+  {
+    "id": "O043002",
+    "replyText": "可以试着去修理铺碰碰运气，老周可能有些现在停产了的旧零件。",
+    "lockedText": "",
     "requiredMemory": [
       "M17"
     ],
-    "allowedEmotion": [
-      "E01",
-      "E03"
-    ],
-    "rewardMemory": [
-      "M18"
-    ],
+    "allowedEmotion": [],
+    "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0606",
+    "nextNodeId": "T0431",
     "isSessionEnd": false,
-    "affectionNpcId": "老周",
-    "affectionDelta": 2,
-    "optionSetId": "O06050",
-    "displayOrder": 1,
-    "actionIds": []
-  },
-  {
-    "id": "O060502",
-    "replyText": "再考虑一次，拆下它就不能再播放了。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E03"
-    ],
-    "rewardMemory": [
-      "M18"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0607",
-    "isSessionEnd": false,
-    "affectionNpcId": "老周",
+    "affectionNpcId": "",
     "affectionDelta": 0,
-    "optionSetId": "O06050",
+    "optionSetId": "O04300",
     "displayOrder": 2,
     "actionIds": []
   },
   {
-    "id": "O070201",
-    "replyText": "听完。既然他们都来了，就一起听这段录音。",
-    "lockedText": "你知道收音机里保存着一段家庭录音。",
-    "requiredMemory": [
-      "M11"
-    ],
-    "allowedEmotion": [
-      "E02",
-      "E04"
-    ],
-    "rewardMemory": [
-      "M21"
-    ],
+    "id": "O043101",
+    "replyText": "这与您的收音机不相关，您求助于他，是以顾客而非监督员的身份。",
+    "lockedText": "",
+    "requiredMemory": [],
+    "allowedEmotion": [],
+    "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0703",
+    "nextNodeId": "T0432",
     "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
-    "affectionDelta": 2,
-    "optionSetId": "O07020",
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O04310",
     "displayOrder": 1,
     "actionIds": []
   },
   {
-    "id": "O070202",
-    "replyText": "先问问每个人是否都准备好了。",
+    "id": "O043102",
+    "replyText": "我能理解，但您也说，收音机里的东西您放不下，那么这是否值得您为其赌一把呢？",
     "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E01"
+    "requiredMemory": [
+      "M16"
     ],
-    "rewardMemory": [
-      "M21"
-    ],
+    "allowedEmotion": [],
+    "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0704",
+    "nextNodeId": "T0432",
     "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
-    "affectionDelta": 1,
-    "optionSetId": "O07020",
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O04310",
     "displayOrder": 2,
     "actionIds": []
   },
   {
-    "id": "O070501",
-    "replyText": "录音里的停顿也许同样重要，再听一遍。",
-    "lockedText": "录音里的称呼让你想起陈果说过的话。",
+    "id": "O043401",
+    "replyText": "我的能力范围只包括物件评估，不包括对记忆的判断。",
+    "lockedText": "",
+    "requiredMemory": [],
+    "allowedEmotion": [],
+    "rewardMemory": [],
+    "affectionRules": [],
+    "nextNodeId": "",
+    "isSessionEnd": true,
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O04340",
+    "displayOrder": 1,
+    "actionIds": []
+  },
+  {
+    "id": "O043402",
+    "replyText": "人类有记住所经之事、所爱之人的本能，所以“记忆”大概的确是值得人类为之去留下些什么的。",
+    "lockedText": "",
+    "requiredMemory": [
+      "M10",
+      "M16"
+    ],
+    "allowedEmotion": [],
+    "rewardMemory": [],
+    "affectionRules": [],
+    "nextNodeId": "",
+    "isSessionEnd": true,
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O04340",
+    "displayOrder": 2,
+    "actionIds": []
+  },
+  {
+    "id": "O051201",
+    "replyText": "出仓机构齿轮零件。",
+    "lockedText": "",
+    "requiredMemory": [],
+    "allowedEmotion": [],
+    "rewardMemory": [],
+    "affectionRules": [],
+    "nextNodeId": "T0513",
+    "isSessionEnd": false,
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O05120",
+    "displayOrder": 1,
+    "actionIds": []
+  },
+  {
+    "id": "O051202",
+    "replyText": "出仓机构齿轮零件。我记得您的座钟里也有类似的零件。",
+    "lockedText": "",
+    "requiredMemory": [
+      "M08"
+    ],
+    "allowedEmotion": [],
+    "rewardMemory": [],
+    "affectionRules": [],
+    "nextNodeId": "T0514",
+    "isSessionEnd": false,
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O05120",
+    "displayOrder": 2,
+    "actionIds": []
+  },
+  {
+    "id": "O060701",
+    "replyText": "磁带记录时间为2017年3月25日，距今久远，磁带内部受潮发霉，可能出现音质问题。",
+    "lockedText": "",
+    "requiredMemory": [],
+    "allowedEmotion": [],
+    "rewardMemory": [],
+    "affectionRules": [],
+    "nextNodeId": "T0608",
+    "isSessionEnd": false,
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O06070",
+    "displayOrder": 1,
+    "actionIds": []
+  },
+  {
+    "id": "O060702",
+    "replyText": "磁带记录时间为2017年3月25日，距今久远，不过大概是个很重要的时间点。您的记忆里有和这个时间挂钩的事情吗？",
+    "lockedText": "",
+    "requiredMemory": [
+      "M16"
+    ],
+    "allowedEmotion": [],
+    "rewardMemory": [],
+    "affectionRules": [],
+    "nextNodeId": "T0608",
+    "isSessionEnd": false,
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O06070",
+    "displayOrder": 2,
+    "actionIds": []
+  },
+  {
+    "id": "O064601",
+    "replyText": "我只是一个用于物品评估和价值估量的人工智能，无法判定情感。",
+    "lockedText": "",
+    "requiredMemory": [],
+    "allowedEmotion": [],
+    "rewardMemory": [],
+    "affectionRules": [],
+    "nextNodeId": "T0647",
+    "isSessionEnd": false,
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O06460",
+    "displayOrder": 1,
+    "actionIds": []
+  },
+  {
+    "id": "O064602",
+    "replyText": "我……似乎有点理解，什么是“情感”了。",
+    "lockedText": "",
+    "requiredMemory": [
+      "M12",
+      "M18"
+    ],
+    "allowedEmotion": [],
+    "rewardMemory": [],
+    "affectionRules": [],
+    "nextNodeId": "T0648",
+    "isSessionEnd": false,
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O06460",
+    "displayOrder": 2,
+    "actionIds": []
+  },
+  {
+    "id": "O070701",
+    "replyText": "高效代替低效，本就是最正常的事情。没什么好为我可惜的。",
+    "lockedText": "",
+    "requiredMemory": [],
+    "allowedEmotion": [],
+    "rewardMemory": [],
+    "affectionRules": [],
+    "nextNodeId": "T0708",
+    "isSessionEnd": false,
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O07070",
+    "displayOrder": 1,
+    "actionIds": []
+  },
+  {
+    "id": "O070702",
+    "replyText": "怎么想的？……实话说，有点……难受？闷闷的，说不上来是什么感觉……",
+    "lockedText": "",
     "requiredMemory": [
       "M19"
     ],
-    "allowedEmotion": [
-      "E04",
-      "E03"
-    ],
-    "rewardMemory": [
-      "M22"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0706",
-    "isSessionEnd": false,
-    "affectionNpcId": "陈果",
-    "affectionDelta": 2,
-    "optionSetId": "O07050",
-    "displayOrder": 1,
-    "actionIds": []
-  },
-  {
-    "id": "O070502",
-    "replyText": "先停在这里，让他们自己决定要不要继续。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E01"
-    ],
-    "rewardMemory": [
-      "M22"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0707",
-    "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
-    "affectionDelta": 1,
-    "optionSetId": "O07050",
-    "displayOrder": 2,
-    "actionIds": []
-  },
-  {
-    "id": "O080201",
-    "replyText": "先按最近使用的记录排列。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E00"
-    ],
-    "rewardMemory": [
-      "M23",
-      "M24",
-      "M25",
-      "M26",
-      "M27"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0803",
-    "isSessionEnd": false,
-    "affectionNpcId": "",
-    "affectionDelta": 0,
-    "optionSetId": "O08020",
-    "displayOrder": 1,
-    "actionIds": []
-  },
-  {
-    "id": "O080202",
-    "replyText": "先看哪些经历彼此产生了联系。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E01",
-      "E04"
-    ],
-    "rewardMemory": [
-      "M23",
-      "M24",
-      "M25",
-      "M26",
-      "M27"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0804",
-    "isSessionEnd": false,
-    "affectionNpcId": "",
-    "affectionDelta": 0,
-    "optionSetId": "O08020",
-    "displayOrder": 2,
-    "actionIds": []
-  },
-  {
-    "id": "O080501",
-    "replyText": "把记忆清单交给我，我自己决定。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E04"
-    ],
+    "allowedEmotion": [],
     "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0806",
+    "nextNodeId": "T0709",
     "isSessionEnd": false,
     "affectionNpcId": "",
     "affectionDelta": 0,
-    "optionSetId": "O08050",
-    "displayOrder": 1,
+    "optionSetId": "O07070",
+    "displayOrder": 2,
     "actionIds": []
   },
   {
-    "id": "O080502",
-    "replyText": "暂时不用排序，我会逐条检查。",
+    "id": "O071601",
+    "replyText": "删除全部记忆？……既然是没法拒绝的命令，再不舍也要做啊。",
     "lockedText": "",
     "requiredMemory": [],
-    "allowedEmotion": [
-      "E01"
-    ],
+    "allowedEmotion": [],
     "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0807",
+    "nextNodeId": "T0717",
     "isSessionEnd": false,
     "affectionNpcId": "",
     "affectionDelta": 0,
-    "optionSetId": "O08050",
-    "displayOrder": 2,
-    "actionIds": []
-  },
-  {
-    "id": "O090201",
-    "replyText": "我找不到那段记录，但愿意听你重新讲。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E01"
-    ],
-    "rewardMemory": [
-      "M28"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0904",
-    "isSessionEnd": false,
-    "affectionNpcId": "老周",
-    "affectionDelta": 1,
-    "optionSetId": "O09020",
+    "optionSetId": "O07160",
     "displayOrder": 1,
     "actionIds": []
   },
   {
-    "id": "O090202",
-    "replyText": "我还记得小满留下的纸条。",
+    "id": "O071602",
+    "replyText": "……没关系的，如果什么都忘了，再重新学一次，也是帮您、帮果果、帮周老重新回忆一次。就像那个磁带里的录音，不也帮您想到了那时吗？",
     "lockedText": "",
     "requiredMemory": [
-      "M08"
+      "M18"
     ],
-    "allowedEmotion": [
-      "E03",
-      "E04"
-    ],
-    "rewardMemory": [
-      "M28"
-    ],
+    "allowedEmotion": [],
+    "rewardMemory": [],
     "affectionRules": [],
-    "nextNodeId": "T0903",
+    "nextNodeId": "T0719",
     "isSessionEnd": false,
-    "affectionNpcId": "老周",
-    "affectionDelta": 2,
-    "optionSetId": "O09020",
-    "displayOrder": 2,
-    "actionIds": []
-  },
-  {
-    "id": "O090501",
-    "replyText": "因为你还没有讲完。",
-    "lockedText": "你记得有人曾把朋友的声音留在收音机里。",
-    "requiredMemory": [
-      "M17"
-    ],
-    "allowedEmotion": [
-      "E01",
-      "E03"
-    ],
-    "rewardMemory": [
-      "M29"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0906",
-    "isSessionEnd": false,
-    "affectionNpcId": "老周",
-    "affectionDelta": 2,
-    "optionSetId": "O09050",
-    "displayOrder": 1,
-    "actionIds": []
-  },
-  {
-    "id": "O090502",
-    "replyText": "我不知道原因，但我想继续听。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E04"
-    ],
-    "rewardMemory": [
-      "M29"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T0907",
-    "isSessionEnd": false,
-    "affectionNpcId": "老周",
-    "affectionDelta": 1,
-    "optionSetId": "O09050",
-    "displayOrder": 2,
-    "actionIds": []
-  },
-  {
-    "id": "O100201",
-    "replyText": "按维修成本、运输时间和可用状态给旧物排序。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E00"
-    ],
-    "rewardMemory": [
-      "M30",
-      "M31"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T1003",
-    "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
-    "affectionDelta": 1,
-    "optionSetId": "O10020",
-    "displayOrder": 1,
-    "actionIds": []
-  },
-  {
-    "id": "O100202",
-    "replyText": "先问每个人最想带走哪一件，再安排转运。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E01",
-      "E04"
-    ],
-    "rewardMemory": [
-      "M30",
-      "M31"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T1004",
-    "isSessionEnd": false,
-    "affectionNpcId": "老周",
-    "affectionDelta": 2,
-    "optionSetId": "O10020",
-    "displayOrder": 2,
-    "actionIds": []
-  },
-  {
-    "id": "O100501",
-    "replyText": "这是我按现有记录算出的结果。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E00"
-    ],
-    "rewardMemory": [
-      "M30",
-      "M31"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T1006",
-    "isSessionEnd": false,
-    "affectionNpcId": "陈先生",
-    "affectionDelta": 1,
-    "optionSetId": "O10050",
-    "displayOrder": 1,
-    "actionIds": []
-  },
-  {
-    "id": "O100502",
-    "replyText": "我说不清全部原因，但我愿意承担这个选择。",
-    "lockedText": "",
-    "requiredMemory": [],
-    "allowedEmotion": [
-      "E01",
-      "E05"
-    ],
-    "rewardMemory": [
-      "M30",
-      "M31"
-    ],
-    "affectionRules": [],
-    "nextNodeId": "T1007",
-    "isSessionEnd": false,
-    "affectionNpcId": "老周",
-    "affectionDelta": 2,
-    "optionSetId": "O10050",
+    "affectionNpcId": "",
+    "affectionDelta": 0,
+    "optionSetId": "O07160",
     "displayOrder": 2,
     "actionIds": []
   }

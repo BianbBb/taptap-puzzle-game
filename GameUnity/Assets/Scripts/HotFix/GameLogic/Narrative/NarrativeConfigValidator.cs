@@ -73,6 +73,8 @@ namespace GameLogic
                 }
             }
 
+            var grantedItems = new HashSet<string>(StringComparer.Ordinal);
+            var removedItems = new HashSet<string>(StringComparer.Ordinal);
             foreach (NarrativeActionConfig action in config.AllActions)
             {
                 bool isItemAction = string.Equals(action.ActionType, "GrantItem", StringComparison.OrdinalIgnoreCase) ||
@@ -89,12 +91,31 @@ namespace GameLogic
                 if (isItemAction && !config.HasNarrativeItem(action.TargetId))
                     AddError(issues, "ACTION_ITEM_MISSING", action.Id, $"references unknown item {action.TargetId}.");
 
+                if (isItemAction)
+                {
+                    if (string.Equals(action.ActionType, "GrantItem", StringComparison.OrdinalIgnoreCase))
+                        grantedItems.Add(action.TargetId);
+                    else
+                        removedItems.Add(action.TargetId);
+                }
+
                 if (isEmotionAction)
                 {
                     usedEmotions.Add(action.TargetId);
                     if (!config.HasEmotion(action.TargetId))
                         AddError(issues, "ACTION_EMOTION_MISSING", action.Id,
                             $"references unknown emotion {action.TargetId}.");
+                }
+            }
+
+            // 物品栏容量 1：只发放却从不回收的物品会永久占着槽位，下一次 GrantItem 直接把它顶掉，
+            // 玩家看不到任何提示 —— 所以配表层面就该成对（现有剧情都是同节点 OnEnter/OnExit 配对）。
+            foreach (string grantedItemId in grantedItems)
+            {
+                if (!removedItems.Contains(grantedItemId))
+                {
+                    AddWarning(issues, "ITEM_GRANT_WITHOUT_REMOVE", grantedItemId,
+                        "item is granted by an action but never removed; the single-slot bag will silently replace it on the next GrantItem.");
                 }
             }
 
@@ -191,6 +212,7 @@ namespace GameLogic
 
                 var unlockedCount = 0;
                 var memorylessCount = 0;
+                var replyCount = 0;
                 if (node.Replies != null)
                 {
                     foreach (string replyId in node.Replies)
@@ -202,6 +224,8 @@ namespace GameLogic
                                 $"references unknown reply {replyId}.");
                             continue;
                         }
+
+                        replyCount++;
 
                         if (reply.RequiredMemory == null || reply.RequiredMemory.Count == 0)
                         {
@@ -215,17 +239,22 @@ namespace GameLogic
                     }
                 }
 
-                if (unlockedCount == 0)
+                // 无回复选项的节点（自动推进 / Session 收尾）走 DefaultNextNodeId，
+                // 不存在“选项全锁”的问题，跳过两条检查避免淹没真正的配置错误。
+                if (replyCount > 0)
                 {
-                    // 新档当前状态可能尚未持有前置 Memory；仍需允许 UI 展示 Locked 回复。
-                    AddWarning(issues, "NODE_ALL_REPLIES_LOCKED", node.Id,
-                        "all replies are locked in the current memory state.");
-                }
+                    if (unlockedCount == 0)
+                    {
+                        // 新档当前状态可能尚未持有前置 Memory；仍需允许 UI 展示 Locked 回复。
+                        AddWarning(issues, "NODE_ALL_REPLIES_LOCKED", node.Id,
+                            "all replies are locked in the current memory state.");
+                    }
 
-                if (memorylessCount == 0)
-                {
-                    AddWarning(issues, "NODE_NO_MEMORYLESS_REPLY", node.Id,
-                        "the node has no reply that can be selected before earning memories.");
+                    if (memorylessCount == 0 && !GrantsItemOnEnter(node, config))
+                    {
+                        AddWarning(issues, "NODE_NO_MEMORYLESS_REPLY", node.Id,
+                            "the node has no reply that can be selected before earning memories.");
+                    }
                 }
 
                 if (!node.IsSessionEnd && string.IsNullOrWhiteSpace(node.DefaultNextNodeId) &&
@@ -287,6 +316,12 @@ namespace GameLogic
 
             foreach (EmotionConfig emotion in config.AllEmotions)
             {
+                // E00 / NONE 是“无情绪”占位行，本来就不该被任何记忆或选项引用。
+                if (NarrativeRules.IsNoneEmotion(emotion.Id))
+                {
+                    continue;
+                }
+
                 if (!usedEmotions.Contains(emotion.Id))
                 {
                     AddWarning(issues, "EMOTION_UNUSED", emotion.Id,
@@ -304,6 +339,34 @@ namespace GameLogic
             }
 
             return issues;
+        }
+
+        /// <summary>
+        /// 节点进场就发物品时，玩家可以在本节点拆解物品拿到前置记忆，
+        /// 因此“没有免记忆选项”属于设计意图，不算推进性风险。
+        /// </summary>
+        private static bool GrantsItemOnEnter(StoryNodeConfig node, NarrativeConfigMgr config)
+        {
+            if (node.OnEnterActionIds == null)
+            {
+                return false;
+            }
+
+            foreach (string actionId in node.OnEnterActionIds)
+            {
+                NarrativeActionConfig action = config.GetAction(actionId);
+                if (action == null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(action.ActionType, "GrantItem", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static void ValidateMemoryReferences(string configId, string kind,

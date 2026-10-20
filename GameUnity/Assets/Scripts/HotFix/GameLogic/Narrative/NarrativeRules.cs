@@ -20,6 +20,13 @@ namespace GameLogic
         public const string NoneEmotionConfigId = "E00";
         public const string AnyReplyId = "ANY";
         public const int MemoryCapacity = 5;
+
+        /// <summary>
+        /// 物品栏容量。玩家扮演的是"上门评估的顾问"，手上一次只拿一件待评估的物件，
+        /// 交给物主或判断完毕后立刻还回去，所以不放行囊、不攒收集品。
+        /// 只有 GrantItem 动作会占用这个槽位；场景热点、部件查看这类"只是看一眼"的交互不占。
+        /// </summary>
+        public const int NarrativeItemCapacity = 1;
         public const float MinimumAffection = 0f;
         public const float MaximumAffection = 100f;
 
@@ -49,5 +56,12 @@ namespace GameLogic
 
         public static float ClampAffection(float value)
             => Math.Max(MinimumAffection, Math.Min(MaximumAffection, value));
+
+        /// <summary>是否是「无情绪」哨兵值（运行时占位 NONE，或配表里的 E00 行）。</summary>
+        public static bool IsNoneEmotion(string emotionId)
+        {
+            return string.Equals(emotionId, NoneEmotionId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(emotionId, NoneEmotionConfigId, StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

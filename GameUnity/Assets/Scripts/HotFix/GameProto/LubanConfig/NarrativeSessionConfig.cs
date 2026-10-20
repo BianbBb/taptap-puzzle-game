@@ -28,6 +28,8 @@ public sealed partial class NarrativeSessionConfig : Luban.BeanBase
         IsFormalEnding = _buf.ReadBool();
         NpcSet = _buf.ReadString();
         BackgroundId = _buf.ReadString();
+        TitleDate = _buf.ReadString();
+        TitleLocation = _buf.ReadString();
     }
 
     public static NarrativeSessionConfig DeserializeNarrativeSessionConfig(ByteBuf _buf)
@@ -75,6 +77,14 @@ public sealed partial class NarrativeSessionConfig : Luban.BeanBase
     /// 场景背景 ID；为空时回退到按 npcId 选择（旧逻辑）
     /// </summary>
     public string BackgroundId;
+    /// <summary>
+    /// 开场过场卡日期，如 2026年9月30日；为空则本幕不播过场
+    /// </summary>
+    public string TitleDate;
+    /// <summary>
+    /// 开场过场卡地点，如 老周修理铺；为空则本幕不播过场
+    /// </summary>
+    public string TitleLocation;
 
     public const int __ID__ = -1628633530;
     public override int GetTypeId() => __ID__;
@@ -100,6 +110,8 @@ public sealed partial class NarrativeSessionConfig : Luban.BeanBase
         other.IsFormalEnding = IsFormalEnding;
         other.NpcSet = NpcSet;
         other.BackgroundId = BackgroundId;
+        other.TitleDate = TitleDate;
+        other.TitleLocation = TitleLocation;
     }
 
     public NarrativeSessionConfig DeepCopy()
@@ -122,6 +134,8 @@ public sealed partial class NarrativeSessionConfig : Luban.BeanBase
         + "isFormalEnding:" + IsFormalEnding + ","
         + "npcSet:" + NpcSet + ","
         + "backgroundId:" + BackgroundId + ","
+        + "titleDate:" + TitleDate + ","
+        + "titleLocation:" + TitleLocation + ","
         + "}";
     }
 }
