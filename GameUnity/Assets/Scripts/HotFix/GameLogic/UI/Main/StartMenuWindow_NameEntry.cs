@@ -89,14 +89,10 @@ namespace GameLogic
 			public float ChipStartDy;
 			public float ChipPitch;
 			public float ChipTextSize;
-			public string ChipHint;
-			public float ChipHintDy;
 
 			public Vector2 ConfirmSize;
 			public float ConfirmDy;
 			public string ConfirmLabel;
-
-			public float NoteDy;
 
 			public Vector2 CloseSize;
 			public Vector2 CloseInset;
@@ -115,21 +111,19 @@ namespace GameLogic
 				// 纸片素材本身带纸色，这里必须给白：给纸色会让 tint 再乘一遍，整张纸被压暗
 				PanelTint = Color.white,
 				TitleDy = 206f, TitleSize = 38f, TitleColor = new Color(0.361f, 0.275f, 0.157f, 1f),
-				SubDy = 108f, SubSize = 18f, SubColor = NameInkSoft,
+				SubDy = 128f, SubSize = 18f, SubColor = NameError,
 				ContentDx = 0f,
 				FieldBack = "collection_card_image_slot", FieldSprite = null,
 				// 比纸色略深一点点，才看得出「这里能填」，又不至于变成一块白砖
 				FieldSize = new Vector2(500f, 84f), FieldTint = new Color(0.925f, 0.898f, 0.855f, 1f),
-				FieldDy = 22f, FieldTextSize = 28f,
-				FieldUnderline = true, UnderlineWidth = 440f, UnderlineDy = -26f,
-				DiceSize = new Vector2(84f, 84f), DiceDx = 286f, DiceDy = 26f,
+				FieldDy = 52f, FieldTextSize = 28f,
+				FieldUnderline = true, UnderlineWidth = 440f, UnderlineDy = 4f,
+				DiceSize = new Vector2(84f, 84f), DiceDx = 286f, DiceDy = 56f,
 				DiceHint = "换一个", DiceHintDy = -62f,
 				ChipBack = "collection_card_image_slot", ChipSprite = "setting_save_slot_border",
 				ChipSize = new Vector2(196f, 66f), ChipTint = NameChipPaper,
-				ChipVertical = false, ChipStartDy = -80f, ChipPitch = 224f, ChipTextSize = 25f,
-				ChipHint = "随便挑一格，或者自己写", ChipHintDy = -136f,
-				ConfirmSize = new Vector2(310f, 102f), ConfirmDy = -196f, ConfirmLabel = "就叫这个",
-				NoteDy = -266f,
+				ChipVertical = false, ChipStartDy = -58f, ChipPitch = 224f, ChipTextSize = 25f,
+				ConfirmSize = new Vector2(310f, 102f), ConfirmDy = -168f, ConfirmLabel = "就叫这个",
 				CloseSize = new Vector2(104f, 65f), CloseInset = new Vector2(56f, 34f),
 			},
 
@@ -141,7 +135,7 @@ namespace GameLogic
 				PanelStretch = false,
 				PanelTint = Color.white,
 				TitleDy = 223f, TitleSize = 36f, TitleColor = NameInk,
-				SubDy = 181f, SubSize = 18f, SubColor = NameInkSoft,
+				SubDy = 181f, SubSize = 18f, SubColor = NameError,
 				ContentDx = -77f,
 				FieldBack = null, FieldSprite = "dialogue_reply_option_bg",
 				FieldSize = new Vector2(500f, 100f), FieldTint = Color.white,
@@ -152,9 +146,7 @@ namespace GameLogic
 				ChipBack = null, ChipSprite = "dialogue_reply_bubble_01",
 				ChipSize = new Vector2(500f, 60f), ChipTint = Color.white,
 				ChipVertical = true, ChipStartDy = 15f, ChipPitch = 66f, ChipTextSize = 24f,
-				ChipHint = null, ChipHintDy = 0f,
 				ConfirmSize = new Vector2(310f, 102f), ConfirmDy = -208f, ConfirmLabel = "就这个",
-				NoteDy = -282f,
 				CloseSize = new Vector2(100f, 62f), CloseInset = new Vector2(168f, 34f),
 			},
 
@@ -166,7 +158,7 @@ namespace GameLogic
 				PanelStretch = true,
 				PanelTint = Color.white,
 				TitleDy = 174f, TitleSize = 36f, TitleColor = NameInk,
-				SubDy = 130f, SubSize = 17f, SubColor = NameInkFaint,
+				SubDy = 130f, SubSize = 17f, SubColor = NameError,
 				ContentDx = 0f,
 				FieldBack = null, FieldSprite = null,
 				FieldSize = new Vector2(420f, 70f), FieldTint = new Color(1f, 1f, 1f, 0f),
@@ -177,9 +169,7 @@ namespace GameLogic
 				ChipBack = null, ChipSprite = "collection_card_image_slot",
 				ChipSize = new Vector2(190f, 56f), ChipTint = new Color(0.969f, 0.945f, 0.898f, 1f),
 				ChipVertical = false, ChipStartDy = -60f, ChipPitch = 214f, ChipTextSize = 23f,
-				ChipHint = null, ChipHintDy = 0f,
 				ConfirmSize = new Vector2(310f, 102f), ConfirmDy = -160f, ConfirmLabel = "就叫这个",
-				NoteDy = -234f,
 				CloseSize = new Vector2(92f, 58f), CloseInset = new Vector2(62f, 26f),
 			},
 		};
@@ -272,10 +262,9 @@ namespace GameLogic
 				TextAlignmentOptions.Center);
 			title.fontStyle = FontStyles.Bold;
 
-			string hint = m_nameEntryStartNewGame
-				? "他们记不住的东西很多，但会记住怎么叫你。"
-				: "这本子还没写下你的名字。";
-			m_nameHintText = CreateNameEntryText(parent, hint, style.SubSize, style.SubColor,
+			// 副标题位平时留空，只当报错槽用（提交空名时在这里出红字），
+			// 空字符串不产生任何绘制，不会占视觉。
+			m_nameHintText = CreateNameEntryText(parent, string.Empty, style.SubSize, style.SubColor,
 				new Vector2(style.ContentDx, style.SubDy), new Vector2(700f, 30f),
 				TextAlignmentOptions.Center);
 		}
@@ -439,13 +428,6 @@ namespace GameLogic
 				m_nameCandidateButtons.Add(chipButton);
 				m_nameCandidateLabels.Add(label);
 			}
-
-			if (!string.IsNullOrEmpty(style.ChipHint))
-			{
-				CreateNameEntryText(parent, style.ChipHint, 15f, NameInkFaint,
-					new Vector2(style.ContentDx, style.ChipHintDy), new Vector2(600f, 24f),
-					TextAlignmentOptions.Center);
-			}
 		}
 
 		private void CreateNameEntryConfirm(Transform parent, NameEntryStyle style)
@@ -469,13 +451,6 @@ namespace GameLogic
 			confirm.transition = Selectable.Transition.None;
 			confirm.onClick.AddListener(ConfirmNameEntry);
 			BindNameEntryHover(confirm);
-
-			string footer = m_nameEntryStartNewGame
-				? "确认后会从第一天开始（旧进度会被清空）"
-				: "确认后接着上次的进度";
-			CreateNameEntryText(parent, footer, 15f, NameInkSoft,
-				new Vector2(style.ContentDx, style.NoteDy), new Vector2(720f, 26f),
-				TextAlignmentOptions.Center);
 		}
 
 		private void CreateNameEntryClose(Transform parent, NameEntryStyle style)
