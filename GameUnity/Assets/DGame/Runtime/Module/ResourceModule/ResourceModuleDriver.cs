@@ -184,7 +184,12 @@ namespace DGame
             {
                 DLogger.Info("在此模式下运行，资源模块会优先使用编辑器资源，应该首先验证这些资源是否有效");
 #if !UNITY_EDITOR
-                PlayMode = EPlayMode.OfflinePlayMode;
+                // 注意：不能写 PlayMode = EPlayMode.OfflinePlayMode;
+                // PlayMode 的 setter 在非编辑器下是空实现（#if UNITY_EDITOR 包裹），赋值会被静默丢弃，
+                // 导致打包后仍走 EditorSimulateMode 分支 -> EditorSimulateModeHelper.SimulateBuild
+                // -> PackageInvokeBuilder 抛 "Only support in unity editor platform !"，资源系统初始化失败。
+                // 这里直接改序列化字段，绕开 setter。
+                playMode = EPlayMode.OfflinePlayMode;
 #endif
             }
 
