@@ -107,9 +107,12 @@ namespace GameLogic
 		private CanvasGroup m_reflectionCoverGroup;
 		private readonly List<ReplayMessageItem> m_replyItems = new List<ReplayMessageItem>();
 		private readonly List<ReplayEmoItem> m_emotionItems = new List<ReplayEmoItem>();
-		/// <summary>BubbleColor 的 alpha 为 0 表示这条消息不染情绪色。</summary>
-		private readonly List<(bool IsPlayer, string Text, Color BubbleColor)> m_messages =
-			new List<(bool, string, Color)>();
+		/// <summary>
+		/// 一条气泡记录。Speaker 是左侧气泡换头像用的 npcId（玩家侧不用），
+		/// BubbleColor 的 alpha 为 0 表示这条消息不染情绪色。
+		/// </summary>
+		private readonly List<(bool IsPlayer, string Speaker, string Text, Color BubbleColor)> m_messages =
+			new List<(bool, string, string, Color)>();
 		private readonly List<Image> m_memorySlotImages = new List<Image>();
 		private readonly List<Image> m_memorySlotThumbs = new List<Image>();
 		private readonly List<Image> m_memorySlotLabelBacks = new List<Image>();
@@ -646,7 +649,7 @@ namespace GameLogic
 				await PresentNpcSubtitleAsync(story, presentVersion);
 			else
 				await PresentMessageAsync(NarrativePlayerName.Resolve(story.NpcText),
-					IsPlayerSpeakerNode(story), presentVersion);
+					IsPlayerSpeakerNode(story), story.NpcId, presentVersion);
 			if (IsDestroyed || presentVersion != m_dialoguePresentVersion)
 			{
 				return;
@@ -1101,7 +1104,7 @@ namespace GameLogic
 			if (message.IsPlayer)
 				((RightMessageItem)item).SetMessage(message.Text, message.BubbleColor);
 			else
-				((LeftMessageItem)item).SetMessage(message.Text);
+				((LeftMessageItem)item).SetMessage(message.Text, message.Speaker);
 			return item.LoopItem;
 		}
 
@@ -1994,7 +1997,7 @@ namespace GameLogic
 			}
 
 			string text = m_messages[index].Text;
-			m_messages[index] = (true, text, bubbleColor);
+			m_messages[index] = (true, m_messages[index].Speaker, text, bubbleColor);
 			LoopListViewItem2 shown = m_messageList.LoopRectView.GetShownItemByItemIndex(index);
 			if (shown != null)
 			{
@@ -2465,17 +2468,19 @@ namespace GameLogic
 
 		/// <summary>
 		/// 气泡区逐字显示。isPlayer 决定这一条落在哪一侧：
-		/// 玩家（AI）走右侧、带玩家头像；NPC 走左侧。左右由说话人定，与 TurnType 无关。
+		/// 玩家（AI）走右侧、带玩家头像；NPC 走左侧，头像按 speaker（npcId）取。
+		/// 左右由说话人定，与 TurnType 无关。
 		/// </summary>
-		private async UniTask PresentMessageAsync(string text, bool isPlayer, int presentVersion)
+		private async UniTask PresentMessageAsync(string text, bool isPlayer, string speaker,
+			int presentVersion)
 		{
 			if (string.IsNullOrEmpty(text))
 			{
-				AddMessage(isPlayer, string.Empty);
+				AddMessage(isPlayer, string.Empty, Color.clear, speaker);
 				return;
 			}
 
-			AddMessage(isPlayer, text.Substring(0, 1));
+			AddMessage(isPlayer, text.Substring(0, 1), Color.clear, speaker);
 			int index = m_messages.Count - 1;
 			for (int i = 1; i <= text.Length; i++)
 			{
@@ -2579,7 +2584,8 @@ namespace GameLogic
 				return;
 			}
 
-			m_messages[index] = (m_messages[index].IsPlayer, text, m_messages[index].BubbleColor);
+			m_messages[index] = (m_messages[index].IsPlayer, m_messages[index].Speaker, text,
+				m_messages[index].BubbleColor);
 			LoopListView2 listView = m_messageList.LoopRectView;
 			LoopListViewItem2 shown = listView.GetShownItemByItemIndex(index);
 			if (shown != null)
@@ -2588,7 +2594,8 @@ namespace GameLogic
 					m_messageList.GetItem<RightMessageItem>(shown.GoId)
 						?.SetMessage(text, m_messages[index].BubbleColor);
 				else
-					m_messageList.GetItem<LeftMessageItem>(shown.GoId)?.SetMessage(text);
+					m_messageList.GetItem<LeftMessageItem>(shown.GoId)
+						?.SetMessage(text, m_messages[index].Speaker);
 				listView.OnItemSizeChanged(index);
 			}
 
@@ -2605,7 +2612,8 @@ namespace GameLogic
 				c == '!' || c == '?' || c == ';' || c == ':';
 		}
 
-		private void AddMessage(bool isPlayer, string text, Color bubbleColor = default)
+		private void AddMessage(bool isPlayer, string text, Color bubbleColor = default,
+			string speaker = null)
 		{
 			bool wasPinned = m_messagePinnedToLatest;
 			if (m_messages.Count > 0)
@@ -2614,7 +2622,7 @@ namespace GameLogic
 				wasPinned = wasPinned || prevLast != null;
 			}
 
-			m_messages.Add((isPlayer, text, bubbleColor));
+			m_messages.Add((isPlayer, speaker, text, bubbleColor));
 			m_messageScrollVersion++;
 			if (isPlayer)
 			{
