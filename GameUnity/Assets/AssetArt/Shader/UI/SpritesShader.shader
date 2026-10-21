@@ -18,6 +18,10 @@ Shader "DGame/UI/Sprites Shader"
 		_AlphaTex("Mask Texture", 2D) = "white" {}
 
 		[Toggle] _IsCircle ("IsCircle", int) = 0
+
+		// 0~1 的可插值去饱和：0 = 原色，1 = 纯黑白。
+		// GRAY_ON 是一次性开关（用于「已解锁/未解锁」这种硬切换），这个 float 用来做「慢慢褪色」。
+		_Gray ("Desaturate", Range(0, 1)) = 0
 	}
 
 	SubShader
@@ -82,6 +86,7 @@ Shader "DGame/UI/Sprites Shader"
 			fixed4 _Color;
 			float4 _ClipRect;
 			int _IsCircle;
+			float _Gray;
 
 			v2f vert(appdata_t IN)
 			{
@@ -106,6 +111,8 @@ Shader "DGame/UI/Sprites Shader"
 			fixed4 frag(v2f IN) : SV_Target
 			{
 				half4 color = tex2D(_MainTex, IN.texcoord) * IN.color;
+				// 先把「彩色 → 灰度」这一维单独拿出来做插值，别和下面的关键字开关混在一起。
+				color.rgb = lerp(color.rgb, dot(color.rgb, fixed3(0.299, 0.587, 0.114)), saturate(_Gray));
 				#ifdef GRAY_ON
 				color.rgb = dot(color.rgb, fixed3(0.299, 0.450, 0.299));
 				#endif

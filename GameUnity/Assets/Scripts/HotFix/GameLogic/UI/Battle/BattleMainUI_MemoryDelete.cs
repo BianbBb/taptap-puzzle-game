@@ -10,14 +10,21 @@ namespace GameLogic
 	/// <summary>
 	/// 记忆删除的「按住才碎」交互，以及清理阶段屏幕正中的呼吸提示。
 	///
-	/// 删除不再是一点就没：按住删除按钮，卡片开始抖且越抖越狠；满 1 秒「啵」一声，
-	/// 卡片在 0.1 秒内放大到 1.5 倍并淡出消失。中途松手或指针移出即取消，
+	/// 删除不再是一点就没：按住删除按钮，卡片开始抖且越抖越狠、缩略图一点点褪成黑白；
+	/// 满 0.7 秒「啵」一声，卡片在 0.1 秒内放大到 1.5 倍并淡出消失。中途松手即取消，
 	/// 所以误触不会丢记忆，长按本身也成了「你确定要让它碎掉吗」的那一拍。
 	/// </summary>
 	public partial class BattleMainUI
 	{
 		// ---- 长按节奏（秒，走 unscaled）----
-		private const float MemoryDeleteHoldSeconds = 1f;
+		private const float MemoryDeleteHoldSeconds = 0.7f;
+		/// <summary>
+		/// 进度环的「先快后慢」分界：前 20% 的时间（0.14 秒）就把圈冲到 50%。
+		/// 线性填充的问题是前 0.2 秒圈几乎没动，玩家会以为这只是一次普通点击；
+		/// 先给一个大跳变，手才会自己继续按住。
+		/// </summary>
+		private const float MemoryDeleteRingFastPhase = 0.2f;
+		private const float MemoryDeleteRingFastAmount = 0.5f;
 		private const float MemoryDeleteBreakSeconds = 0.1f;
 		private const float MemoryDeleteBreakScale = 1.5f;
 		/// <summary>抖动角度从 1.2° 涨到 2.4°：越接近碎，抖得越狠。</summary>
@@ -36,6 +43,13 @@ namespace GameLogic
 		private static readonly Color MemoryDeleteRingColor = new Color(0.87f, 0.20f, 0.18f, 1f);
 		/// <summary>运行时生成的空心环，按 256 画、缩到 38 用。</summary>
 		private static Sprite s_memoryDeleteRingSprite;
+
+		// ---- 缩略图褪色 ----
+		/// <summary>UIMat 背后的 shader 带 `_Gray`（0 原色 / 1 纯黑白），这里做一份实例专给缩略图用。</summary>
+		private const string MemoryThumbMatLocation = "UIMat";
+		/// <summary>`where T : UnityEngine.Object`，所以泛型参数写 Material 而不是 var。</summary>
+		private Material m_memoryThumbGrayMat;
+		private static readonly int GrayAmountId = Shader.PropertyToID("_Gray");
 
 		// ---- 中央提示 ----
 		private const float CleanupHintBreathPeriod = 2.2f;
@@ -92,6 +106,7 @@ namespace GameLogic
 			m_memoryDeleteHoldVersion++;
 			ResetMemorySlotShake(slotIndex);
 			ResetMemoryDeleteProgress(slotIndex);
+			ResetMemoryThumbGray(slotIndex);
 		}
 
 		private async UniTask HoldMemoryDeleteAsync(int slotIndex, int version)
@@ -113,7 +128,10 @@ namespace GameLogic
 
 				float progress = elapsed / MemoryDeleteHoldSeconds;
 				ApplyMemorySlotShake(slotRect, progress, elapsed);
-				ApplyMemoryDeleteProgress(slotIndex, progress);
+				ApplyMemoryDeleteProgress(slotIndex, EaseMemoryDeleteRing(progress));
+				// 褪色走线性，不跟进度环那条「先快后慢」的曲线：圈是可以骗人的反馈，
+				// 颜色是「它正在被抹掉」的实感，一路匀速掉到底才对。
+				ApplyMemoryThumbGray(slotIndex, progress);
 				await UniTask.Yield(PlayerLoopTiming.Update);
 				elapsed += Time.unscaledDeltaTime;
 			}
@@ -125,11 +143,29 @@ namespace GameLogic
 
 			// 循环退出时 elapsed 会略过 1，这里显式补满：圈必须刚好 100% 才碎。
 			ApplyMemoryDeleteProgress(slotIndex, 1f);
+			ApplyMemoryThumbGray(slotIndex, 1f);
 
-			// 满 1 秒：锁已解开，后面这段不再接受「松手取消」——已经碎了。
+			// 满 0.7 秒：锁已解开，后面这段不再接受「松手取消」——已经碎了。
 			m_memoryDeleteHolding = false;
 			m_memoryDeleteHoldSlot = -1;
 			await BreakMemorySlotAsync(slotIndex, slotRect);
+		}
+
+		/// <summary>
+		/// 进度环的位移曲线：前 <see cref="MemoryDeleteRingFastPhase"/> 冲到 50%，后面用 smoothstep 慢慢走完。
+		/// 后段的 smoothstep 起手导数为 0，所以 50% 那段不会出现「一口气又冲一下」的顿挫。
+		/// </summary>
+		private static float EaseMemoryDeleteRing(float t)
+		{
+			t = Mathf.Clamp01(t);
+			if (t < MemoryDeleteRingFastPhase)
+			{
+				return MemoryDeleteRingFastAmount * EaseOutCubic(t / MemoryDeleteRingFastPhase);
+			}
+
+			float k = (t - MemoryDeleteRingFastPhase) / (1f - MemoryDeleteRingFastPhase);
+			float smooth = k * k * (3f - 2f * k);
+			return Mathf.Lerp(MemoryDeleteRingFastAmount, 1f, smooth);
 		}
 
 		private bool IsMemoryDeleteHoldAlive(RectTransform slotRect, int version)
@@ -180,9 +216,10 @@ namespace GameLogic
 				elapsed += Time.unscaledDeltaTime;
 			}
 
-			// 先复位再刷新：槽位是复用的，残留的 1.5 倍/透明/满格环会粘到下一条记忆上。
+			// 先复位再刷新：槽位是复用的，残留的 1.5 倍/透明/满格环/黑白缩略图会粘到下一条记忆上。
 			ResetMemorySlotShake(slotIndex);
 			ResetMemoryDeleteProgress(slotIndex);
+			ResetMemoryThumbGray(slotIndex);
 
 			NarrativeSaveData saveData = NarrativeSaveData.Get;
 			IReadOnlyList<string> ids = saveData.GetMemoryIdsInAcquisitionOrder();
@@ -246,6 +283,82 @@ namespace GameLogic
 		private Image GetMemoryDeleteProgressRing(int slotIndex)
 			=> slotIndex >= 0 && slotIndex < m_memoryDeleteProgressRings.Count
 				? m_memoryDeleteProgressRings[slotIndex] : null;
+
+		/// <summary>长按过程中缩略图逐渐失去颜色：0 = 原色，1 = 纯黑白。</summary>
+		private void ApplyMemoryThumbGray(int slotIndex, float amount)
+		{
+			Image thumb = GetMemoryThumb(slotIndex);
+			// 这条记忆没有配图（缩略图 disabled）就没什么可褪的，直接跳过。
+			if (thumb == null || thumb.sprite == null)
+			{
+				return;
+			}
+
+			Material mat = GetMemoryThumbGrayMaterial();
+			if (mat == null)
+			{
+				return;
+			}
+
+			// material 的 setter 会 SetMaterialDirty（重建网格），所以只在换材质那一次赋值；
+			// 之后每帧只改 float，走的是同一份材质实例，不触发重建。
+			if (thumb.material != mat)
+			{
+				thumb.material = mat;
+			}
+
+			mat.SetFloat(GrayAmountId, Mathf.Clamp01(amount));
+		}
+
+		/// <summary>松手 / 删除完成后把颜色还回来，不然黑白缩略图会跟着槽位复用粘到下一条记忆。</summary>
+		private void ResetMemoryThumbGray(int slotIndex)
+		{
+			Image thumb = GetMemoryThumb(slotIndex);
+			if (thumb != null && m_memoryThumbGrayMat != null && thumb.material == m_memoryThumbGrayMat)
+			{
+				// 赋 null 即回 UGUI 默认材质，比留着一份 _Gray=0 的实例少一次合批打断。
+				thumb.material = null;
+			}
+
+			if (m_memoryThumbGrayMat != null)
+			{
+				m_memoryThumbGrayMat.SetFloat(GrayAmountId, 0f);
+			}
+		}
+
+		private Image GetMemoryThumb(int slotIndex)
+			=> slotIndex >= 0 && slotIndex < m_memorySlotThumbs.Count ? m_memorySlotThumbs[slotIndex] : null;
+
+		private Material GetMemoryThumbGrayMaterial()
+		{
+			if (m_memoryThumbGrayMat != null)
+			{
+				return m_memoryThumbGrayMat;
+			}
+
+			Material baseMat = GameModule.ResourceModule.LoadAsset<Material>(MemoryThumbMatLocation);
+			if (baseMat == null)
+			{
+				// 材质没进包就只是「不褪色」，不能把删除交互整个拖挂。
+				return null;
+			}
+
+			m_memoryThumbGrayMat = new Material(baseMat) { name = "MemoryThumbGray" };
+			m_memoryThumbGrayMat.SetFloat(GrayAmountId, 0f);
+			return m_memoryThumbGrayMat;
+		}
+
+		/// <summary>窗口销毁时把实例材质释放掉，材质不归资源模块管。</summary>
+		private void DestroyMemoryThumbGrayMaterial()
+		{
+			if (m_memoryThumbGrayMat == null)
+			{
+				return;
+			}
+
+			Object.Destroy(m_memoryThumbGrayMat);
+			m_memoryThumbGrayMat = null;
+		}
 
 		/// <summary>
 		/// 程序化空心环：白色圆环，靠 Image.color 染红。
@@ -377,7 +490,7 @@ namespace GameLogic
 			m_memoryCleanupHintCount = NarrativeSaveData.Get.MemoryCount;
 			m_memoryCleanupHint.text =
 				$"<size={CleanupHintNumberFontSize}>（{m_memoryCleanupHintCount}/{NarrativeRules.MemoryCapacity}）</size>　" +
-				"记忆数目超限，需要删除部分记忆";
+				"记忆数目超限，长按删除部分记忆";
 		}
 
 		/// <summary>呼吸灯：alpha 在 0.45~1 之间来回，数字一变就就地刷新文本。</summary>

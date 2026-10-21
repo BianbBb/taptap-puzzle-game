@@ -55,7 +55,7 @@ namespace GameLogic
         public const string MemoryGet = "sfx_memory_get";
         /// <summary>记忆落入槽位</summary>
         public const string MemoryLand = "sfx_memory_land";
-        /// <summary>删除记忆（长按满 1 秒、卡片碎掉的那一刻）</summary>
+        /// <summary>删除记忆（长按满 0.7 秒、卡片碎掉的那一刻）</summary>
         public const string MemoryDelete = "sfx_memory_delete";
         /// <summary>记忆破碎：泡泡破裂的「啵」，比消散的 Puff 更短更脆（0.19s）</summary>
         public const string MemoryBreak = "sfx_memory_break";

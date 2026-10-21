@@ -332,6 +332,7 @@ namespace GameLogic
 			m_memoryCleanupHintVersion++;
 			m_memoryDeleteHoldVersion++;
 			m_memoryDeleteHolding = false;
+			DestroyMemoryThumbGrayMaterial();
 			m_memoryTooltip = null;
 			m_memoryTooltipName = null;
 			m_memoryTooltipDescription = null;
