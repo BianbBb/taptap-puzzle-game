@@ -587,6 +587,21 @@ namespace GameLogic
 			m_tfReplayEmoNode.gameObject.SetActive(false);
 			m_tfReplayMessageNode.gameObject.SetActive(false);
 
+			// 记忆星图：「我」是谁 → 四颗情绪依次点亮 → 自我。同样是整屏 overlay，
+			// 黑底盖住 HUD，玩家点完自我后自动推进到下一节点。
+			if (IsMemoryStarMapTurn(story))
+			{
+				SetDialogueAdvanceCatcherActive(false);
+				await PlayMemoryStarMapAsync();
+				if (IsDestroyed || presentVersion != m_dialoguePresentVersion)
+				{
+					return;
+				}
+
+				await AutoAdvanceStoryNodeAsync(story, presentVersion);
+				return;
+			}
+
 			// 结语卡：正片最后一句不进气泡，整块画面渐暗后只在黑底上出字。
 			// HUD 不单独收，让它被黑幕一起吃掉，比先闪一下空对话面板自然。
 			if (IsEndingCardTurn(story))
