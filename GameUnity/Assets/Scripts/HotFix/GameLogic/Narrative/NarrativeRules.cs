@@ -19,6 +19,11 @@ namespace GameLogic
         /// <summary>配表里"无情绪"那一行的 ID，不参与图鉴展示与表达计数。</summary>
         public const string NoneEmotionConfigId = "E00";
         public const string AnyReplyId = "ANY";
+        /// <summary>
+        /// 玩家自己的说话人 ID。主角就是那台评估机器，配表里统一写 AI，
+        /// 气泡靠它分边（AI 走玩家侧，其余走 NPC 侧）。
+        /// </summary>
+        public const string PlayerSpeakerId = "AI";
         public const int MemoryCapacity = 5;
 
         /// <summary>

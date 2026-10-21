@@ -186,6 +186,15 @@ namespace GameLogic
 		private int m_sceneBackgroundVersion;
 		// 缺素材（既无骨骼也无立绘）的角色只提示一次，别每句都刷屏
 		private readonly HashSet<string> m_warnedMissingNpcVisuals = new HashSet<string>();
+		/// <summary>
+		/// 按设计就不出现在场景里的 npcId：AI / 旁白只是「心里话」的署名，陈父与妻子
+		/// 这一版没有美术、剧情上也从不与玩家同处一室。它们即使被写进 npcSet 也不占角色槽，
+		/// 免得空一个位置、还刷一条「请补素材」的假警告。
+		/// </summary>
+		private static readonly HashSet<string> s_nonVisualNpcIds = new HashSet<string>
+		{
+			"AI", "旁白", "陈父", "父亲", "妻子"
+		};
 #if SPINE_UNITY && SPINE_CSHARP
 		private readonly HashSet<string> m_unavailableNpcSpines = new HashSet<string>();
 		// 缺表情的动作只在控制台提示一次，MapNpcSpinePose 是静态方法，所以这里也用静态集合
@@ -621,7 +630,8 @@ namespace GameLogic
 			if (npcDialogue)
 				await PresentNpcSubtitleAsync(story, presentVersion);
 			else
-				await PresentNpcMessageAsync(NarrativePlayerName.Resolve(story.NpcText), presentVersion);
+				await PresentMessageAsync(NarrativePlayerName.Resolve(story.NpcText),
+					IsPlayerSpeakerNode(story), presentVersion);
 			if (IsDestroyed || presentVersion != m_dialoguePresentVersion)
 			{
 				return;
@@ -2037,6 +2047,23 @@ namespace GameLogic
 				turnType.Equals("NPCDialog", StringComparison.OrdinalIgnoreCase);
 		}
 
+		/// <summary>
+		/// 这句是不是玩家自己说的。气泡左右只看说话人，不看 TurnType：
+		/// TurnType 分的是「底部字幕 / 气泡区」两种呈现方式，同一种呈现方式里 NPC 和玩家都会有台词
+		/// （例：老周在气泡区讲座钟的来历，玩家在气泡区念评估结果）。
+		/// 配表里玩家的 npcId 统一写 AI。
+		/// </summary>
+		private static bool IsPlayerSpeakerNode(StoryNodeConfig story)
+		{
+			if (story == null || string.IsNullOrWhiteSpace(story.NpcId))
+			{
+				return false;
+			}
+
+			return string.Equals(story.NpcId.Trim(), NarrativeRules.PlayerSpeakerId,
+				StringComparison.OrdinalIgnoreCase);
+		}
+
 		private void BindDialoguePanel()
 		{
 			if (m_scrollMessage == null || m_scrollMessage.transform.parent == null)
@@ -2421,15 +2448,19 @@ namespace GameLogic
 			SetContinueHintVisible(true);
 		}
 
-		private async UniTask PresentNpcMessageAsync(string text, int presentVersion)
+		/// <summary>
+		/// 气泡区逐字显示。isPlayer 决定这一条落在哪一侧：
+		/// 玩家（AI）走右侧、带玩家头像；NPC 走左侧。左右由说话人定，与 TurnType 无关。
+		/// </summary>
+		private async UniTask PresentMessageAsync(string text, bool isPlayer, int presentVersion)
 		{
 			if (string.IsNullOrEmpty(text))
 			{
-				AddMessage(false, string.Empty);
+				AddMessage(isPlayer, string.Empty);
 				return;
 			}
 
-			AddMessage(false, text.Substring(0, 1));
+			AddMessage(isPlayer, text.Substring(0, 1));
 			int index = m_messages.Count - 1;
 			for (int i = 1; i <= text.Length; i++)
 			{
@@ -3898,23 +3929,26 @@ namespace GameLogic
 			// 节点级「这位中途走了」：只留说话人，其余槽收起
 			if (story != null && story.HideOtherNpc)
 			{
-				if (!string.IsNullOrEmpty(speaker)) present.Add(speaker);
+				if (!string.IsNullOrEmpty(speaker) && !IsNonVisualNpcId(speaker)) present.Add(speaker);
 				return present;
 			}
 
 			List<string> npcSet = GetSessionNpcSet();
 			for (int i = 0; i < npcSet.Count && present.Count < MaxSceneCharacterSlots; i++)
+			{
+				if (IsNonVisualNpcId(npcSet[i])) continue;
 				present.Add(npcSet[i]);
+			}
 
-			if (!string.IsNullOrEmpty(speaker) && !IsSilentNpcId(speaker) && !present.Contains(speaker) &&
+			if (!string.IsNullOrEmpty(speaker) && !IsNonVisualNpcId(speaker) && !present.Contains(speaker) &&
 				present.Count < MaxSceneCharacterSlots)
 				present.Add(speaker);
 			return present;
 		}
 
 		/// <summary>AI / 旁白 只是「心里话」的 npcId，不该真的站到场景里。</summary>
-		private static bool IsSilentNpcId(string npcId)
-			=> string.Equals(npcId, "AI", StringComparison.OrdinalIgnoreCase) || npcId == "旁白";
+		private static bool IsNonVisualNpcId(string npcId)
+			=> !string.IsNullOrEmpty(npcId) && s_nonVisualNpcIds.Contains(npcId.Trim());
 
 		/// <summary>
 		/// 按「在场角色」刷新所有槽。槽位分配只看 npcSet 顺序，与当前是谁在说话无关，
@@ -3927,6 +3961,9 @@ namespace GameLogic
 			if (m_imgSceneRoot == null) return;
 
 			m_currentSpeakerNpcId = story != null ? story.NpcId : null;
+			// 槽位系统一接管，prefab 里那块「NPC角色素材」占位板就该退场。
+			// 它挂在 BG 之后、人物之前，不关会正正盖住 Spine 角色（表现为「只看到一块灰板」）。
+			HideLegacyNpcPortrait();
 			List<string> present = ResolvePresentNpcIds(story);
 			int count = Mathf.Min(present.Count, MaxSceneCharacterSlots);
 			for (int i = 0; i < MaxSceneCharacterSlots; i++)
@@ -4421,19 +4458,6 @@ namespace GameLogic
 			}
 		}
 
-		private void HideLegacyNpcPortrait()
-		{
-			if (m_imgNpcPortrait != null)
-			{
-				m_imgNpcPortrait.enabled = false;
-			}
-
-			if (m_tmpNpcPlaceholder != null)
-			{
-				m_tmpNpcPlaceholder.gameObject.SetActive(false);
-			}
-		}
-
 		/// <summary>销毁所有槽的骨骼（日终反思、清场时用）。</summary>
 		private void HideNpcSpine()
 		{
@@ -4447,6 +4471,32 @@ namespace GameLogic
 		{
 		}
 #endif
+
+		/// <summary>
+		/// 关掉 prefab 里那块「NPC角色素材」占位板。
+		/// 它是美术没交素材时留的位标：一个**没有 sprite 的 Image**（UGUI 会画成一块不透明灰底）
+		/// + 一行文字，层级上挂在场景背景之后、人物之前，不关掉会正正盖住角色。
+		/// 以前只有「立绘加载成功」的回调会关它，而三个主要角色全走 Spine，于是它一直留在画面上。
+		/// 不依赖 Spine 类型，所以放在宏外面，两条路径都能调。
+		/// </summary>
+		private void HideLegacyNpcPortrait()
+		{
+			if (m_imgNpcPortrait != null)
+			{
+				m_imgNpcPortrait.enabled = false;
+			}
+
+			if (m_tmpNpcPlaceholder != null)
+			{
+				m_tmpNpcPlaceholder.gameObject.SetActive(false);
+				// 文字只是子节点，占位板本身是它的父节点，两个都要收（别把整个 UI 根节点收掉）。
+				Transform holder = m_tmpNpcPlaceholder.transform.parent;
+				if (holder != null && holder != transform)
+				{
+					holder.gameObject.SetActive(false);
+				}
+			}
+		}
 
 		private static string ResolveNpcPortraitLocation(string npcId, string animationAsset)
 		{
