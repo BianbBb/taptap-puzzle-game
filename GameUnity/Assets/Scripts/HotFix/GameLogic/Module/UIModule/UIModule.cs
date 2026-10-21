@@ -80,6 +80,7 @@ namespace GameLogic
             if (s_uiCanvas != null)
             {
                 s_uiCanvas.gameObject.layer = LayerMask.NameToLayer("UI");
+                PurgeOrphanWindows(s_uiCanvas);
             }
 
             RegisterAllController();
@@ -108,6 +109,40 @@ namespace GameLogic
                 {
                     m_errorLogger = new ErrorLogger(this);
                 }
+            }
+        }
+
+        /// <summary>
+        /// 清掉 UICanvas 下不属于当前模块的窗口节点。
+        /// 正常情况下 UICanvas 只由本模块的窗口填充，OnInit 时必然是空的；
+        /// 能出现残留只有一种可能：上一份 UIModule 被重建（热重载 / 模块销毁异常中断），
+        /// 旧窗口的 GameObject 留在 DontDestroyOnLoad 的 UIRoot 里，而新实例的 m_uiStack 是空的。
+        /// 这些孤儿既会继续渲染（多份全屏 UI 叠在一起，每帧多几百万顶点），
+        /// 也会顶在射线最上层吃掉点击，还会让 GetWindow 拿不到真正在跑的那个窗口。
+        /// </summary>
+        private static void PurgeOrphanWindows(Transform canvas)
+        {
+            if (canvas == null)
+            {
+                return;
+            }
+
+            for (int i = canvas.childCount - 1; i >= 0; i--)
+            {
+                Transform child = canvas.GetChild(i);
+                if (child == null)
+                {
+                    continue;
+                }
+
+                // 窗口实例的特征：根节点同时挂 Canvas 和 UIBindComponent，普通 UI 子节点不会两样齐备。
+                if (child.GetComponent<Canvas>() == null || child.GetComponent<UIBindComponent>() == null)
+                {
+                    continue;
+                }
+
+                DLogger.Warning("清理残留窗口节点：{0}（上一份 UIModule 未销毁，避免全屏 UI 叠加）", child.name);
+                UnityEngine.Object.Destroy(child.gameObject);
             }
         }
 
