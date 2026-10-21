@@ -61,9 +61,14 @@ namespace GameLogic
 
             foreach (NarrativeItemPartConfig part in config.AllNarrativeItemParts)
             {
-				if (part.HotspotX < 0f || part.HotspotX > 1f || part.HotspotY < 0f || part.HotspotY > 1f)
+				// (-1, -1) 是「这个部件在图上没有位置」的约定值：被卡死的仓盖后面、还没拆出来的东西，
+				// 画不了圆点，改走详情页下方的按钮列表（见 BattleMainUI_ItemPage 的 hot/list 分流）。
+				// 只有一半是负数的才是真配错。
+				bool hotspotUnset = part.HotspotX < 0f && part.HotspotY < 0f;
+				if (!hotspotUnset &&
+					(part.HotspotX < 0f || part.HotspotX > 1f || part.HotspotY < 0f || part.HotspotY > 1f))
 					AddError(issues, "ITEM_PART_HOTSPOT_OUT_OF_RANGE", part.Id,
-						$"hotspot coordinates must be within 0..1; received ({part.HotspotX}, {part.HotspotY}).");
+						$"hotspot coordinates must be within 0..1 (or both -1 for \"no hotspot on the image\"); received ({part.HotspotX}, {part.HotspotY}).");
 
                 if (!string.IsNullOrWhiteSpace(part.MemoryId))
                 {
