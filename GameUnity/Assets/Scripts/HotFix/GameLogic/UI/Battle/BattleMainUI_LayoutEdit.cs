@@ -24,17 +24,36 @@ namespace GameLogic
 		/// <summary>
 		/// 每个角色在所有场景共用一套缩放（打包默认）。F2 的放大/缩小写的是同名的本机覆盖键，
 		/// 所以调一次对所有幕生效。
+		/// 陈果的立绘只画到裙摆（半身构图），按 960 高的槽位一拉，1.5 会让她比老周还大一号，
+		/// 三人同框（S07）时尤其明显；1.1 才回到「小孩站在大人旁边」的比例。
 		/// </summary>
 		private static readonly Dictionary<string, float> CharacterScaleDefaults = new Dictionary<string, float>
 		{
 			{ "老周", 1.4f },
 			{ "陈先生", 1.7f },
-			{ "陈果", 1.5f },
-			{ "女孩", 1.5f },
+			{ "陈果", 1.1f },
+			{ "女孩", 1.1f },
 		};
 
 		// 当前场景建议的人物图层（0=所有前景都在人物前，1=中间，2=人物在所有前景前）
 		private int m_sceneCharacterLayer;
+		// 当前场景的 backgroundId，用来查 SceneNpcCharacterLayers 这张例外表
+		private string m_sceneBackgroundId;
+
+		/// <summary>
+		/// 「这个角色在这个场景该站哪一层」的例外表，key = backgroundId|npcId。
+		/// 只写默认值真的不一样的组合，没列到的角色一律跟 m_sceneCharacterLayer 走。
+		///
+		/// 修理铺：店铺默认是 0（收音机 / 柜台 / 桌面零件都盖住人物），三个人同框那一幕
+		/// （S07）陈果站中间，正好对着挂在墙上的盆栽 —— 0 层会让盆栽吃掉她的脑袋。
+		/// 所以把她单独提到 1 层：盆栽在她身后，收音机 / 柜台 / 零件仍在她身前。
+		/// </summary>
+		private static readonly Dictionary<string, int> SceneNpcCharacterLayers = new Dictionary<string, int>
+		{
+			{ "scene_shop_old|陈果", 1 },
+			{ "scene_shop_old_fixed|陈果", 1 },
+			{ "scene_shop_new|陈果", 1 },
+		};
 
 		private readonly HashSet<RectTransform> m_layoutDragTargets = new HashSet<RectTransform>();
 		private GameObject m_layoutHint;
@@ -170,9 +189,31 @@ namespace GameLogic
 		{
 			// 本机手动覆盖（F2 的「图层」按钮）优先，否则跟当前场景走。
 			string key = LayoutPreferencePrefix + part + ".Layer";
-			return PlayerPrefs.HasKey(key)
-				? Mathf.Clamp(PlayerPrefs.GetInt(key), 0, 2)
-				: Mathf.Clamp(m_sceneCharacterLayer, 0, 2);
+			if (PlayerPrefs.HasKey(key))
+			{
+				return Mathf.Clamp(PlayerPrefs.GetInt(key), 0, 2);
+			}
+
+			// 「场景默认」之上还有一层「这个角色在这个场景」的例外
+			if (TryResolveSceneNpcLayer(GetLayoutPartNpcId(part), out int npcLayer))
+			{
+				return npcLayer;
+			}
+
+			return Mathf.Clamp(m_sceneCharacterLayer, 0, 2);
+		}
+
+		private bool TryResolveSceneNpcLayer(string npcId, out int layer)
+		{
+			layer = 0;
+			if (string.IsNullOrEmpty(npcId) || string.IsNullOrEmpty(m_sceneBackgroundId))
+			{
+				return false;
+			}
+
+			// 「女孩」是陈果在早期节点里的写法，别名直接并到陈果
+			string key = m_sceneBackgroundId + "|" + (npcId == "女孩" ? "陈果" : npcId);
+			return SceneNpcCharacterLayers.TryGetValue(key, out layer);
 		}
 
 		/// <summary>

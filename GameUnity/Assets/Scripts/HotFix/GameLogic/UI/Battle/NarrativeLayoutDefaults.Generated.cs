@@ -11,7 +11,7 @@ namespace GameLogic
 			entries.Add("Character.S01.NpcDialogue.陈先生", new Entry(true, 719.6366577148438f, -591.8914184570312f, false, 1f, false, 0, false, false));
 			entries.Add("CharacterScale.老周", new Entry(false, 0f, 0f, true, 1.4f, false, 0, false, false));
 			entries.Add("CharacterScale.陈先生", new Entry(false, 0f, 0f, true, 1.7f, false, 0, false, false));
-			entries.Add("CharacterScale.陈果", new Entry(false, 0f, 0f, true, 1.5f, false, 0, false, false));
+			entries.Add("CharacterScale.陈果", new Entry(false, 0f, 0f, true, 1.1f, false, 0, false, false));
 			entries.Add("Collection", new Entry(true, 851.5414428710938f, -427.53729248046875f, false, 1f, false, 0, false, false));
 			entries.Add("DialoguePanel", new Entry(true, 287f, -103.5f, false, 1f, false, 0, false, false));
 			entries.Add("EmotionPanel", new Entry(true, 0f, 14f, false, 1f, false, 0, false, false));

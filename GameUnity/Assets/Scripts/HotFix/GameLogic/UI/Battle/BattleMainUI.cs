@@ -4675,6 +4675,9 @@ namespace GameLogic
 			}
 
 			// 人物插层由场景决定：0=所有前景盖住人物（站在柜台/书桌后面），1=第 1 层前景在人物身后。
+			// 这只是场景的默认值，具体到每个角色还可能被 SceneNpcCharacterLayers 里的例外改写
+			// （例：修理铺的盆栽会正正盖住站中间的人，所以陈果单独提到第 1 层）。
+			m_sceneBackgroundId = backgroundId;
 			m_sceneCharacterLayer = knownScene
 				? ResolveSceneCharacterLayer(backgroundId)
 				: (npcId == "陈果" || npcId == "女孩" ? 1 : 0);
