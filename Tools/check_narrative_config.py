@@ -12,6 +12,10 @@
 白的放过、灰的照旧报（与 C# 版一致的取舍）：
 - 部件热点 (-1,-1) = 这个部件在图上没有位置，走详情页按钮列表，不算错（2026-10-21 起）。
 - NODE_ALL_REPLIES_LOCKED / NODE_NO_MEMORYLESS_REPLY 依赖存档状态，这里不查，留给运行时。
+
+只在离线查、C# 校验器没有的「配表纪律」规则（不影响运行，纯粹防止写表时踩坑）：
+- SHOP_SCENE_STALE / SHOP_SCENE_UNSET：修理铺在 S07 T0639 变亮之后不许再回旧店，
+  详见 docs/场景搭建与配表接入.md 的「修理铺的三个状态」。
 """
 import argparse
 import json
@@ -20,6 +24,11 @@ import sys
 
 JSON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         '..', 'GameUnity', 'Configs', 'Json')
+
+# 修理铺的「变亮」分界线：S07（第六幕·奖励，day 23）的 T0639 起换崭新店铺。
+# 这一幕之内变亮（前半段还是破旧店），所以本幕不受限；dayIndex 大于它的幕一律不许回旧店。
+SHOP_LIGHT_UP_DAY = 23
+SHOP_OLD_BACKGROUNDS = {'scene_shop_old', 'scene_shop_old_fixed'}
 
 
 def load(name):
@@ -109,6 +118,49 @@ def main():
         if nxt and nxt not in sessions:
             E('SESSION_NEXT_MISSING', sid, nxt)
 
+    # ---- 修理铺：变亮之后一律用新店（配表纪律，C# 校验器没有这一条）----
+    # S07（day 23）的 T0639 起，修理铺换成 scene_shop_new：那次白光代表这间铺子往后的日子都好了，
+    # 所以 dayIndex > 23 的幕只要出现修理铺，就不许再回 scene_shop_old / scene_shop_old_fixed —
+    # 否则「修复后的店」会莫名其妙退回破旧版，而失误要到跑到那一幕的画面才看得见。
+    # 进店节点不是按名字猜的：从每条 Session 的 startNodeId 顺着对话走一遍，谁走到就是谁的幕。
+    def session_nodes(session):
+        start = session.get('startNodeId')
+        stack, seen = ([start] if start in nodes else []), set()
+        while stack:
+            nid = stack.pop()
+            if nid in seen or nid not in nodes:
+                continue
+            seen.add(nid)
+            node = nodes[nid]
+            if node.get('isSessionEnd'):
+                continue
+            stack.extend(nxt for nxt in
+                         [node.get('defaultNextNodeId')] + list(node.get('extraNextNodeIds') or [])
+                         if nxt)
+            for rid in node.get('replies') or []:
+                nxt = (replies.get(rid) or {}).get('nextNodeId')
+                if nxt:
+                    stack.append(nxt)
+            for branch in node.get('branches') or []:
+                stack.append(branch.get('nextNode'))
+        return seen
+
+    for sid, session in sessions.items():
+        if session.get('dayIndex', 0) <= SHOP_LIGHT_UP_DAY:
+            continue
+        bg = session.get('backgroundId')
+        if bg in SHOP_OLD_BACKGROUNDS:
+            E('SHOP_SCENE_STALE', sid,
+              f'{bg} on day {session["dayIndex"]}; the shop is already lit up, use scene_shop_new')
+        if not bg and '老周' in (session.get('npcSet') or ''):
+            W('SHOP_SCENE_UNSET', sid,
+              'no backgroundId; falls back to npcId layout, which renders the old shop art')
+        for nid in sorted(session_nodes(session)):
+            node_bg = nodes[nid].get('backgroundId')
+            if node_bg in SHOP_OLD_BACKGROUNDS:
+                E('SHOP_SCENE_STALE', nid,
+                  f'{node_bg} on day {session["dayIndex"]}; the shop is already lit up')
+
     # ---- 记忆 -> 情绪 ----
     for memory in memory_rows:
         for eid in memory.get('emotionCardSet') or []:
@@ -159,7 +211,10 @@ def main():
                 E('BRANCH_REPLY_MISSING', nid, branch.get('reply'))
             if branch.get('nextNode') not in nodes:
                 E('BRANCH_NODE_MISSING', nid, branch.get('nextNode'))
-        if (node.get('turnType') or '').lower() == 'scenesearch':
+        turn = (node.get('turnType') or '').lower()
+        if turn == 'memorystarmap' and not default_next:
+            E('STAR_MAP_NO_NEXT', nid, 'a MemoryStarMap node needs defaultNextNodeId')
+        if turn == 'scenesearch':
             if not default_next:
                 E('SCENE_SEARCH_NO_NEXT', nid, 'needs defaultNextNodeId')
             background = node.get('backgroundId')

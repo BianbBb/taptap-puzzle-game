@@ -60,6 +60,14 @@ NPC_ID_MAP = {
 
 # 策划表的场景名 -> 项目现有场景图层前缀。
 # 新图补齐后，在这里加映射即可，代码侧 TryResolveBackgroundLocations 也要同步。
+#
+# ⚠️ 修理铺三个状态，源表只能表达两个（修复前 / 修复后）：
+#   scene_shop_old        破旧店 + 坏收音机   ← 修复前
+#   scene_shop_old_fixed  破旧店 + 好收音机   ← 源表表达不了，导完手工改
+#   scene_shop_new        崭新店 + 好收音机   ← 修复后
+# 第六幕（S07，day 23）整幕都还是破旧店，直到 T0639 那次白光才变新店，
+# 所以导完必须手工把 S07 改成 scene_shop_old_fixed，并在 T0639 填 scene_shop_new。
+# dayIndex > 23 的幕之后再出现修理铺，一律 scene_shop_new（Tools/check_narrative_config.py 会查）。
 BACKGROUND_MAP = {
     "修理铺-收音机修复前": "scene_shop_old",
     "修理铺-收音机修复后": "scene_shop_new",
@@ -67,7 +75,8 @@ BACKGROUND_MAP = {
     "陈果卧室-修复后": "scene_chenguo",
     "陈先生卧室-修复前": "scene_father",
     "陈先生卧室-修复后": "scene_father",
-    "仓库": "scene_zhou",
+    # 仓库已换成 6+2 层的新美术（scene_zhou 是旧的 5 前景版，只留在代码兜底里）。
+    "仓库": "scene_warehouse",
 }
 
 # 源表 BackGroundID -> 开场过场卡上的地点文案（Session.titleLocation）
@@ -1028,7 +1037,7 @@ def convert(src, out_dir, apply_mode, day_mode, mem_map=None):
           ("dayMonologue", "string", "该Session结束后的AI日终独白"),
           ("isFormalEnding", "bool", "是否在日终后进入正式结局"),
           ("npcSet", "string", "按剧情配表 Session.NPCSet 的顺序填写 NPC 名，逗号分隔；用于 NPC 对话左右站位"),
-          ("backgroundId", "string", "场景背景 ID；为空时回退到按 npcId 选择（旧逻辑）"),
+          ("backgroundId", "string", "场景背景 ID；为空时回退到按 npcId 选择（旧逻辑）；修理铺三态见 docs/场景搭建与配表接入.md，S07 T0639 起一律 scene_shop_new"),
           ("titleDate", "string", "开场过场卡日期，如 2026年9月30日；为空则本幕不播过场"),
           ("titleLocation", "string", "开场过场卡地点，如 老周修理铺；为空则本幕不播过场")],
          ses_out),
