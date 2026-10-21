@@ -143,6 +143,22 @@ namespace GameLogic
                 }
             }
 
+            // 记忆星图节点自己不播文案，演完直接推进；没有 next 会把玩家锁死在黑屏里。
+            foreach (StoryNodeConfig node in config.AllStoryNodes)
+            {
+                if (node.TurnType == null ||
+                    !node.TurnType.Trim().Equals("MemoryStarMap", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(node.DefaultNextNodeId))
+                {
+                    AddError(issues, "STAR_MAP_NO_NEXT", node.Id,
+                        "a MemoryStarMap node needs a default next node to leave the cutscene.");
+                }
+            }
+
             var grantedItems = new HashSet<string>(StringComparer.Ordinal);
             var removedItems = new HashSet<string>(StringComparer.Ordinal);
             foreach (NarrativeActionConfig action in config.AllActions)
