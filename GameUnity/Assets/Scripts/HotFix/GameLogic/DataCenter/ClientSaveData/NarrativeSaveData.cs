@@ -376,6 +376,18 @@ namespace GameLogic
                     "Day monologue can only start after the active session has ended.");
             }
 
+            // 「AI 被清退 / 重启」的幕（S08 磨难）：幕一结束就把记忆全抹掉，Session 表 clearMemoriesOnEnd 标记。
+            // 放在这里而不是 EnterDayEnd 里，是因为它是「幕结束 → 日终反思」的唯一闸口，
+            // 且必须在 NeedsMemoryCleanup 判定之前完成 —— 清空后记忆数是 0，
+            // 玩家不会再被弹到「手动删记忆」的整理页，日终独白那句「存储清零」也就成了陈述事实。
+            // 只清记忆：情绪与好感保留，S09 里 AI 还要把自己学会的那几种情绪逐条复述出来。
+            NarrativeSessionConfig completedSession =
+                NarrativeConfigMgr.Instance.GetSession(m_lastCompletedSessionId);
+            if (completedSession != null && completedSession.ClearMemoriesOnEnd && ClearAllMemories())
+            {
+                DLogger.Info("Session {0} cleared all memories (clearMemoriesOnEnd).", completedSession.Id);
+            }
+
             m_dayPhase = NarrativeDayPhase.Monologue;
             Save();
         }
@@ -424,6 +436,24 @@ namespace GameLogic
 
         public bool RemoveMemoryDuringCleanup(string memoryId)
             => m_dayPhase == NarrativeDayPhase.MemoryCleanup && RemoveMemory(memoryId);
+
+        /// <summary>
+        /// 抹掉玩家持有的全部记忆，用于「AI 被清退 / 重启」的幕（Session 表 clearMemoriesOnEnd）。
+        /// 情绪、好感、道具、剧情 flag 一律不动：S08 结尾 AI 忘掉的是「事」，
+        /// 不是「人」也不是「学会的东西」——S09 里它还要把自己学到的四种情绪逐条复述出来。
+        /// </summary>
+        public bool ClearAllMemories()
+        {
+            if (m_ownedMemoryIds.Count == 0 && (m_ownedMemoryOrder == null || m_ownedMemoryOrder.Count == 0))
+            {
+                return false;
+            }
+
+            m_ownedMemoryIds.Clear();
+            m_ownedMemoryOrder?.Clear();
+            Save();
+            return true;
+        }
 
         public bool FinishMemoryCleanupAndAdvanceDay()
             => FinishMemoryCleanupAndAdvanceDay(0);

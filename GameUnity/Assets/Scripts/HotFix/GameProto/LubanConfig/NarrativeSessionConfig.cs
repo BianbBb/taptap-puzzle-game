@@ -30,6 +30,7 @@ public sealed partial class NarrativeSessionConfig : Luban.BeanBase
         BackgroundId = _buf.ReadString();
         TitleDate = _buf.ReadString();
         TitleLocation = _buf.ReadString();
+        ClearMemoriesOnEnd = _buf.ReadBool();
     }
 
     public static NarrativeSessionConfig DeserializeNarrativeSessionConfig(ByteBuf _buf)
@@ -85,6 +86,10 @@ public sealed partial class NarrativeSessionConfig : Luban.BeanBase
     /// 开场过场卡地点，如 老周修理铺；为空则本幕不播过场
     /// </summary>
     public string TitleLocation;
+    /// <summary>
+    /// 该 Session 结束后清空玩家全部记忆（AI 被清退/重启）；情绪、好感、道具保留
+    /// </summary>
+    public bool ClearMemoriesOnEnd;
 
     public const int __ID__ = -1628633530;
     public override int GetTypeId() => __ID__;
@@ -112,6 +117,7 @@ public sealed partial class NarrativeSessionConfig : Luban.BeanBase
         other.BackgroundId = BackgroundId;
         other.TitleDate = TitleDate;
         other.TitleLocation = TitleLocation;
+        other.ClearMemoriesOnEnd = ClearMemoriesOnEnd;
     }
 
     public NarrativeSessionConfig DeepCopy()
@@ -136,6 +142,7 @@ public sealed partial class NarrativeSessionConfig : Luban.BeanBase
         + "backgroundId:" + BackgroundId + ","
         + "titleDate:" + TitleDate + ","
         + "titleLocation:" + TitleLocation + ","
+        + "clearMemoriesOnEnd:" + ClearMemoriesOnEnd + ","
         + "}";
     }
 }

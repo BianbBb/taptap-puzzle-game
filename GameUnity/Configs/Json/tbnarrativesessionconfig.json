@@ -11,7 +11,8 @@
     "npcSet": "老周,陈先生",
     "backgroundId": "scene_shop_old",
     "titleDate": "2026年9月30日",
-    "titleLocation": "老周修理铺"
+    "titleLocation": "老周修理铺",
+    "clearMemoriesOnEnd": false
   },
   {
     "id": "S02",
@@ -25,7 +26,8 @@
     "npcSet": "老周",
     "backgroundId": "scene_warehouse",
     "titleDate": "2026年10月6日",
-    "titleLocation": "仓库"
+    "titleLocation": "仓库",
+    "clearMemoriesOnEnd": false
   },
   {
     "id": "S03",
@@ -39,7 +41,8 @@
     "npcSet": "陈先生,陈果",
     "backgroundId": "scene_chenguo",
     "titleDate": "2026年10月10日",
-    "titleLocation": "陈果房间"
+    "titleLocation": "陈果房间",
+    "clearMemoriesOnEnd": false
   },
   {
     "id": "S04",
@@ -53,7 +56,8 @@
     "npcSet": "老周,陈果",
     "backgroundId": "scene_shop_old",
     "titleDate": "",
-    "titleLocation": ""
+    "titleLocation": "",
+    "clearMemoriesOnEnd": false
   },
   {
     "id": "S05",
@@ -67,7 +71,8 @@
     "npcSet": "陈先生,妻子",
     "backgroundId": "scene_father",
     "titleDate": "2026年10月15日",
-    "titleLocation": "父母房间"
+    "titleLocation": "父母房间",
+    "clearMemoriesOnEnd": false
   },
   {
     "id": "S06",
@@ -81,7 +86,8 @@
     "npcSet": "老周,陈先生",
     "backgroundId": "scene_shop_old",
     "titleDate": "2026年10月16日",
-    "titleLocation": "老周修理铺"
+    "titleLocation": "老周修理铺",
+    "clearMemoriesOnEnd": false
   },
   {
     "id": "S07",
@@ -95,7 +101,8 @@
     "npcSet": "老周,陈先生,陈果",
     "backgroundId": "scene_shop_old_fixed",
     "titleDate": "2026年10月22日",
-    "titleLocation": "老周修理铺"
+    "titleLocation": "老周修理铺",
+    "clearMemoriesOnEnd": false
   },
   {
     "id": "S08",
@@ -109,7 +116,8 @@
     "npcSet": "陈先生",
     "backgroundId": "scene_father",
     "titleDate": "2026年10月27日",
-    "titleLocation": "父母房间"
+    "titleLocation": "父母房间",
+    "clearMemoriesOnEnd": true
   },
   {
     "id": "S09",
@@ -123,6 +131,7 @@
     "npcSet": "老周,陈先生",
     "backgroundId": "scene_shop_new",
     "titleDate": "2026年10月30日",
-    "titleLocation": "老周修理铺"
+    "titleLocation": "老周修理铺",
+    "clearMemoriesOnEnd": false
   }
 ]
