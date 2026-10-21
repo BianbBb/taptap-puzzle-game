@@ -32,6 +32,16 @@ namespace GameLogic
         protected override void BindMemberProperty()
         {
             m_skeletonGraphic = m_goSpineModel.GetComponent<SkeletonGraphic>();
+            // 预制体上是 allowMultipleCanvasRenderers=1 + canvasRenderers=[] 这个坏组合：
+            // SkeletonGraphic.Rebuild 里只要 allowMultipleCanvasRenderers 为真，就会把自己那个
+            // CanvasRenderer.Clear() 掉，然后把网格画进 canvasRenderers 里的**子**渲染器 ——
+            // 而列表是空的，等于网格谁都不画。症状就是「骨骼在播、皮肤和动作都对、就是不显示」。
+            // 关掉它走单渲染器路径：UpdateMeshSingleCanvasRenderer 会 SetMesh + SetTexture。
+            if (m_skeletonGraphic != null)
+            {
+                m_skeletonGraphic.allowMultipleCanvasRenderers = false;
+            }
+
             EnsureAnimationState();
         }
 
@@ -48,6 +58,9 @@ namespace GameLogic
         #region 字段
 
         private float m_curScale = 1;
+        /// <summary>上一次 FitToSlot 用的 slot 尺寸，同尺寸不重算（换表情时会跳）。</summary>
+        private Vector2 m_fittedSlotSize;
+        private bool m_fittedOnce;
         private GameTimer m_gameTimer;
         private Action m_clickAction;
         private SkeletonGraphic m_skeletonGraphic;
@@ -114,6 +127,8 @@ namespace GameLogic
 
         /// <summary>
         /// 把骨骼按原始比例缩进 slot 内，底对齐、水平居中。
+        /// 同一个 slot 尺寸只算一次：换表情时骨骼包围盒会变（陈果 kaixin 位移 19%），
+        /// 每句重算会让角色忽大忽小地跳。
         /// </summary>
         public void FitToSlot(Vector2 slotSize)
         {
@@ -128,25 +143,38 @@ namespace GameLogic
                 return;
             }
 
-            Skeleton skeleton = m_skeletonGraphic.Skeleton;
-            skeleton.UpdateWorldTransform();
-            float[] vertexBuffer = new float[2048];
-            float x;
-            float y;
-            float width;
-            float height;
-            skeleton.GetBounds(out x, out y, out width, out height, ref vertexBuffer);
-
-            if (width < 0.01f || height < 0.01f)
+            if (m_fittedSlotSize == slotSize && m_fittedOnce)
             {
                 return;
             }
 
-            float scale = Mathf.Min(slotSize.x / width, slotSize.y / height);
+            // 必须用「实际网格的包围盒」算缩放，不能用 Skeleton.GetBounds。
+            // GetBounds 返回的是按 SkeletonDataAsset 的 scale（本工程 0.01）缩过的骨架空间
+            // （约 13 x 22），而 SkeletonGraphic 的网格顶点是未缩的像素空间（约 1336 x 2172），
+            // 两者差 100 倍 —— 拿 GetBounds 算出来的 scale 是 43 而不是 0.44，
+            // 整个模型被放大一百倍飞出屏幕（症状：骨骼在播、皮肤动作都对、画面里一个人都没有）。
+            m_skeletonGraphic.UpdateMesh();
+            Mesh mesh = m_skeletonGraphic.GetLastMesh();
+            if (mesh == null || mesh.vertexCount == 0)
+            {
+                return;
+            }
+
+            Bounds bounds = mesh.bounds;
+            if (bounds.size.x < 0.01f || bounds.size.y < 0.01f)
+            {
+                return;
+            }
+
+            float scale = Mathf.Min(slotSize.x / bounds.size.x, slotSize.y / bounds.size.y);
             ChangeScale(scale);
-            float offsetX = -(x + width * 0.5f) * scale;
-            float offsetY = -slotSize.y * 0.5f - y * scale;
+            // localPosition 在父空间里，不受自身 localScale 影响，所以偏移量要乘 scale 换算回父空间。
+            // 底对齐：包围盒底边 = slot 底边；水平居中：包围盒中心 x = slot 中心 x。
+            float offsetX = -bounds.center.x * scale;
+            float offsetY = -slotSize.y * 0.5f - (bounds.center.y - bounds.extents.y) * scale;
             ChangeLocalPos(new Vector3(offsetX, offsetY, 0f));
+            m_fittedSlotSize = slotSize;
+            m_fittedOnce = true;
             m_skeletonGraphic.raycastTarget = false;
         }
 
