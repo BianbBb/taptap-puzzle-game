@@ -406,21 +406,23 @@ namespace GameLogic
 			rect.anchorMax = new Vector2(0.5f, 0f);
 			rect.pivot = new Vector2(0.5f, 0f);
 			rect.anchoredPosition = new Vector2(0f, 48f);
-			rect.sizeDelta = new Vector2(720f, 48f);
+			rect.sizeDelta = new Vector2(720f, 96f);
 
 			TextMeshProUGUI label = go.GetComponent<TextMeshProUGUI>();
 			label.text = text;
-			label.fontSize = 24f;
+			label.fontSize = 48f;
 			label.alignment = TextAlignmentOptions.Center;
-			label.color = HudPaperText;
+			// 提示压在场景图上，纸色（深褐）在仓库里几乎看不清，这里直接用白字。
+			label.color = Color.white;
 			label.raycastTarget = false;
 
 			CanvasGroup group = go.GetComponent<CanvasGroup>();
 			group.alpha = 0f;
 			group.blocksRaycasts = false;
 			group.interactable = false;
-			group.DOFade(0.85f, 0.4f).SetUpdate(true).SetLink(go)
-				.OnComplete(() => group.DOFade(0.35f, 1.2f).SetUpdate(true).SetLink(go));
+			// 白字比褐字显眼，呼吸的低点抬到 0.6，否则淡下去那一瞬间像糊了一层灰。
+			group.DOFade(1f, 0.4f).SetUpdate(true).SetLink(go)
+				.OnComplete(() => group.DOFade(0.6f, 1.2f).SetUpdate(true).SetLink(go));
 		}
 
 		private void ClearSceneHotspots()
