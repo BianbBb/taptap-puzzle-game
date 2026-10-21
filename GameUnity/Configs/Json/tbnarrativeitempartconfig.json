@@ -108,32 +108,32 @@
     "partName": "磁带仓",
     "imageId": "placeholder",
     "memoryId": "M13",
-    "hotspotX": 0.5275,
-    "hotspotY": 0.5574
+    "hotspotX": 0.615,
+    "hotspotY": 0.488
   },
   {
     "id": "RADIO_PART_02",
     "partName": "电源线",
     "imageId": "placeholder",
     "memoryId": "M14",
-    "hotspotX": 0.211,
-    "hotspotY": 0.394
+    "hotspotX": 0.135,
+    "hotspotY": 0.395
   },
   {
     "id": "RADIO_PART_03",
     "partName": "电池仓",
     "imageId": "placeholder",
     "memoryId": "M15",
-    "hotspotX": -1,
-    "hotspotY": -1
+    "hotspotX": 0.235,
+    "hotspotY": 0.51
   },
   {
     "id": "RADIO_PART_04",
     "partName": "磁带",
     "imageId": "placeholder",
     "memoryId": "M16",
-    "hotspotX": -1,
-    "hotspotY": -1
+    "hotspotX": 0.47,
+    "hotspotY": 0.592
   },
   {
     "id": "TAPE_PART_01",

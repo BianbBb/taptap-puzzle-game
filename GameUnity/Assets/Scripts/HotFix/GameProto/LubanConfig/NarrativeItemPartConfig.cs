@@ -48,11 +48,11 @@ public sealed partial class NarrativeItemPartConfig : Luban.BeanBase
     /// </summary>
     public string MemoryId;
     /// <summary>
-    /// 图片热点横坐标，归一化0到1
+    /// 图片热点横坐标，归一化0到1；(-1,-1)表示这个部件在图上没有位置，改走详情页按钮列表
     /// </summary>
     public float HotspotX;
     /// <summary>
-    /// 图片热点纵坐标，归一化0到1
+    /// 图片热点纵坐标，归一化0到1（从下往上）；(-1,-1)同上
     /// </summary>
     public float HotspotY;
 
