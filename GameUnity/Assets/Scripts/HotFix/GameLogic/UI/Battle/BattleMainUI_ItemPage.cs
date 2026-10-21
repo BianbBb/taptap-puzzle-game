@@ -56,8 +56,9 @@ namespace GameLogic
 		private const float ItemPageDescFontSize = 28f;
 		private const float ItemPageDescMinFontSize = 21f;
 		private const float ItemPageHintTop = 656f;
-		private const float ItemPageHintFontSize = 21f;
-		private const float ItemPageHintBoxHeight = 30f;
+		/// <summary>底部提示字号。21 在实机上和描述（28）差一档，读起来像脚注，提到 26。</summary>
+		private const float ItemPageHintFontSize = 26f;
+		private const float ItemPageHintBoxHeight = 34f;
 		private const float ItemPageChipTop = 696f;
 		/// <summary>没有物品图时，文字块整体上提这么多（约等于物品图区域的高度）。
 		/// 注意纸面 y 是「向下为负」，所以提起来是加正数。</summary>
@@ -73,17 +74,14 @@ namespace GameLogic
 		private const float ItemPageChipMinFontSize = 15f;
 		private const float ItemPageFadeSeconds = 0.18f;
 		private const float ItemPageCloseFadeSeconds = 0.14f;
-		/// <summary>热点圈的直径。</summary>
-		private const float ItemPageHotspotSize = 74f;
+		/// <summary>热点圈的直径。没有名字纸片之后，圈本身是唯一的提示，尺寸也跟着涨一点。</summary>
+		private const float ItemPageHotspotSize = 80f;
 		private const float ItemPageHotspotPulseSeconds = 0.75f;
-		/// <summary>圈下面那张写部件名的小纸片。字号跟着整体放大，12 号在实机上是一团墨。</summary>
-		private const float ItemPageHotspotTagFontSize = 19f;
-		private const float ItemPageHotspotTagHeight = 31f;
-		private const float ItemPageHotspotTagMaxWidth = 210f;
+		/// <summary>呼吸到最暗时的透明度。别低于 0.6，否则波谷那一瞬间看着像没画圈。</summary>
+		private const float ItemPageHotspotPulseMinAlpha = 0.6f;
 
 		private static readonly Color ItemPageRuledColor = new Color(1f, 1f, 1f, 0.32f);
 		private static readonly Color ItemPageHotspotColor = new Color(0.85f, 0.66f, 0.30f, 0.95f);
-		private static readonly Color ItemPageTagColor = new Color(0.99f, 0.96f, 0.89f, 0.92f);
 
 		private static Sprite s_itemPageRingSprite;
 		private static Sprite s_itemPageDotSprite;
@@ -476,8 +474,11 @@ namespace GameLogic
 			RectTransform rect = go.GetComponent<RectTransform>();
 			rect.anchorMin = rect.anchorMax = new Vector2(1f, 1f);
 			rect.pivot = new Vector2(1f, 1f);
+			// 66×41 在实机上是颗小痣，玩家根本注意不到。翻倍到 132×82 —— 严格翻倍是为了不破坏素材比例：
+			// setting_close_btn 的 spriteBorder 是 0，不能九切，尺寸比例一变就变形。
+			// 锚点在右上、pivot 也是右上，所以放大只往左和往下长，贴纸边距不用改。
 			rect.anchoredPosition = new Vector2(-(ItemPagePadRight + 14f), -(ItemPagePadTop + 8f));
-			rect.sizeDelta = new Vector2(66f, 41f);
+			rect.sizeDelta = new Vector2(132f, 82f);
 			Image image = go.GetComponent<Image>();
 			image.preserveAspect = false;
 			image.raycastTarget = true;
@@ -492,7 +493,10 @@ namespace GameLogic
 			button.onClick.AddListener(CloseItemPage);
 		}
 
-		/// <summary>部件热点：金色虚线圈 + 下面一张写着部件名的小纸片。</summary>
+		/// <summary>
+		/// 部件热点：一圈金色虚线 + 一圈更淡的柔光。
+		/// 不写部件名 —— 圈本身就是要玩家去点的东西，写了名字反而像图注。
+		/// </summary>
 		private void CreateItemPageHotspots(RectTransform imageRect, Vector2 displaySize,
 			List<NarrativeItemPartConfig> parts)
 		{
@@ -550,13 +554,14 @@ namespace GameLogic
 				CanvasGroup ringGroup = ring.GetComponent<CanvasGroup>();
 				ringGroup.blocksRaycasts = false;
 				// 呼吸：圈和光一起亮一下暗一下，别做成转圈 —— 转圈在静态画面上像加载中。
+				// 暗只暗到 0.6：旧值 0.45 配上细线，波谷那一刻整圈基本消失，正好撞上「看不见有圈」。
 				DOTween.To(() => ringGroup.alpha, alpha =>
 					{
 						if (ringGroup != null)
 						{
 							ringGroup.alpha = alpha;
 						}
-					}, 0.45f, ItemPageHotspotPulseSeconds)
+					}, ItemPageHotspotPulseMinAlpha, ItemPageHotspotPulseSeconds)
 					.SetEase(Ease.InOutSine)
 					.SetLoops(-1, LoopType.Yoyo)
 					.SetUpdate(true)
@@ -573,8 +578,6 @@ namespace GameLogic
 					.SetUpdate(true)
 					.SetLink(glow);
 
-				AddItemPageHotspotTag(rect, part.PartName);
-
 				Button button = go.GetComponent<Button>();
 				button.transition = Selectable.Transition.ColorTint;
 				ColorBlock colors = button.colors;
@@ -586,37 +589,6 @@ namespace GameLogic
 				string memoryId = part.MemoryId;
 				button.onClick.AddListener(() => InspectNarrativeItemPart(memoryId, rect));
 			}
-		}
-
-		/// <summary>圈下面那张写部件名的小纸片。宽度按文字量算，别固定死。</summary>
-		private static void AddItemPageHotspotTag(RectTransform hotspot, string partName)
-		{
-			if (string.IsNullOrWhiteSpace(partName))
-			{
-				return;
-			}
-
-			var go = new GameObject("Tag", typeof(RectTransform), typeof(Image));
-			go.transform.SetParent(hotspot, false);
-			RectTransform rect = go.GetComponent<RectTransform>();
-			rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-			rect.pivot = new Vector2(0.5f, 1f);
-			Image background = go.GetComponent<Image>();
-			background.color = ItemPageTagColor;
-			background.raycastTarget = false;
-
-			TextMeshProUGUI label = CreateOverlayText(go.transform, partName, ItemPageHotspotTagFontSize,
-				Vector2.zero, new Vector2(ItemPageHotspotTagMaxWidth, ItemPageHotspotTagHeight),
-				TextAlignmentOptions.Center);
-			label.enableWordWrapping = false;
-			label.overflowMode = TextOverflowModes.Overflow;
-			label.color = new Color(0.48f, 0.36f, 0.2f, 1f);
-			label.ForceMeshUpdate();
-			float width = Mathf.Clamp(label.preferredWidth + 20f, 56f, ItemPageHotspotTagMaxWidth);
-			rect.sizeDelta = new Vector2(width, ItemPageHotspotTagHeight);
-			rect.anchoredPosition = new Vector2(0f, -ItemPageHotspotSize * 0.5f - 5f);
-			RectTransform labelRect = label.rectTransform;
-			labelRect.sizeDelta = new Vector2(width, ItemPageHotspotTagHeight);
 		}
 
 		/// <summary>部件是否能在图上圈出来（有物品图 + 坐标落在 0~1）。</summary>
@@ -684,7 +656,7 @@ namespace GameLogic
 				.OnComplete(onComplete);
 		}
 
-		/// <summary>虚线圆环：18 段，实 62%、空 38%。缩到 74px 显示时正好是一圈手画的虚线圈。</summary>
+		/// <summary>虚线圆环：14 段，实 58%、空 42%，描边 14/256（落到实机约 5 单位）。</summary>
 		private static Sprite GetItemPageRingSprite()
 		{
 			if (s_itemPageRingSprite != null)
@@ -693,12 +665,16 @@ namespace GameLogic
 			}
 
 			const int size = 256;
-			const int dashCount = 18;
-			const float dashFill = 0.62f;
+			const int dashCount = 14;
+			const float dashFill = 0.58f;
+			// 描边宽度按「显示尺寸」倒推：热点圈成品直径 ≈ 88（80 的点击区 + 上下各 4 的内衬），
+			// 纹理 256 缩到 88 是 0.34 倍，1px 纹理只剩 0.34 单位 —— 旧值 5px 在实机上就是一条 1.7 单位的毛线。
+			// 14px 落下来 ≈ 4.8 单位，1080p 下是实打实的 5 个像素，一眼能看见。
+			const float strokeWidth = 14f;
 			var pixels = new Color32[size * size];
 			float center = size * 0.5f;
 			float radius = center - 5f;
-			float inner = radius - 5f;
+			float inner = radius - strokeWidth;
 			for (int y = 0; y < size; y++)
 			{
 				for (int x = 0; x < size; x++)
